@@ -1,0 +1,71 @@
+# gesture_map.yaml — User-configurable gesture routing
+# Edit this file to remap gestures to different OSC addresses,
+# MIDI CC numbers, DMX channels, or acoustic parameters.
+#
+# Supported protocols: osc, midi_cc, dmx, acoustic
+#
+# value field:
+#   osc/acoustic: normalised float 0.0–1.0
+#   midi_cc:      integer 0–127
+#   dmx:          integer 0–255
+
+gestures:
+  SWEEP_RIGHT:
+    protocol: osc
+    address:  /mix/pan
+    value:    1.0
+
+  SWEEP_LEFT:
+    protocol: osc
+    address:  /mix/pan
+    value:    0.0
+
+  RAISE_BOTH_HANDS:
+    protocol: osc
+    address:  /fx/reverb/send
+    value:    1.0
+
+  LOWER_BOTH_HANDS:
+    protocol: osc
+    address:  /fx/reverb/send
+    value:    0.0
+
+  OPEN_PALM:
+    protocol: osc
+    address:  /channel/bypass
+    value:    1.0
+
+  FIST:
+    protocol: osc
+    address:  /channel/mute
+    value:    1.0
+
+  HEAD_LEAN_LEFT:
+    protocol: osc
+    address:  /bus/drums/solo
+    value:    1.0
+
+  HEAD_LEAN_RIGHT:
+    protocol: osc
+    address:  /bus/instruments/solo
+    value:    1.0
+
+  HEAD_RAISE:
+    protocol: acoustic
+    address:  reverb_decay
+    value:    1.0
+
+  HEAD_LOWER:
+    protocol: acoustic
+    address:  reverb_decay
+    value:    0.0
+
+  PINCH:
+    protocol: osc
+    address:  /channel/finetrim
+    value:    1.0
+
+  TWO_HAND_EXPAND:
+    protocol: osc
+    address:  /mix/stereowidth
+    value:    1.0
