@@ -29,6 +29,16 @@ vision = [
     "python-osc>=1.8",
     "sounddevice>=0.4",
 ]
+ai = [
+    "panns-inference>=0.1",
+    "transformers>=4.30",
+    "laion-clap>=1.0",
+    "soundfile>=0.12",
+    "librosa>=0.10",
+]
+coaching = [
+    "google-genai>=1.0",
+]
 
 [build-system]
 requires = ["hatchling"]

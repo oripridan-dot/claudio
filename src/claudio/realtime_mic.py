@@ -25,6 +25,7 @@ import numpy as np
 import sounddevice as sd
 
 from claudio.hrtf_engine import AudioSource, HRTFBinauralEngine
+from claudio.realtime_intelligence import IntelligenceLoop
 from claudio.signal_flow_config import SignalFlowConfig
 
 # ─── Configuration ────────────────────────────────────────────────────────────
@@ -74,6 +75,15 @@ class LiveProcessor:
         self._peak_out = 0.0
         self._lock = threading.Lock()
 
+        # AI Intelligence observation loop
+        self._ai_enabled = True
+        self._intelligence = IntelligenceLoop(
+            sample_rate=SAMPLE_RATE,
+            analysis_interval_s=0.5,
+            analysis_window_s=1.0,
+        )
+        self._intelligence.start()
+
     def audio_callback(
         self,
         indata: np.ndarray,
@@ -113,6 +123,10 @@ class LiveProcessor:
         outdata[:, 1] = frame.right[:frames]
         self._peak_out = max(self._peak_out, float(np.max(np.abs(outdata))))
         self._block_count += 1
+
+        # AI observation tap — copy audio to intelligence loop (non-blocking)
+        if self._ai_enabled:
+            self._intelligence.push_audio(mono)
 
     def set_position(self, key: str) -> None:
         """Switch to a preset position."""
@@ -157,6 +171,30 @@ class LiveProcessor:
         print(f"  │ Blocks:      {self._block_count:>7d}                         │")
         print("  └─────────────────────────────────────────────────┘")
 
+        # AI Intelligence stats
+        if self._ai_enabled:
+            ai_stats = self._intelligence.stats
+            event = self._intelligence.get_latest_event()
+            print("  ┌── AI Intelligence ─────────────────────────────┐")
+            print(f"  │ Status:      {'ACTIVE' if self._intelligence.is_running else 'OFF':37s}│")
+            print(f"  │ Detections:  {ai_stats['total_detections']:>7d}                         │")
+            print(f"  │ Instrument:  {ai_stats['last_detection']:<37s}│")
+            if event and event.instrument:
+                det = event.instrument
+                print(f"  │ Confidence:  {det.confidence:>6.1%}                          │")
+                print(f"  │ Source:      {det.classification_source:<37s}│")
+                if det.pickup_type.value != 'unknown':
+                    print(f"  │ Pickup:      {det.pickup_type.value:<37s}│")
+                if event.coaching_hints:
+                    for hint in event.coaching_hints[:2]:
+                        # Truncate to fit the box
+                        short = hint[:47] + '...' if len(hint) > 50 else hint
+                        print(f"  │ 💡 {short:<45s}│")
+                if event.mentor_tip:
+                    tip = event.mentor_tip
+                    print(f"  │ 🎓 {tip.mentor.name}: {tip.quote[:35]}...│")
+            print("  └─────────────────────────────────────────────────┘")
+
     def run(self) -> None:
         """Start the live processing loop."""
         print("╔══════════════════════════════════════════════════════════╗")
@@ -168,6 +206,7 @@ class LiveProcessor:
         print("║  Controls:                                               ║")
         print("║    1-8  Select position    9  Orbit mode                 ║")
         print("║    s    Print stats        q  Quit                       ║")
+        print("║    a    Toggle AI analysis r  Head rotation              ║")
         print("╚══════════════════════════════════════════════════════════╝")
         print()
         print("  Positions:")
@@ -199,12 +238,21 @@ class LiveProcessor:
                         self.print_stats()
                     elif key in POSITIONS:
                         self.set_position(key)
+                    elif key == "a":
+                        self._ai_enabled = not self._ai_enabled
+                        if self._ai_enabled:
+                            self._intelligence.start()
+                            print("  → AI analysis: ON")
+                        else:
+                            self._intelligence.stop()
+                            print("  → AI analysis: OFF")
                     else:
-                        print("  Unknown command. Use 1-9, s, or q.")
+                        print("  Unknown command. Use 1-9, s, a, or q.")
 
         except KeyboardInterrupt:
             pass
         finally:
+            self._intelligence.stop()
             print("\n  Shutting down...")
             self.print_stats()
 
