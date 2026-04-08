@@ -22,7 +22,6 @@ import numpy as np
 from claudio.hrtf_data import (
     HRIR_LEN,
     SAMPLE_RATE,
-    _HRTF_CACHE,
     azimuth_elevation_from_position,
     get_hrir,
     interpolate_hrir_bilinear,

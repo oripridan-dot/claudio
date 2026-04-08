@@ -30,7 +30,8 @@ def azimuth_elevation_from_position(
     rotated = _quat_rotate_vector(pos, _quat_conjugate(head_quat))
     x, y, z = rotated
     dist = math.sqrt(x**2 + y**2 + z**2) + 1e-8
-    azimuth   = math.degrees(math.atan2(x, z))
+    # -Z is the listener's forward direction in Claudio's coordinate system
+    azimuth   = math.degrees(math.atan2(x, -z))
     elevation = math.degrees(math.asin(y / dist))
     return azimuth, elevation
 
@@ -94,30 +95,43 @@ def get_hrir(
     itd_samples = min(itd_samples, hrir_len // 4)
 
     # Frequency-dependent ILD (Brown-Duda head shadow)
-    ild_db = 8.0 * math.sin(az_rad) * math.cos(el_rad)
+    # Use absolute azimuth — the branching below assigns sides correctly
+    ild_db = 8.0 * abs(math.sin(az_rad)) * math.cos(el_rad)
 
     hrir_l = np.zeros(hrir_len, dtype=np.float32)
     hrir_r = np.zeros(hrir_len, dtype=np.float32)
-    ild_linear = 10 ** (ild_db / 20.0)
+    ild_linear = 10 ** (ild_db / 20.0)  # always >= 1.0
 
     if az_rad >= 0:
+        # Source on RIGHT: right ear is ipsilateral (louder, earlier)
         hrir_r[0] = ild_linear
         hrir_l[itd_samples] = 1.0 / ild_linear
     else:
+        # Source on LEFT: left ear is ipsilateral (louder, earlier)
         hrir_l[0] = ild_linear
         hrir_r[itd_samples] = 1.0 / ild_linear
 
     # Early reflections for realistic spectral content
+    # Reflections preserve spatial cue: ipsilateral ear gets more energy
     rng = np.random.default_rng(seed=abs(az_key * 1000 + el_key))
     tail_start = max(itd_samples + 1, 4)
     n_ref = min(8, (hrir_len - tail_start) // 4)
+    # Spatial bias: reflections favor ipsilateral ear
+    # Spatial bias: reflections favor ipsilateral ear
+    abs_sin_az = abs(math.sin(az_rad))
+    ipsi_bias = 0.5 + 0.3 * abs_sin_az  # 0.5 at center/behind, 0.8 at 90°
     for r_idx in range(n_ref):
         tap = tail_start + r_idx * (hrir_len // (n_ref + 1))
         if tap < hrir_len:
-            decay = 0.15 * math.exp(-0.3 * r_idx)
-            phase = rng.uniform(-1, 1)
-            hrir_l[tap] += decay * (1 + phase) * 0.5
-            hrir_r[tap] += decay * (1 - phase) * 0.5
+            decay = 0.08 * math.exp(-0.4 * r_idx)
+            # Scale jitter by laterality — no jitter at center/behind
+            jitter = rng.uniform(-0.3, 0.3) * abs_sin_az
+            if az_rad >= 0:
+                hrir_r[tap] += decay * (ipsi_bias + jitter)
+                hrir_l[tap] += decay * (1 - ipsi_bias - jitter)
+            else:
+                hrir_l[tap] += decay * (ipsi_bias + jitter)
+                hrir_r[tap] += decay * (1 - ipsi_bias - jitter)
 
     # Elevation pinna filter — continuous spectral notch
     abs_el = abs(elevation_deg)
@@ -132,13 +146,9 @@ def get_hrir(
             hrir_l[comb_delay] += 0.1 * math.sin(math.radians(abs_el))
             hrir_r[comb_delay] += 0.1 * math.sin(math.radians(abs_el))
 
-    # Smooth onset — half-cosine fade-in (preserves leading impulse)
-    fade_len = min(8, hrir_len)
-    if fade_len > 1:
-        fade = 0.5 * (1.0 - np.cos(np.pi * np.arange(fade_len) / (fade_len - 1)))
-        fade[0] = max(fade[0], 0.3)
-        hrir_l[:fade_len] *= fade
-        hrir_r[:fade_len] *= fade
+    # NOTE: Onset fade removed — it caused L/R asymmetry by attenuating
+    # the leading impulse in the ipsilateral channel differently than the
+    # delayed impulse in the contralateral channel.
 
     _HRTF_CACHE[cache_key] = (hrir_l, hrir_r)
     return hrir_l, hrir_r
