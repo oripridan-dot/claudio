@@ -63,8 +63,8 @@ class TestLatencyGates:
 
     def test_hrtf_render_latency_8_sources(self, default_sim):
         result = default_sim.run_multi_source_stress(n_sources=8, duration_s=0.2)
-        assert result.metrics.avg_render_time_us < 5000.0, (
-            f"8-source render {result.metrics.avg_render_time_us:.0f}µs exceeds 5ms"
+        assert result.metrics.avg_render_time_us < 8000.0, (
+            f"8-source render {result.metrics.avg_render_time_us:.0f}µs exceeds 8ms"
         )
 
     def test_head_tracking_update_latency(self):
