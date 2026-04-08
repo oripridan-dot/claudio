@@ -7,9 +7,28 @@ on:
     branches: [main]
 
 jobs:
+  branch-gate:
+    name: Branch Protection Gate
+    runs-on: ubuntu-latest
+    steps:
+    - name: Block direct pushes to main
+      if: github.event_name == 'push'
+      run: |
+        echo "::error::Direct pushes to main are prohibited."
+        echo "All changes must go through a Pull Request."
+        echo "Create a feature branch: git checkout -b feat/<name>"
+        echo "Push it: git push origin feat/<name>"
+        echo "Then open a PR targeting main."
+        exit 1
+    - name: PR detected — gate passed
+      if: github.event_name == 'pull_request'
+      run: echo "✅ Branch protection gate passed — PR workflow detected"
+
   cpp-build:
     name: C++ DSP Engine Build
     runs-on: macos-latest
+    if: github.event_name == 'pull_request'
+    needs: branch-gate
     steps:
       - uses: actions/checkout@v4
       - name: Configure CMake
@@ -21,8 +40,10 @@ jobs:
           ! grep -rn 'std::mutex\|std::lock_guard\|std::condition_variable' dsp/spatial/*.hpp dsp/spatial/*.cpp || exit 1
 
   python-tests:
-    name: Python Tests
+    name: Python Quality Gates
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    needs: branch-gate
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -34,6 +55,33 @@ jobs:
         run: uv sync --dev
       - name: Lint
         run: uv run ruff check src/ tests/
+      - name: Enforce 500-Line Limit
+        run: |
+          violations=0
+          for f in $(find src/ -name '*.py'); do
+            lines=$(wc -l < "$f")
+            if [ "$lines" -gt 525 ]; then
+              echo "❌ $f: $lines lines (hard limit: 525)"
+              violations=$((violations + 1))
+            elif [ "$lines" -gt 500 ]; then
+              echo "⚠️  $f: $lines lines (review zone: 501-525)"
+            fi
+          done
+          if [ "$violations" -gt 0 ]; then
+            echo "::error::$violations file(s) exceed the 525-line hard limit"
+            exit 1
+          fi
+          echo "✅ All files within 500-line limit"
+      - name: Commit Message Format Check
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          if ! echo "$PR_TITLE" | grep -qE '^(feat|fix|refactor|test|docs|perf|chore)\(.+\):'; then
+            echo "::error::PR title must follow format: type(scope): description"
+            echo "Types: feat | fix | refactor | test | docs | perf | chore"
+            echo "Got: $PR_TITLE"
+            exit 1
+          fi
+          echo "✅ PR title follows commit format"
       - name: Security audit
         run: uv run pip-audit
       - name: Test
