@@ -27,6 +27,7 @@ import os
 import time
 
 import matplotlib
+
 matplotlib.use("Agg")  # Non-interactive backend — no display needed
 import matplotlib.pyplot as plt
 import numpy as np
@@ -237,7 +238,6 @@ def test_freq_response() -> dict:
 
     # Reference sweep spectrum
     ref_spectrum = np.abs(np.fft.rfft(sweep * np.hanning(len(sweep))))
-    ref_freqs = np.fft.rfftfreq(len(sweep), 1 / SAMPLE_RATE)
 
     for idx, (mode, color) in enumerate(modes):
         out = process_through_hifi(sweep, mode)
@@ -755,10 +755,10 @@ def main() -> None:
     generate_summary(all_results)
 
     n_plots = len([f for f in os.listdir(OUTPUT_DIR) if f.endswith(".png")])
-    print(f"\n  ═══════════════════════════════════════════════════")
+    print("\n  ═══════════════════════════════════════════════════")
     print(f"  ✅ {n_plots} plots generated in {OUTPUT_DIR}/")
-    print(f"  ═══════════════════════════════════════════════════")
-    print(f"\n  Open the dashboard:")
+    print("  ═══════════════════════════════════════════════════")
+    print("\n  Open the dashboard:")
     print(f"    open {OUTPUT_DIR}/00_summary_dashboard.png")
 
 

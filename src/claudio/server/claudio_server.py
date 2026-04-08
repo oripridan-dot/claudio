@@ -149,6 +149,7 @@ class SessionState:
         self.phase_meter = PhaseCorrelationMeter(sample_rate=48_000)
         self.room_scanner = RoomScanner(sample_rate=48_000)
         self.sweet_spot = SweetSpotEngine()
+        self.sweet_spot.set_stereo_pair()  # initialize default stereo monitoring
         self.fusion = MultimodalFusion()
         self.roadmap = RoadmapEngine()
         self.last_instrument: dict = {}
@@ -188,7 +189,11 @@ async def session_ws(ws: WebSocket) -> None:
                 # Expects: { type: "phase_check", ch1: [...], ch2: [...], ch1_id, ch2_id }
                 ch1 = np.array(data["ch1"], dtype=np.float32)
                 ch2 = np.array(data["ch2"], dtype=np.float32)
-                frame = session.phase_meter.measure(ch1, ch2)
+                frame = session.phase_meter.analyze(
+                    ch1, ch2,
+                    ch1_name=data.get("ch1_id", "CH1"),
+                    ch2_name=data.get("ch2_id", "CH2"),
+                )
                 result = _serialize(frame)
                 await ws.send_json({"type": "phase_frame", "data": result})
 
@@ -255,7 +260,7 @@ async def session_ws(ws: WebSocket) -> None:
                     y=data.get("y", 0.0),
                     z=data.get("z", 0.0),
                 )
-                correction = session.sweet_spot.compute_correction(pos)
+                correction = session.sweet_spot.compute(pos)
                 await ws.send_json({
                     "type": "sweet_spot_correction",
                     "data": _serialize(correction),
