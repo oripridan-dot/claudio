@@ -50,7 +50,7 @@ from claudio.metering.semantic_metering import (
     TopographicFreqMap,
 )
 
-app = FastAPI(title="Claudio Intelligence Server", version="0.3.0")
+app = FastAPI(title="Claudio Intelligence Server", version="1.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -99,7 +99,7 @@ def _serialize(obj: Any) -> Any:
 async def health() -> dict:
     return {
         "status": "ok",
-        "version": "0.3.0",
+        "version": "1.1.0",
         "modules": {
             "instrument_classifier": True,
             "multimodal_fusion": True,
@@ -218,9 +218,9 @@ async def session_ws(ws: WebSocket) -> None:
                     "data": _serialize(session.roadmap.state),
                 })
 
-                # Trigger acoustic advice
-                for adv_item in scan.acoustic_advice:
-                    trigger = _advice_to_trigger(adv_item.category)
+                # Trigger mentor tips from treatment plan keywords
+                for plan_item in scan.treatment_plan:
+                    trigger = _treatment_text_to_trigger(plan_item)
                     if trigger:
                         tip = knowledge_base.find_best_tip(trigger, confidence=0.7)
                         if tip:
@@ -299,11 +299,13 @@ async def _check_coaching_triggers(
                     })
 
 
-def _advice_to_trigger(category: str) -> TriggerCategory | None:
-    mapping = {
-        "bass_buildup": TriggerCategory.BASS_BUILDUP,
-        "flutter_echo": TriggerCategory.FLUTTER_ECHO,
-        "comb_filter": TriggerCategory.ROOM_REFLECTION,
-        "reflection": TriggerCategory.ROOM_REFLECTION,
-    }
-    return mapping.get(category)
+def _treatment_text_to_trigger(text: str) -> TriggerCategory | None:
+    """Match treatment plan text to a mentor trigger category via keywords."""
+    lower = text.lower()
+    if "bass trap" in lower or "low-frequency" in lower or "room mode" in lower:
+        return TriggerCategory.BASS_BUILDUP
+    if "flutter" in lower:
+        return TriggerCategory.FLUTTER_ECHO
+    if "reflection" in lower or "mirror point" in lower or "comb" in lower:
+        return TriggerCategory.ROOM_REFLECTION
+    return None

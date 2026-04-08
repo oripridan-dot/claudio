@@ -2,10 +2,14 @@
 head_tracker.py — Real-Time 6DoF Head Tracker
 
 Extracts head orientation (roll, pitch, yaw) and approximate translation
-from MediaPipe Face Mesh landmarks using a solvePnP-based approach.
+from MediaPipe Face Landmarker (478 landmarks) using a solvePnP-based approach.
+Backward-compatible with legacy 468-landmark Face Mesh output.
 
-Output: continuous quaternion stream fed to the claudio-core HRTF engine
-via a lock-free ring buffer (matching the SpatialLatencyGate requirement).
+Output: continuous quaternion stream fed to the HRTF engine via a lock-free
+ring buffer (matching the SpatialLatencyGate requirement).
+
+The Face Landmarker also exposes 52 blendshape coefficients for facial
+expression tracking — useful for future avatar-driven mixing interfaces.
 
 The quaternion stream runs independently of the gesture classifier —
 head tracking is always active when a camera is available, even when
@@ -145,10 +149,12 @@ class SpatialHeadTracker:
 
     def update(self, face_landmarks: np.ndarray) -> HeadPose | None:
         """
-        Ingest one face mesh frame (468×3 normalised landmarks).
+        Ingest one Face Landmarker frame (478×3 or legacy 468×3 landmarks).
         Returns a HeadPose or None if estimation fails.
         """
-        if face_landmarks is None or face_landmarks.shape != (468, 3):
+        if face_landmarks is None:
+            return None
+        if face_landmarks.shape not in ((478, 3), (468, 3)):
             return None
 
         # Extract the 6 key landmarks and denormalise to pixel coords

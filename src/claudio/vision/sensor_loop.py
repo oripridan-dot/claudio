@@ -3,12 +3,13 @@ sensor_loop.py — Main Kinetic Studio Sensor Loop
 
 Ties together:
   - Camera capture (OpenCV)
-  - MediaPipe Holistic pose/hand/face estimation
+  - MediaPipe Solutions: Face Landmarker (478 pts), Hand Landmarker (21 pts),
+    Pose Landmarker (33 pts) — using the MediaPipe Tasks API
   - GestureClassifier
   - SpatialHeadTracker
   - GestureRoutingMatrix (OSC / MIDI CC / DMX / acoustic)
 
-Entry point: python -m claudio_vision_forge.sensor_loop
+Entry point: python -m claudio.vision.sensor_loop
 """
 from __future__ import annotations
 

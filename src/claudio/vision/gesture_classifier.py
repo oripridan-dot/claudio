@@ -62,8 +62,8 @@ class LandmarkFrame:
     # Hands: 21 landmarks × 3
     left_hand:  np.ndarray | None = None      # shape (21, 3)
     right_hand: np.ndarray | None = None      # shape (21, 3)
-    # Face: 468 landmarks × 3 (used for head pose)
-    face: np.ndarray | None = None            # shape (468, 3)
+    # Face Landmarker: 478 landmarks × 3 (or legacy 468 without iris)
+    face: np.ndarray | None = None            # shape (478, 3) or (468, 3)
 
 
 class GestureClassifier:

@@ -29,10 +29,12 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install uv
-        run: pip install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
       - name: Install dependencies
         run: uv sync --dev
       - name: Lint
         run: uv run ruff check src/ tests/
+      - name: Security audit
+        run: uv run pip-audit
       - name: Test
         run: uv run pytest tests/ -v --tb=short

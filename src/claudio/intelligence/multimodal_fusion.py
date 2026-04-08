@@ -160,7 +160,7 @@ INSTRUMENT_MODEL_DB: list[InstrumentModelProfile] = [
         family=InstrumentFamily.BASS_ELECTRIC,
         body_shapes=["double_cutaway", "contoured"],
         headstock_shapes=["inline_4"],
-        pickup_configs=[PickupType.SINGLE_COIL],
+        pickup_configs=[PickupType.SPLIT_COIL],
         spectral_centroid_range=(400, 1500),
         typical_fundamental_range=(41, 400),
         coaching_notes=[
@@ -181,6 +181,53 @@ INSTRUMENT_MODEL_DB: list[InstrumentModelProfile] = [
             "The Jazz Bass has more growl and midrange presence than a P-Bass. "
             "Both pickups blended gives the classic scooped tone — "
             "favor the bridge pickup for more bite in a rock mix.",
+        ],
+    ),
+    InstrumentModelProfile(
+        name="Gibson SG",
+        brand="Gibson", model="SG",
+        family=InstrumentFamily.GUITAR_ELECTRIC,
+        body_shapes=["double_cutaway", "thin_body"],
+        headstock_shapes=["3x3"],
+        pickup_configs=[PickupType.HUMBUCKER],
+        spectral_centroid_range=(1600, 3200),
+        typical_fundamental_range=(82, 1200),
+        coaching_notes=[
+            "The SG's thin mahogany body produces a focused, aggressive midrange. "
+            "It cuts through dense mixes naturally — avoid over-boosting 2kHz "
+            "or the upper mids will become fatiguing on long listens.",
+        ],
+    ),
+    InstrumentModelProfile(
+        name="Rickenbacker 4003",
+        brand="Rickenbacker", model="4003",
+        family=InstrumentFamily.BASS_ELECTRIC,
+        body_shapes=["cresting_wave", "bound"],
+        headstock_shapes=["inline_4"],
+        pickup_configs=[PickupType.SINGLE_COIL],
+        spectral_centroid_range=(600, 2200),
+        typical_fundamental_range=(41, 400),
+        coaching_notes=[
+            "The Rickenbacker 4003 has a distinctive bright, clanky attack "
+            "from its single-coil pickups and through-neck construction. "
+            "Use the Rick-O-Sound stereo output to process the neck and "
+            "bridge pickups independently for maximum tonal control.",
+        ],
+    ),
+    InstrumentModelProfile(
+        name="Taylor 814ce",
+        brand="Taylor", model="814ce",
+        family=InstrumentFamily.GUITAR_ACOUSTIC,
+        body_shapes=["grand_auditorium"],
+        headstock_shapes=["3x3"],
+        pickup_configs=[PickupType.PIEZO],
+        spectral_centroid_range=(1600, 3200),
+        typical_fundamental_range=(82, 1200),
+        coaching_notes=[
+            "The Grand Auditorium body balances projection and clarity — "
+            "less boomy than a dreadnought but still full-bodied. "
+            "When using the ES2 pickup, blend it with a condenser mic "
+            "at the 12th fret for the most natural captured tone.",
         ],
     ),
     InstrumentModelProfile(
@@ -211,6 +258,22 @@ INSTRUMENT_MODEL_DB: list[InstrumentModelProfile] = [
             "The SM58 has a built-in presence peak around 5kHz that helps vocals cut. "
             "Work the proximity effect: 2 inches for intimate warmth, "
             "6 inches for a natural, flat response.",
+        ],
+    ),
+    InstrumentModelProfile(
+        name="Shure SM57",
+        brand="Shure", model="SM57",
+        family=InstrumentFamily.GUITAR_ELECTRIC,
+        body_shapes=[],
+        headstock_shapes=[],
+        pickup_configs=[],
+        spectral_centroid_range=(1200, 5000),
+        typical_fundamental_range=(80, 4000),
+        coaching_notes=[
+            "The SM57 is the industry standard for guitar cabs and snare drum. "
+            "On a guitar cab, start 1 inch off-centre of the speaker cone — "
+            "moving toward the edge rolls off the high-frequency bite, "
+            "moving to the centre adds presence and aggression.",
         ],
     ),
     InstrumentModelProfile(

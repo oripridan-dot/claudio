@@ -341,14 +341,17 @@ MENTOR_TIPS: list[MentorTip] = [
         mentor=BOB_LUDWIG,
         quote=(
             "Over-limiting kills the punch of the snare and the breath of the vocal. "
-            "If Spotify is going to turn you down to -14 LUFS anyway, "
-            "why crush the life out of your mix to hit -6? Leave the dynamics in."
+            "Spotify normalises to -14 LUFS, Apple Music to -16 LUFS, YouTube to -14. "
+            "If the platform is going to turn you down anyway, "
+            "why crush the life out of your mix? Leave the dynamics in."
         ),
         context_location="Gateway Mastering, Portland, Maine",
         context_date="2015",
         physical_action=(
             "Back off the final limiter threshold by 2-3dB. "
-            "Target -14 LUFS integrated for streaming platforms."
+            "Set the true peak ceiling to -1.0 dBTP (AES77-2023). "
+            "Targets: Spotify -14 LUFS, Apple Music -16 LUFS, "
+            "YouTube -13 to -14 LUFS, Amazon -14 LUFS."
         ),
         ui_action="HIGHLIGHT_LUFS_METER",
         severity="warning",
