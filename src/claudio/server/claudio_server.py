@@ -49,6 +49,11 @@ from claudio.metering.semantic_metering import (
     PocketRadar,
     TopographicFreqMap,
 )
+from claudio.server.ws_session import (
+    SessionState,
+    check_coaching_triggers,
+    treatment_text_to_trigger,
+)
 
 app = FastAPI(title="Claudio Intelligence Server", version="1.1.0")
 
@@ -141,19 +146,7 @@ async def complete_item(item_id: str) -> dict:
 
 # ─── WebSocket ───────────────────────────────────────────────────────────────
 
-class SessionState:
-    """Per-connection analysis state."""
 
-    def __init__(self) -> None:
-        self.instrument_classifier = InstrumentClassifier(sample_rate=48_000)
-        self.phase_meter = PhaseCorrelationMeter(sample_rate=48_000)
-        self.room_scanner = RoomScanner(sample_rate=48_000)
-        self.sweet_spot = SweetSpotEngine()
-        self.sweet_spot.set_stereo_pair()  # initialize default stereo monitoring
-        self.fusion = MultimodalFusion()
-        self.roadmap = RoadmapEngine()
-        self.last_instrument: dict = {}
-        self.last_phase: dict = {}
 
 
 @app.websocket("/ws/session")
@@ -284,33 +277,11 @@ async def session_ws(ws: WebSocket) -> None:
         pass
 
 
-async def _check_coaching_triggers(
-    session: SessionState,
-    detection: Any,
-    ws: WebSocket,
-) -> None:
-    """Check if the instrument detection triggers any mentor tips."""
-    if hasattr(detection, "coaching_hints") and detection.coaching_hints:
-        for hint in detection.coaching_hints:
-            if "harsh" in hint.lower() or "pick" in hint.lower():
-                tip = knowledge_base.find_best_tip(
-                    TriggerCategory.HARSH_TRANSIENT,
-                    confidence=0.7,
-                )
-                if tip:
-                    await ws.send_json({
-                        "type": "mentor_tip",
-                        "data": _serialize(tip),
-                    })
+async def _check_coaching_triggers(session, detection, ws):
+    """Delegate to ws_session module."""
+    await check_coaching_triggers(session, detection, ws, knowledge_base, _serialize)
 
 
-def _treatment_text_to_trigger(text: str) -> TriggerCategory | None:
-    """Match treatment plan text to a mentor trigger category via keywords."""
-    lower = text.lower()
-    if "bass trap" in lower or "low-frequency" in lower or "room mode" in lower:
-        return TriggerCategory.BASS_BUILDUP
-    if "flutter" in lower:
-        return TriggerCategory.FLUTTER_ECHO
-    if "reflection" in lower or "mirror point" in lower or "comb" in lower:
-        return TriggerCategory.ROOM_REFLECTION
-    return None
+def _treatment_text_to_trigger(text):
+    """Delegate to ws_session module."""
+    return treatment_text_to_trigger(text)

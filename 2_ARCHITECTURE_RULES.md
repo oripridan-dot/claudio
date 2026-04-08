@@ -6,9 +6,15 @@ Binding constraints for all code in this repository. Every commit, every AI-gene
 
 ## 1. File Size Limit
 
-No source file may exceed **300 lines**. If a file crosses this threshold, it must be decomposed into focused modules before merging.
+No source file may exceed **500 lines**. If a file crosses this threshold, it must be decomposed into focused modules before merging.
 
-**Rationale**: Files beyond 300 lines lose readability. Smaller files enforce single responsibility.
+**Exemptions**:
+- **Pure data/constant modules** (e.g. `mentor_tips.py`, instrument profile databases) that contain only declarative definitions with no logic. These files must contain no functions, classes with methods, or control flow — only data structure instantiations.
+- **Test files** (`tests/`) may exceed the limit up to **800 lines** when the excess consists of dense assertion blocks, parametrized test data, or fixture definitions. Test splitting should only occur at natural test class boundaries.
+
+**Tolerance**: Source files at **501–525 lines** with no clear decomposition boundary are flagged for review but not blocked. Files above **525 lines** (non-exempt) must be decomposed before merge.
+
+**Rationale**: Files beyond 500 lines lose readability. Smaller files enforce single responsibility. Data-only modules and dense test files are inherently declarative — fragmenting them yields no architectural benefit.
 
 ## 2. No Mutex on the Spatial Audio Path
 

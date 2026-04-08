@@ -4,7 +4,6 @@ from __future__ import annotations
 import math
 
 import numpy as np
-import pytest
 
 from claudio.hrtf_engine import (
     AudioSource,
@@ -52,17 +51,18 @@ def test_render_produces_stereo_output():
     assert np.mean(np.abs(frame.right)) > 0.0
 
 
-@pytest.mark.skip(reason="Requires pytest-benchmark fixture")
 def test_hrtf_update_is_lock_free(benchmark):
     """
     SpatialLatencyGate proxy: updating head pose must be trivially fast.
-    A real 1.5 ms wall-clock gate runs in CI via a dedicated integration test.
+    Benchmark proves <1.5ms wall-clock for a 90° head turn HRTF update.
     """
     engine = HRTFBinauralEngine()
     quat = (math.cos(math.pi/4), 0.0, math.sin(math.pi/4), 0.0)
     benchmark(engine.update_head_pose, quat)
-    # No assertion on time here — benchmark reports it.
-    # Integration test in ci/spatial_latency_gate.py enforces <1.5 ms.
+    # Benchmark stats: ensure mean is well under 1.5ms (1500µs)
+    if benchmark.stats is not None:
+        mean_us = benchmark.stats["mean"] * 1e6
+        assert mean_us < 1500, f"Head pose update too slow: {mean_us:.0f}µs (limit: 1500µs)"
 
 
 def test_render_empty_sources():
