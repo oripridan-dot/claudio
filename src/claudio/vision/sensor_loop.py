@@ -3,12 +3,13 @@ sensor_loop.py — Main Kinetic Studio Sensor Loop
 
 Ties together:
   - Camera capture (OpenCV)
-  - MediaPipe Holistic pose/hand/face estimation
+  - MediaPipe Solutions: Face Landmarker (478 pts), Hand Landmarker (21 pts),
+    Pose Landmarker (33 pts) — using the MediaPipe Tasks API
   - GestureClassifier
   - SpatialHeadTracker
   - GestureRoutingMatrix (OSC / MIDI CC / DMX / acoustic)
 
-Entry point: python -m claudio_vision_forge.sensor_loop
+Entry point: python -m claudio.vision.sensor_loop
 """
 from __future__ import annotations
 
@@ -18,9 +19,9 @@ import time
 
 import numpy as np
 
-from gesture_classifier import GestureClassifier, LandmarkFrame
-from gesture_router import GestureRoutingMatrix, ControlAction
-from head_tracker import SpatialHeadTracker
+from claudio.vision.gesture_classifier import GestureClassifier, LandmarkFrame
+from claudio.vision.gesture_router import ControlAction, GestureRoutingMatrix
+from claudio.vision.head_tracker import SpatialHeadTracker
 
 
 def _make_osc_sink(host: str, port: int):
@@ -55,7 +56,7 @@ def _make_dmx_sink(serial_port: str):
             ser.write(packet)
 
         return send
-    except (ImportError, Exception) as e:
+    except (ImportError, Exception):
         def send(action: ControlAction) -> None:
             print(f"[DMX] ch={action.address} val={action.value:.3f}")
         return send
@@ -143,8 +144,7 @@ def run(
             if lf.face is not None:
                 head_pose = head_tracker.update(lf.face)
                 if head_pose:
-                    q = head_pose.quat
-                    # Would normally push to claudio-core via IPC here
+                    # Would normally push head_pose.quat to claudio-core via IPC here
                     if frame_count % 30 == 0:
                         print(
                             f"[HEAD] yaw={head_pose.yaw:+.1f}° "

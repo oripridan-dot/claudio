@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 
@@ -36,7 +35,7 @@ class PhaseCorrelationFrame:
 class MultiMicPhaseReport:
     """Phase analysis across all active mic channels."""
     channel_pairs: list[tuple[str, str, PhaseCorrelationFrame]]
-    worst_pair: Optional[tuple[str, str]] = None
+    worst_pair: tuple[str, str] | None = None
     overall_coherence: float = 1.0  # 0-1; 1 = all channels perfectly coherent
 
 
@@ -145,7 +144,7 @@ class PhaseCorrelationMeter:
         names = list(channels.keys())
         pairs: list[tuple[str, str, PhaseCorrelationFrame]] = []
         worst_correlation = 1.0
-        worst_pair: Optional[tuple[str, str]] = None
+        worst_pair: tuple[str, str] | None = None
 
         for i in range(len(names)):
             for j in range(i + 1, len(names)):
@@ -190,10 +189,10 @@ class StereoPhaseScope:
     ) -> tuple[np.ndarray, np.ndarray]:
         """Returns (x_coords, y_coords) for vectorscope display."""
         min_len = min(len(left), len(right))
-        l = left[:min_len:downsample]
-        r = right[:min_len:downsample]
-        x = (l + r) / 2.0   # Mid
-        y = (l - r) / 2.0   # Side
+        left_ds = left[:min_len:downsample]
+        right_ds = right[:min_len:downsample]
+        x = (left_ds + right_ds) / 2.0   # Mid
+        y = (left_ds - right_ds) / 2.0   # Side
         return x.astype(np.float32), y.astype(np.float32)
 
     def compute_correlation_history(
@@ -209,9 +208,9 @@ class StereoPhaseScope:
         for i in range(n_windows):
             start = i * window_size
             end = start + window_size
-            l = left[start:end] - np.mean(left[start:end])
-            r = right[start:end] - np.mean(right[start:end])
-            num = float(np.sum(l * r))
-            den = math.sqrt(float(np.sum(l ** 2)) * float(np.sum(r ** 2))) + 1e-10
+            left_w = left[start:end] - np.mean(left[start:end])
+            right_w = right[start:end] - np.mean(right[start:end])
+            num = float(np.sum(left_w * right_w))
+            den = math.sqrt(float(np.sum(left_w ** 2)) * float(np.sum(right_w ** 2))) + 1e-10
             history[i] = num / den
         return history.astype(np.float32)

@@ -5,7 +5,7 @@ Spatialises mono audio streams (one per instrument/source) into a
 192 kHz binaural field using per-source HRTF convolution.
 
 Head orientation is consumed from a lock-free quaternion ring buffer
-populated by the claudio-vision-forge sensor loop (or any 6DoF tracker).
+populated by the vision sensor loop (or any 6DoF tracker).
 The HRTF matrix is updated in-place on every audio callback without
 acquiring a mutex — ensuring the SpatialLatencyGate constraint of <1.5 ms
 HRTF update on a 90-degree head turn is never violated.
@@ -16,19 +16,23 @@ Architecture:
   - Quaternion → azimuth/elevation → HRTF lookup (or NNLS interpolation)
   - Dynamic room model: inverse-square gain, proximity LF boost, early reflections
 
-HRTF dataset: MIT KEMAR (or user-uploaded personalised HRIRs).
-KEMAR HRIRs are licensed under CC BY 4.0 — safe for commercial use.
+HRTF data:
+  - Default: MIT KEMAR procedural approximation (Gardner & Martin, 1995)
+  - Production: AES69-2022 SOFA format (.sofa files) — the industry standard
+    for exchanging HRTFs, BRIRs, and DRIRs (see sofaconventions.org)
+  - Personalisation: supports user-uploaded SOFA profiles or future
+    AI-driven HRTF synthesis via neural upsampling (e.g. HRTFformer, 2025)
+  - Rendering toolkit: compatible with Binaural Rendering Toolbox (BRT) v2.0
+    modular pipeline for transparent, reproducible spatial audio
+
+MIT KEMAR HRIRs are licensed under CC BY 4.0 — safe for commercial use.
 """
 from __future__ import annotations
 
 import math
-import threading
-from collections import deque
 from dataclasses import dataclass, field
-from typing import Optional
 
 import numpy as np
-
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -37,8 +41,11 @@ FFT_SIZE      = 512       # overlap-add block size
 HRIR_LEN      = 128       # samples per HRIR (common KEMAR dataset length)
 SPEED_OF_SOUND = 343.0    # m/s at 20°C
 
+# Path for user-uploaded or bundled SOFA datasets (AES69-2022)
+SOFA_DATASET_PATH = "assets/hrtf"
+
 # MIT KEMAR elevation/azimuth lookup grid
-# In production, this is populated from the bundled HRIR dataset files.
+# In production, this is populated from the bundled SOFA dataset files.
 # Here we use a procedural approximation for self-contained operation.
 _HRTF_CACHE: dict[tuple[int, int], tuple[np.ndarray, np.ndarray]] = {}
 
@@ -52,8 +59,8 @@ class AudioSource:
     position:    np.ndarray   # (x, y, z) in metres, listener-centred
     gain_db:     float = 0.0
     # Pre-computed frequency-domain HRTF pair (updated on head movement)
-    _hrtf_l_fd: Optional[np.ndarray] = field(default=None, repr=False, compare=False)
-    _hrtf_r_fd: Optional[np.ndarray] = field(default=None, repr=False, compare=False)
+    _hrtf_l_fd: np.ndarray | None = field(default=None, repr=False, compare=False)
+    _hrtf_r_fd: np.ndarray | None = field(default=None, repr=False, compare=False)
     # Overlap-add state buffers
     _ola_l: np.ndarray = field(
         default_factory=lambda: np.zeros(HRIR_LEN - 1), repr=False, compare=False

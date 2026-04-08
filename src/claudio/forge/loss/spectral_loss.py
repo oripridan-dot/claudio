@@ -15,7 +15,6 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
-
 _FFT_SIZES = [64, 128, 256, 512, 1024, 2048]
 _HOP_RATIO = 0.25   # hop = fft_size × 0.25
 

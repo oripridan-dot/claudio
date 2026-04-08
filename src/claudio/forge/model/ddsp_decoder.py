@@ -34,7 +34,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 N_PARTIALS    = 64
 N_FILTER_BINS = 256
 SAMPLE_RATE   = 44_100

@@ -1,15 +1,14 @@
 """test_semantic_metering.py — Unit tests for the semantic metering engine."""
 from __future__ import annotations
 
-import math
 import numpy as np
-import pytest
 
 from claudio.metering.semantic_metering import (
-    PocketRadar, TopographicFreqMap, PerformanceCoach,
-    AcousticEnvironmentAdvisor, CoachingNote,
+    AcousticEnvironmentAdvisor,
+    PerformanceCoach,
+    PocketRadar,
+    TopographicFreqMap,
 )
-
 
 # ─── PocketRadar ─────────────────────────────────────────────────────────────
 

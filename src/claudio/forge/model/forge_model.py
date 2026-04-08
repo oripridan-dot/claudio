@@ -13,9 +13,9 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
+from claudio.forge.model.ddsp_decoder import DDSPDecoder
 from claudio.forge.model.feature_extractor import FeatureExtractor
 from claudio.forge.model.gru_encoder import GRUEncoder
-from claudio.forge.model.ddsp_decoder import DDSPDecoder
 
 
 class ForgeModel(nn.Module):

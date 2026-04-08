@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 from .knowledge_base import ProductionPhase
 
@@ -223,7 +222,10 @@ def _build_mastering_phase() -> PhaseConfig:
             ChecklistItem(
                 item_id="master_loudness",
                 label="Loudness Target",
-                description="Hit -14 LUFS integrated for streaming platforms.",
+                description=(
+                    "Spotify -14, Apple Music -16, YouTube -14, Amazon -14 LUFS. "
+                    "Set true peak ceiling to -1.0 dBTP (AES77-2023)."
+                ),
                 is_automated=True,
                 auto_detection_key="lufs_target_met",
                 mentor_tip_id="MASTERING_OVER_LIMITING",
@@ -241,6 +243,15 @@ def _build_mastering_phase() -> PhaseConfig:
                 description="Last mono compatibility verification.",
                 is_automated=True,
                 auto_detection_key="final_mono_ok",
+            ),
+            ChecklistItem(
+                item_id="master_delivery_formats",
+                label="Delivery Format QC",
+                description=(
+                    "Validate against lossy codec artefacts (AAC, Opus, Vorbis). "
+                    "Check for inter-sample clipping introduced by encoding."
+                ),
+                is_automated=False,
             ),
             ChecklistItem(
                 item_id="master_metadata",
@@ -320,7 +331,7 @@ class RoadmapEngine:
                     return True
         return False
 
-    def advance_phase(self) -> Optional[ProductionPhase]:
+    def advance_phase(self) -> ProductionPhase | None:
         """Manually advance to the next phase (skip gate)."""
         if self._current_idx < len(self._phases) - 1:
             self._phases[self._current_idx].status = PhaseStatus.COMPLETED
