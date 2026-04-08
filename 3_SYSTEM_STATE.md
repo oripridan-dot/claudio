@@ -29,7 +29,7 @@ Last updated: 2026-04-08
 
 | Rule | Status | Details |
 |---|---|---|
-| 300-line file limit | ✅ Compliant | 0 non-exempt files >325 lines |
+| 500-line file limit | ✅ Compliant | 0 files >500 lines (max: mentor_tips.py @ 434) |
 | No inline `# noqa` | ✅ Compliant | All suppressions in `pyproject.toml` per-file-ignores |
 | No mutex on audio path | ✅ Verified | CI grep audit enforced |
 | Single Responsibility | ✅ Enforced | 15 modules decomposed this session |
