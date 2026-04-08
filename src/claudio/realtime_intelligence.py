@@ -1,19 +1,8 @@
 """
 realtime_intelligence.py — Real-Time AI Intelligence Loop
 
-Observation thread that receives audio from the mic callback and
-produces continuous coaching output.
-
-Architecture:
-  1. Audio callback copies frames to an observation ring buffer (lock-free)
-  2. Intelligence thread wakes every ~500ms and processes buffered audio
-  3. RunsInstrumentClassifier → feeds PerformanceCoach → feeds MentorKnowledgeBase
-  4. Results are pushed to a thread-safe deque for UI consumption
-
-This module respects Architecture Rule #3 (AI Observation Only):
-  - It observes a COPY of the signal
-  - It NEVER modifies the audio path
-  - It adds zero latency to live processing
+Observation thread: mic callback → ring buffer → classifier → coach → mentor.
+Zero-latency audio path (Architecture Rule #3: observation-only COPY of signal).
 """
 from __future__ import annotations
 
@@ -24,6 +13,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from .intelligence.gemini_coach import CoachingContext, CoachingResponse, GeminiCoach
 from .intelligence.instrument_classifier import InstrumentClassifier, InstrumentDetection
 from .mentor.knowledge_base import MentorKnowledgeBase, MentorTip, TriggerCategory
 
@@ -34,18 +24,13 @@ class CoachingEvent:
     timestamp: float                 # time.time()
     instrument: InstrumentDetection | None = None
     mentor_tip: MentorTip | None = None
+    gemini_tip: CoachingResponse | None = None
     coaching_hints: list[str] = field(default_factory=list)
     detection_source: str = ""       # "heuristic", "neural", "fused"
 
 
 class IntelligenceLoop:
-    """
-    Real-time intelligence observation thread.
-
-    Receives audio frames via `push_audio()` from the mic callback,
-    accumulates them in a ring buffer, and processes them periodically
-    to generate coaching events.
-    """
+    """Receives audio via push_audio(), analyzes periodically, emits CoachingEvents."""
 
     def __init__(
         self,
@@ -53,7 +38,9 @@ class IntelligenceLoop:
         analysis_interval_s: float = 0.5,
         analysis_window_s: float = 1.0,
         neural_backend: object | None = None,
+        auto_load_neural: bool = True,
         max_events: int = 100,
+        enable_gemini: bool = True,
     ):
         self._sr = sample_rate
         self._analysis_interval = analysis_interval_s
@@ -65,6 +52,14 @@ class IntelligenceLoop:
         self._write_pos = 0
         self._lock = threading.Lock()
 
+        # Auto-load neural backend if not provided
+        if neural_backend is None and auto_load_neural:
+            try:
+                from .intelligence.backend_factory import BackendStrategy, create_backend
+                neural_backend = create_backend(BackendStrategy.AUTO)
+            except Exception as e:
+                print(f"[Intelligence] Neural backend auto-load failed: {e}")
+
         # Intelligence engines
         self._classifier = InstrumentClassifier(
             sample_rate=sample_rate,
@@ -72,15 +67,25 @@ class IntelligenceLoop:
         )
         self._mentor_kb = MentorKnowledgeBase()
 
+        # Gemini coaching engine
+        self._gemini_coach: GeminiCoach | None = None
+        if enable_gemini:
+            try:
+                self._gemini_coach = GeminiCoach()
+            except Exception as e:
+                print(f"[Intelligence] Gemini coach init failed: {e}")
+
         # Output queue
         self._events: deque[CoachingEvent] = deque(maxlen=max_events)
 
         # State tracking
         self._running = False
         self._thread: threading.Thread | None = None
+        self._start_time = time.time()
         self._total_frames = 0
         self._total_detections = 0
         self._last_detection: InstrumentDetection | None = None
+        self._recent_instruments: list[str] = []
 
     def push_audio(self, audio: np.ndarray) -> None:
         """
@@ -139,7 +144,7 @@ class IntelligenceLoop:
 
     @property
     def stats(self) -> dict:
-        return {
+        result = {
             "total_frames": self._total_frames,
             "total_detections": self._total_detections,
             "buffer_fill": self._write_pos / self._buffer_size,
@@ -149,6 +154,9 @@ class IntelligenceLoop:
                 if self._last_detection else "none"
             ),
         }
+        if self._gemini_coach:
+            result["gemini"] = self._gemini_coach.stats
+        return result
 
     def _analysis_loop(self) -> None:
         """Main intelligence analysis loop — runs on background thread."""
@@ -181,14 +189,23 @@ class IntelligenceLoop:
             self._total_detections += 1
             self._last_detection = detection
 
+            # Track recent instruments
+            self._recent_instruments.append(detection.family.value)
+            if len(self._recent_instruments) > 20:
+                self._recent_instruments = self._recent_instruments[-20:]
+
             # Find relevant mentor tip
             tip = self._find_tip(detection, rms)
+
+            # Get Gemini coaching
+            gemini_tip = self._get_gemini_coaching(detection, rms)
 
             # Create coaching event
             event = CoachingEvent(
                 timestamp=now,
                 instrument=detection,
                 mentor_tip=tip,
+                gemini_tip=gemini_tip,
                 coaching_hints=detection.coaching_hints,
                 detection_source=detection.classification_source,
             )
@@ -244,3 +261,35 @@ class IntelligenceLoop:
                 return tip
 
         return None
+
+    def _get_gemini_coaching(
+        self, det: InstrumentDetection, rms: float,
+    ) -> CoachingResponse | None:
+        """Get a coaching tip from Gemini based on the current detection."""
+        if not self._gemini_coach:
+            return None
+
+        try:
+            ctx = CoachingContext(
+                instrument=det.family.value,
+                confidence=det.confidence,
+                spectral_centroid_hz=(
+                    det.spectral_fingerprint.spectral_centroid_hz
+                    if det.spectral_fingerprint else 0.0
+                ),
+                spectral_rolloff_hz=(
+                    det.spectral_fingerprint.spectral_rolloff_hz
+                    if det.spectral_fingerprint else 0.0
+                ),
+                transient_sharpness=(
+                    det.transient_profile.transient_sharpness
+                    if det.transient_profile else 0.0
+                ),
+                rms_level=rms,
+                session_duration_s=time.time() - self._start_time,
+                recent_instruments=self._recent_instruments[-5:],
+                pickup_type=det.pickup_type.value,
+            )
+            return self._gemini_coach.get_coaching(ctx)
+        except Exception:
+            return None

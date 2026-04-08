@@ -193,6 +193,16 @@ class LiveProcessor:
                 if event.mentor_tip:
                     tip = event.mentor_tip
                     print(f"  │ 🎓 {tip.mentor.name}: {tip.quote[:35]}...│")
+                if event.gemini_tip:
+                    gt = event.gemini_tip
+                    src = f"[{gt.source}]"
+                    short = gt.tip[:42] + '...' if len(gt.tip) > 45 else gt.tip
+                    print(f"  │ 🤖 {src} {short:<42s}│")
+            # Gemini stats
+            gemini_stats = ai_stats.get("gemini")
+            if gemini_stats:
+                status = "ACTIVE" if gemini_stats["available"] else "fallback"
+                print(f"  │ Gemini:      {status} (calls: {gemini_stats['total_calls']}, cached: {gemini_stats['total_cached']}) │")
             print("  └─────────────────────────────────────────────────┘")
 
     def run(self) -> None:
