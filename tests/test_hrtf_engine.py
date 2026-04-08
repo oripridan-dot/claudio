@@ -15,7 +15,7 @@ from claudio.signal_flow_config import SignalFlowConfig
 
 
 def test_identity_quaternion_gives_zero_azimuth():
-    pos = np.array([0.0, 0.0, 2.0])  # directly in front (+Z forward)
+    pos = np.array([0.0, 0.0, -2.0])  # directly in front (-Z forward)
     az, el = _azimuth_elevation_from_position(pos, (1.0, 0.0, 0.0, 0.0))
     assert abs(az) < 1.0     # should be near 0°
     assert abs(el) < 1.0
