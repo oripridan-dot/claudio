@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 # ── Instrument Classifier ────────────────────────────────────────────────
-from src.intelligence.instrument_classifier import (
+from claudio.intelligence.instrument_classifier import (
     HarmonicProfiler,
     InstrumentClassifier,
     InstrumentFamily,
@@ -120,7 +120,7 @@ class TestInstrumentClassifier:
 
 # ── Phase Detector ────────────────────────────────────────────────────────
 
-from src.intelligence.phase_detector import PhaseCorrelationMeter
+from claudio.intelligence.phase_detector import PhaseCorrelationMeter
 
 
 class TestPhaseCorrelationMeter:
@@ -168,7 +168,7 @@ class TestPhaseCorrelationMeter:
 
 # ── Room Scanner ──────────────────────────────────────────────────────────
 
-from src.intelligence.room_scanner import RoomScanner
+from claudio.intelligence.room_scanner import RoomScanner
 
 
 class TestRoomScanner:
@@ -218,7 +218,7 @@ class TestRoomScanner:
 
 # ── Sweet Spot Engine ─────────────────────────────────────────────────────
 
-from src.intelligence.sweet_spot_engine import (
+from claudio.intelligence.sweet_spot_engine import (
     ListenerPosition,
     ListeningMode,
     SpeakerConfig,
@@ -266,7 +266,7 @@ class TestSweetSpotEngine:
 
 # ── Knowledge Base ────────────────────────────────────────────────────────
 
-from src.mentor.knowledge_base import (
+from claudio.mentor.knowledge_base import (
     MentorKnowledgeBase,
     ProductionPhase,
     TriggerCategory,
@@ -317,8 +317,8 @@ class TestMentorKnowledgeBase:
 
 # ── Roadmap Engine ────────────────────────────────────────────────────────
 
-from src.mentor.knowledge_base import ProductionPhase
-from src.mentor.roadmap_engine import RoadmapEngine
+from claudio.mentor.knowledge_base import ProductionPhase
+from claudio.mentor.roadmap_engine import RoadmapEngine
 
 
 class TestRoadmapEngine:
@@ -369,7 +369,7 @@ class TestRoadmapEngine:
 
 # ── Multimodal Fusion (smoke test) ───────────────────────────────────────
 
-from src.intelligence.multimodal_fusion import (
+from claudio.intelligence.multimodal_fusion import (
     INSTRUMENT_MODEL_DB,
     BoundingBox,
     MultimodalFusion,

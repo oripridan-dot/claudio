@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pytest
 
-from semantic_metering import (
+from claudio.metering.semantic_metering import (
     PocketRadar, TopographicFreqMap, PerformanceCoach,
     AcousticEnvironmentAdvisor, CoachingNote,
 )
