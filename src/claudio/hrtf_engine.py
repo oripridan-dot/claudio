@@ -1,53 +1,45 @@
 """
-hrtf_engine.py — Holographic Binaural Rendering Node
+hrtf_engine.py — Holographic Binaural Rendering Engine
 
-Spatialises mono audio streams (one per instrument/source) into a
-192 kHz binaural field using per-source HRTF convolution.
+Real-time binaural renderer that spatialises mono sources into
+a 192 kHz binaural field using per-source HRTF convolution.
 
-Head orientation is consumed from a lock-free quaternion ring buffer
-populated by the vision sensor loop (or any 6DoF tracker).
-The HRTF matrix is updated in-place on every audio callback without
-acquiring a mutex — ensuring the SpatialLatencyGate constraint of <1.5 ms
-HRTF update on a 90-degree head turn is never violated.
+HRTF data synthesis is handled by hrtf_data.py (Single Responsibility).
+This module is exclusively the real-time rendering engine.
 
-Architecture:
-  - Each source has (left_hrir, right_hrir) impulse response pair
-  - Convolution runs in frequency domain (overlap-add, N=512)
-  - Quaternion → azimuth/elevation → HRTF lookup (or NNLS interpolation)
-  - Dynamic room model: inverse-square gain, proximity LF boost, early reflections
-
-HRTF data:
-  - Default: MIT KEMAR procedural approximation (Gardner & Martin, 1995)
-  - Production: AES69-2022 SOFA format (.sofa files) — the industry standard
-    for exchanging HRTFs, BRIRs, and DRIRs (see sofaconventions.org)
-  - Personalisation: supports user-uploaded SOFA profiles or future
-    AI-driven HRTF synthesis via neural upsampling (e.g. HRTFformer, 2025)
-  - Rendering toolkit: compatible with Binaural Rendering Toolbox (BRT) v2.0
-    modular pipeline for transparent, reproducible spatial audio
-
-MIT KEMAR HRIRs are licensed under CC BY 4.0 — safe for commercial use.
+Thread model:
+  - Audio thread calls render() at the audio callback rate
+  - Camera/6DoF thread calls update_head_pose() — lock-free
+  - SpatialLatencyGate: <1.5 ms HRTF update on 90° head turn
 """
 from __future__ import annotations
 
-import math
+import time
 from dataclasses import dataclass, field
 
 import numpy as np
 
-# ─── Constants ────────────────────────────────────────────────────────────────
+from claudio.hrtf_data import (
+    HRIR_LEN,
+    SAMPLE_RATE,
+    _HRTF_CACHE,
+    azimuth_elevation_from_position,
+    get_hrir,
+    interpolate_hrir_bilinear,
+)
+from claudio.signal_flow_config import (
+    ConvolutionStrategy,
+    HRTFInterpolation,
+    SignalFlowConfig,
+)
 
-SAMPLE_RATE   = 192_000   # Hz — rendered locally; transport is sample-rate agnostic
-FFT_SIZE      = 512       # overlap-add block size
-HRIR_LEN      = 128       # samples per HRIR (common KEMAR dataset length)
-SPEED_OF_SOUND = 343.0    # m/s at 20°C
+# Re-export for backward compatibility
+_azimuth_elevation_from_position = azimuth_elevation_from_position
+_get_hrir = get_hrir
 
-# Path for user-uploaded or bundled SOFA datasets (AES69-2022)
+FFT_SIZE       = 512
+SPEED_OF_SOUND = 343.0
 SOFA_DATASET_PATH = "assets/hrtf"
-
-# MIT KEMAR elevation/azimuth lookup grid
-# In production, this is populated from the bundled SOFA dataset files.
-# Here we use a procedural approximation for self-contained operation.
-_HRTF_CACHE: dict[tuple[int, int], tuple[np.ndarray, np.ndarray]] = {}
 
 
 # ─── Data Structures ──────────────────────────────────────────────────────────
@@ -56,140 +48,69 @@ _HRTF_CACHE: dict[tuple[int, int], tuple[np.ndarray, np.ndarray]] = {}
 class AudioSource:
     """A single mono audio source placed in 3D space."""
     source_id:   str
-    position:    np.ndarray   # (x, y, z) in metres, listener-centred
+    position:    np.ndarray
     gain_db:     float = 0.0
-    # Pre-computed frequency-domain HRTF pair (updated on head movement)
     _hrtf_l_fd: np.ndarray | None = field(default=None, repr=False, compare=False)
     _hrtf_r_fd: np.ndarray | None = field(default=None, repr=False, compare=False)
-    # Overlap-add state buffers
-    _ola_l: np.ndarray = field(
-        default_factory=lambda: np.zeros(HRIR_LEN - 1), repr=False, compare=False
-    )
-    _ola_r: np.ndarray = field(
-        default_factory=lambda: np.zeros(HRIR_LEN - 1), repr=False, compare=False
-    )
+    _prev_hrtf_l_fd: np.ndarray | None = field(default=None, repr=False, compare=False)
+    _prev_hrtf_r_fd: np.ndarray | None = field(default=None, repr=False, compare=False)
+    _crossfade_pos: int = field(default=0, repr=False, compare=False)
+    _ola_l: np.ndarray | None = field(default=None, repr=False, compare=False)
+    _ola_r: np.ndarray | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass
 class BinauralFrame:
     """One audio callback's worth of rendered binaural output."""
-    left:   np.ndarray   # (FFT_SIZE,) float32 — left ear
-    right:  np.ndarray   # (FFT_SIZE,) float32 — right ear
+    left:   np.ndarray
+    right:  np.ndarray
     sources_rendered: int
-
-
-# ─── HRTF Lookup ─────────────────────────────────────────────────────────────
-
-def _azimuth_elevation_from_position(
-    pos: np.ndarray, head_quat: tuple[float, float, float, float]
-) -> tuple[float, float]:
-    """
-    Convert a 3D source position to listener-relative azimuth and elevation
-    after applying the head orientation quaternion.
-
-    Returns (azimuth_deg, elevation_deg).
-    """
-    # Rotate the source position vector by the inverse of the head quaternion
-    rotated = _quat_rotate_vector(pos, _quat_conjugate(head_quat))
-    x, y, z = rotated
-    dist = math.sqrt(x**2 + y**2 + z**2) + 1e-8
-    azimuth   = math.degrees(math.atan2(x, z))     # horizontal angle
-    elevation = math.degrees(math.asin(y / dist))  # vertical angle
-    return azimuth, elevation
-
-
-def _quat_conjugate(q: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
-    w, x, y, z = q
-    return (w, -x, -y, -z)
-
-
-def _quat_rotate_vector(
-    v: np.ndarray, q: tuple[float, float, float, float]
-) -> np.ndarray:
-    """Rotate vector v by quaternion q using Hamilton product."""
-    w, qx, qy, qz = q
-    vx, vy, vz = v[0], v[1], v[2]
-    # v' = q * (0, v) * q*
-    # Efficient formula (Rodrigues rotation via quaternion)
-    t_x = 2 * (qy * vz - qz * vy)
-    t_y = 2 * (qz * vx - qx * vz)
-    t_z = 2 * (qx * vy - qy * vx)
-    return np.array([
-        vx + w * t_x + qy * t_z - qz * t_y,
-        vy + w * t_y + qz * t_x - qx * t_z,
-        vz + w * t_z + qx * t_y - qy * t_x,
-    ], dtype=np.float64)
-
-
-def _get_hrir(azimuth_deg: float, elevation_deg: float) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Look up or synthesise HRIR pair for the given angle.
-
-    In production: load from the MIT KEMAR or user-uploaded SOFA dataset.
-    Here: procedural minimum-phase ILD/ITD approximation (Gardner & Martin, 1995).
-    """
-    az_key = round(azimuth_deg / 5) * 5      # quantise to 5-degree grid
-    el_key = round(elevation_deg / 10) * 10
-
-    cache_key = (az_key % 360, el_key)
-    if cache_key in _HRTF_CACHE:
-        return _HRTF_CACHE[cache_key]
-
-    az_rad = math.radians(az_key)
-    el_rad = math.radians(el_key)
-
-    # Interaural Time Difference (ITD) in samples at 192 kHz
-    head_radius = 0.0875  # metres
-    itd_s  = (head_radius / SPEED_OF_SOUND) * math.sin(az_rad) * math.cos(el_rad)
-    itd_samples = int(abs(itd_s) * SAMPLE_RATE)
-    itd_samples = min(itd_samples, HRIR_LEN // 2)
-
-    # Interaural Level Difference (ILD) — simple head-shadow model
-    ild_db = 6.0 * math.sin(az_rad) * math.cos(el_rad)
-
-    hrir_l = np.zeros(HRIR_LEN, dtype=np.float32)
-    hrir_r = np.zeros(HRIR_LEN, dtype=np.float32)
-
-    ild_linear = 10 ** (ild_db / 20.0)
-    if az_rad >= 0:   # source on the right
-        hrir_r[0]           = ild_linear
-        hrir_l[itd_samples] = 1.0 / ild_linear
-    else:             # source on the left
-        hrir_l[0]           = ild_linear
-        hrir_r[itd_samples] = 1.0 / ild_linear
-
-    # Apply elevation pinna filter (simplified notch at high frequencies)
-    if abs(el_key) >= 30:
-        freq_notch = int(HRIR_LEN * (1 - abs(elevation_deg) / 90.0) * 0.5)
-        hrir_l[max(0, freq_notch)] *= 0.5
-        hrir_r[max(0, freq_notch)] *= 0.5
-
-    _HRTF_CACHE[cache_key] = (hrir_l, hrir_r)
-    return hrir_l, hrir_r
+    render_time_us: float = 0.0
 
 
 # ─── Binaural Rendering Engine ────────────────────────────────────────────────
 
 class HRTFBinauralEngine:
-    """
-    Real-time holographic binaural rendering engine.
+    """Real-time holographic binaural rendering engine."""
 
-    Thread model:
-      - Audio thread calls `render()` at the audio callback rate
-      - Camera/6DoF thread calls `update_head_pose()` to push new quaternion
-      - No mutex between them — atomic numpy array swap via `_quat` slot
-    """
+    def __init__(
+        self,
+        sample_rate: int = SAMPLE_RATE,
+        config: SignalFlowConfig | None = None,
+    ) -> None:
+        if config is not None:
+            self._sample_rate = config.render_sample_rate
+            self._fft_size = config.fft_size
+            self._hrir_len = config.hrir_length
+            self._grid_res = config.hrtf_grid_resolution_deg
+            self._crossfade_len = config.crossfade_samples
+            self._interpolation = config.hrtf_interpolation
+            self._strategy = config.convolution_strategy
+            self._partition_count = config.partition_count
+            self._air_absorption = config.air_absorption_enabled
+            self._proximity_cap_db = config.proximity_gain_cap_db
+        else:
+            self._sample_rate = sample_rate
+            self._fft_size = FFT_SIZE
+            self._hrir_len = HRIR_LEN
+            self._grid_res = 5.0
+            self._crossfade_len = 32
+            self._interpolation = HRTFInterpolation.BILINEAR
+            self._strategy = ConvolutionStrategy.PARTITIONED
+            self._partition_count = 2
+            self._air_absorption = True
+            self._proximity_cap_db = 12.0
 
-    def __init__(self, sample_rate: int = SAMPLE_RATE) -> None:
-        self._sample_rate = sample_rate
-        self._sources:  dict[str, AudioSource] = {}
-        # Current head orientation — written atomically (numpy assign is GIL-protected)
+        self._sources: dict[str, AudioSource] = {}
         self._head_quat: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
-        self._hrtf_dirty = True    # flag to recompute HRTF on next render
+        self._hrtf_dirty = True
 
     # ── Source Management ─────────────────────────────────────────────────
 
     def add_source(self, source: AudioSource) -> None:
+        tail_len = self._hrir_len - 1
+        source._ola_l = np.zeros(tail_len, dtype=np.float32)
+        source._ola_r = np.zeros(tail_len, dtype=np.float32)
         self._sources[source.source_id] = source
         self._hrtf_dirty = True
 
@@ -203,97 +124,90 @@ class HRTFBinauralEngine:
 
     # ── Head Tracking ─────────────────────────────────────────────────────
 
-    def update_head_pose(self, quat: tuple[float, float, float, float]) -> None:
-        """
-        Called by the 6DoF tracker thread.
-        Lock-free: single assignment is atomic under CPython GIL.
-        This is the path that must execute in <1.5 ms to satisfy
-        SpatialLatencyGate.
-        """
-        self._head_quat  = quat
+    def update_head_pose(
+        self, quat: tuple[float, float, float, float],
+    ) -> None:
+        self._head_quat = quat
         self._hrtf_dirty = True
 
     # ── Rendering ─────────────────────────────────────────────────────────
 
     def render(self, source_buffers: dict[str, np.ndarray]) -> BinauralFrame:
-        """
-        Render all active sources to a binaural stereo output frame.
-
-        Args:
-            source_buffers: dict mapping source_id → mono audio buffer (FFT_SIZE,)
-
-        Returns:
-            BinauralFrame with left and right channels ready for DAC output.
-        """
+        t0 = time.perf_counter()
         if self._hrtf_dirty:
             self._recompute_hrtfs()
             self._hrtf_dirty = False
 
-        out_l = np.zeros(FFT_SIZE, dtype=np.float32)
-        out_r = np.zeros(FFT_SIZE, dtype=np.float32)
+        block = self._fft_size
+        out_l = np.zeros(block, dtype=np.float32)
+        out_r = np.zeros(block, dtype=np.float32)
         rendered = 0
 
         for sid, buf in source_buffers.items():
             src = self._sources.get(sid)
             if src is None or src._hrtf_l_fd is None:
                 continue
-
             gain = 10 ** (src.gain_db / 20.0) * self._proximity_gain(src.position)
-            buf_scaled = buf * gain
+            if self._air_absorption:
+                gain *= self._air_absorption_factor(src.position)
+            buf_scaled = buf[:block] * gain
 
-            # Overlap-add convolution in frequency domain
-            l_out, src._ola_l = self._ola_convolve(
-                buf_scaled, src._hrtf_l_fd, src._ola_l
-            )
-            r_out, src._ola_r = self._ola_convolve(
-                buf_scaled, src._hrtf_r_fd, src._ola_r
-            )
-            out_l += l_out
-            out_r += r_out
+            l_out, src._ola_l = self._ola_convolve(buf_scaled, src._hrtf_l_fd, src._ola_l)
+            r_out, src._ola_r = self._ola_convolve(buf_scaled, src._hrtf_r_fd, src._ola_r)
+            out_l += l_out[:block]
+            out_r += r_out[:block]
             rendered += 1
 
-        return BinauralFrame(left=out_l, right=out_r, sources_rendered=rendered)
+        render_us = (time.perf_counter() - t0) * 1e6
+        return BinauralFrame(left=out_l, right=out_r, sources_rendered=rendered, render_time_us=render_us)
 
     # ── Private ───────────────────────────────────────────────────────────
 
     def _recompute_hrtfs(self) -> None:
-        """Recompute frequency-domain HRTFs for all sources given current head pose."""
         quat = self._head_quat
         for src in self._sources.values():
-            az, el = _azimuth_elevation_from_position(src.position, quat)
-            hrir_l, hrir_r = _get_hrir(az, el)
-            n_fft = FFT_SIZE + HRIR_LEN - 1
-            src._hrtf_l_fd = np.fft.rfft(hrir_l, n=n_fft).astype(np.complex64)
-            src._hrtf_r_fd = np.fft.rfft(hrir_r, n=n_fft).astype(np.complex64)
+            az, el = azimuth_elevation_from_position(src.position, quat)
+            if self._interpolation == HRTFInterpolation.BILINEAR:
+                hrir_l, hrir_r = interpolate_hrir_bilinear(
+                    az, el, self._hrir_len, self._sample_rate, self._grid_res)
+            else:
+                hrir_l, hrir_r = get_hrir(
+                    az, el, self._hrir_len, self._sample_rate, self._grid_res)
+
+            n_fft = self._fft_size + self._hrir_len - 1
+            new_l = np.fft.rfft(hrir_l, n=n_fft).astype(np.complex64)
+            new_r = np.fft.rfft(hrir_r, n=n_fft).astype(np.complex64)
+
+            if src._hrtf_l_fd is not None:
+                src._prev_hrtf_l_fd = src._hrtf_l_fd
+                src._prev_hrtf_r_fd = src._hrtf_r_fd
+                src._crossfade_pos = 0
+            src._hrtf_l_fd = new_l
+            src._hrtf_r_fd = new_r
 
     @staticmethod
     def _ola_convolve(
-        x: np.ndarray,
-        h_fd: np.ndarray,
-        ola_tail: np.ndarray,
+        x: np.ndarray, h_fd: np.ndarray, ola_tail: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Overlap-add frequency-domain convolution.
-        Returns (output_block, new_tail).
-        """
-        n_fft = len(h_fd) * 2 - 2   # inverse of rfft size
+        n_fft = len(h_fd) * 2 - 2
         x_padded = np.zeros(n_fft)
-        x_padded[: len(x)] = x
+        x_padded[:len(x)] = x
         y_time = np.fft.irfft(np.fft.rfft(x_padded) * h_fd).real
-
-        # Add overlap tail
         tail_len = len(ola_tail)
         y_time[:tail_len] += ola_tail
-
-        output   = y_time[: FFT_SIZE].astype(np.float32)
-        new_tail = y_time[FFT_SIZE : FFT_SIZE + tail_len].astype(np.float32)
+        block = len(x)
+        output   = y_time[:block].astype(np.float32)
+        new_tail = y_time[block:block + tail_len].astype(np.float32)
         return output, new_tail
 
-    @staticmethod
-    def _proximity_gain(position: np.ndarray) -> float:
-        """
-        Inverse-square law gain based on source distance from listener.
-        Reference distance: 1.0 m (gain = 1.0).
-        """
+    def _proximity_gain(self, position: np.ndarray) -> float:
         dist = float(np.linalg.norm(position)) + 0.01
-        return min(4.0, 1.0 / (dist ** 2))   # cap at +12 dB for proximity effect
+        cap = 10 ** (self._proximity_cap_db / 20.0)
+        return min(cap, 1.0 / (dist ** 2))
+
+    @staticmethod
+    def _air_absorption_factor(position: np.ndarray) -> float:
+        """ISO 9613-1 simplified: frequency-averaged atmospheric absorption."""
+        dist = float(np.linalg.norm(position))
+        absorption_db_per_m = 0.005
+        return 10 ** (-absorption_db_per_m * dist / 20.0)
