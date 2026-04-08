@@ -22,13 +22,9 @@ KEMAR HRIRs are licensed under CC BY 4.0 — safe for commercial use.
 from __future__ import annotations
 
 import math
-import threading
-from collections import deque
 from dataclasses import dataclass, field
-from typing import Optional
 
 import numpy as np
-
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -52,8 +48,8 @@ class AudioSource:
     position:    np.ndarray   # (x, y, z) in metres, listener-centred
     gain_db:     float = 0.0
     # Pre-computed frequency-domain HRTF pair (updated on head movement)
-    _hrtf_l_fd: Optional[np.ndarray] = field(default=None, repr=False, compare=False)
-    _hrtf_r_fd: Optional[np.ndarray] = field(default=None, repr=False, compare=False)
+    _hrtf_l_fd: np.ndarray | None = field(default=None, repr=False, compare=False)
+    _hrtf_r_fd: np.ndarray | None = field(default=None, repr=False, compare=False)
     # Overlap-add state buffers
     _ola_l: np.ndarray = field(
         default_factory=lambda: np.zeros(HRIR_LEN - 1), repr=False, compare=False

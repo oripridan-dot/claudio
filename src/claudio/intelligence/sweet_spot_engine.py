@@ -16,9 +16,8 @@ All corrections are lightweight enough to run in real-time at 48kHz.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 import numpy as np
 
@@ -90,7 +89,7 @@ class SweetSpotEngine:
         self._speakers: dict[str, SpeakerConfig] = {}
         self._mode = ListeningMode.DYNAMIC_FOLLOW
         self._reference_position = ListenerPosition(0, 0, -1.2)  # ideal mix position
-        self._secondary_position: Optional[ListenerPosition] = None
+        self._secondary_position: ListenerPosition | None = None
 
     # ── Configuration ────────────────────────────────────────────────────
 
@@ -249,10 +248,10 @@ class SweetSpotEngine:
             return self.compute(self._reference_position)
 
         centroid = ListenerPosition(
-            x=float(np.mean([l.x for l in listeners])),
-            y=float(np.mean([l.y for l in listeners])),
-            z=float(np.mean([l.z for l in listeners])),
-            confidence=float(np.mean([l.confidence for l in listeners])),
+            x=float(np.mean([lp.x for lp in listeners])),
+            y=float(np.mean([lp.y for lp in listeners])),
+            z=float(np.mean([lp.z for lp in listeners])),
+            confidence=float(np.mean([lp.confidence for lp in listeners])),
         )
         old_mode = self._mode
         self._mode = ListeningMode.WIDE_COMPROMISE

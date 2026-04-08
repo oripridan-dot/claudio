@@ -41,7 +41,8 @@ class AudioDataset(Dataset):
             if sr != self.SR:
                 waveform = torchaudio.functional.resample(waveform, sr, self.SR)
         else:
-            import wave, struct, array
+            import array
+            import wave
             with wave.open(str(path)) as wf:
                 raw = wf.readframes(wf.getnframes())
                 samples = array.array('h', raw)

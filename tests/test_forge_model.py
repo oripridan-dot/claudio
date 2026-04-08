@@ -1,11 +1,10 @@
 """Smoke test for the DDSP forge pipeline."""
-import pytest
 import torch
 
-from claudio.forge.model.ddsp_decoder import DDSPDecoder
-from claudio.forge.model.gru_encoder import GRUEncoder
-from claudio.forge.model.forge_model import ForgeModel
 from claudio.forge.loss.spectral_loss import MultiScaleSpectralLoss
+from claudio.forge.model.ddsp_decoder import DDSPDecoder
+from claudio.forge.model.forge_model import ForgeModel
+from claudio.forge.model.gru_encoder import GRUEncoder
 
 
 def test_gru_encoder_shape():

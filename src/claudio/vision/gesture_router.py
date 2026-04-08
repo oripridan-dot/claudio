@@ -14,10 +14,10 @@ SpatialLatencyGate constraint when head-tracking events are routed to HRTF.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
 
-from gesture_classifier import GestureType, GestureEvent
+from gesture_classifier import GestureEvent, GestureType
 
 
 @dataclass
@@ -58,7 +58,7 @@ class GestureRoutingMatrix:
 
     def __init__(
         self,
-        routes: Optional[dict[GestureType, ControlAction]] = None,
+        routes: dict[GestureType, ControlAction] | None = None,
     ) -> None:
         self._routes = routes or dict(DEFAULT_ROUTES)
         self._sinks:  dict[str, Callable[[ControlAction], None]] = {}
@@ -68,7 +68,7 @@ class GestureRoutingMatrix:
     ) -> None:
         self._sinks[protocol] = handler
 
-    def route(self, event: GestureEvent) -> Optional[ControlAction]:
+    def route(self, event: GestureEvent) -> ControlAction | None:
         """
         Translate a GestureEvent to a ControlAction and dispatch it.
         Magnitude from the gesture modulates the action value proportionally.

@@ -17,8 +17,6 @@ The live audio path is never touched by this server.
 """
 from __future__ import annotations
 
-import asyncio
-import json
 import time
 from dataclasses import asdict
 from typing import Any
@@ -38,13 +36,10 @@ from claudio.intelligence.phase_detector import PhaseCorrelationMeter
 from claudio.intelligence.room_scanner import RoomScanner
 from claudio.intelligence.sweet_spot_engine import (
     ListenerPosition,
-    ListeningMode,
-    SpeakerConfig,
     SweetSpotEngine,
 )
 from claudio.mentor.knowledge_base import (
     MentorKnowledgeBase,
-    ProductionPhase,
     TriggerCategory,
 )
 from claudio.mentor.roadmap_engine import RoadmapEngine
@@ -180,7 +175,6 @@ async def session_ws(ws: WebSocket) -> None:
             if msg_type == "audio_buffer":
                 # Expects: { type: "audio_buffer", samples: [...], channel_id: "..." }
                 samples = np.array(data["samples"], dtype=np.float32)
-                channel_id = data.get("channel_id", "main")
 
                 # Instrument classification
                 detection = session.instrument_classifier.classify(samples)

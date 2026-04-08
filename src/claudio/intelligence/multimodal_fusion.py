@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 import numpy as np
 
@@ -23,7 +22,6 @@ from .instrument_classifier import (
     InstrumentFamily,
     PickupType,
 )
-
 
 # ─── Vision Detection ────────────────────────────────────────────────────────
 
@@ -82,8 +80,8 @@ class EnvironmentDetection:
 class FusedDetection:
     """Cross-validated detection combining audio + vision."""
     instrument: InstrumentDetection
-    vision: Optional[VisionDetection]
-    environment: Optional[EnvironmentDetection]
+    vision: VisionDetection | None
+    environment: EnvironmentDetection | None
     fused_confidence: float           # combined confidence
     model_identification: str         # e.g. "Fender Telecaster (Bridge Pickup)"
     mic_type: str = ""                # detected microphone type
@@ -344,7 +342,6 @@ class MultimodalFusion:
             if v.category == VisualCategory.MONITOR_SPEAKER:
                 # Estimate position from bounding box center (normalized)
                 cx = v.bounding_box.x + v.bounding_box.width / 2
-                cy = v.bounding_box.y + v.bounding_box.height / 2
                 # Map to approximate 3D position (assumes 3m wide room)
                 speaker_positions.append((
                     (cx - 0.5) * 3.0,  # x: left-right

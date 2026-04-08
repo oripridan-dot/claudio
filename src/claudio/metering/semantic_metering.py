@@ -18,11 +18,9 @@ real-time holographic displays.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 import numpy as np
-
 
 # ─── 1. Pocket Radar ─────────────────────────────────────────────────────────
 
@@ -70,7 +68,7 @@ class PocketRadar:
         bass_onsets_sec: list[float],
         kick_onsets_sec: list[float],
         bpm: float,
-    ) -> Optional[PocketRadarFrame]:
+    ) -> PocketRadarFrame | None:
         if not bass_onsets_sec or not kick_onsets_sec:
             return None
 
@@ -86,8 +84,10 @@ class PocketRadar:
             dev_ms = (b_onset - nearest_kick) * 1000.0
             # Wrap to ±half beat
             half_beat_ms = beat_interval * 500.0
-            while dev_ms >  half_beat_ms: dev_ms -= beat_interval * 1000
-            while dev_ms < -half_beat_ms: dev_ms += beat_interval * 1000
+            while dev_ms > half_beat_ms:
+                dev_ms -= beat_interval * 1000
+            while dev_ms < -half_beat_ms:
+                dev_ms += beat_interval * 1000
             deviations.append(dev_ms)
 
         if not deviations:

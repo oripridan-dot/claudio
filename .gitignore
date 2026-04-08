@@ -21,3 +21,8 @@ checkpoints/
 wandb/
 .env
 .env.local
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+coverage/
+*.lcov

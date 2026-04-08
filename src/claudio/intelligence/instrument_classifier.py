@@ -19,10 +19,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 import numpy as np
-
 
 # ─── Instrument Taxonomy ──────────────────────────────────────────────────────
 
@@ -98,9 +96,9 @@ class InstrumentDetection:
     pickup_type: PickupType = PickupType.UNKNOWN
     model_guess: str = ""                  # e.g. "Fender Stratocaster" (from fusion with vision)
     model_confidence: float = 0.0
-    spectral_fingerprint: Optional[SpectralFingerprint] = None
-    transient_profile: Optional[TransientProfile] = None
-    harmonic_profile: Optional[HarmonicProfile] = None
+    spectral_fingerprint: SpectralFingerprint | None = None
+    transient_profile: TransientProfile | None = None
+    harmonic_profile: HarmonicProfile | None = None
     coaching_hints: list[str] = field(default_factory=list)
 
 

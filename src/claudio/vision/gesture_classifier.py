@@ -17,11 +17,9 @@ Architecture:
 """
 from __future__ import annotations
 
-import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Optional
 
 import numpy as np
 
@@ -60,12 +58,12 @@ class LandmarkFrame:
     """
     timestamp: float
     # Pose: 33 landmarks × 3 (x, y, z)
-    pose: Optional[np.ndarray] = None            # shape (33, 3)
+    pose: np.ndarray | None = None            # shape (33, 3)
     # Hands: 21 landmarks × 3
-    left_hand:  Optional[np.ndarray] = None      # shape (21, 3)
-    right_hand: Optional[np.ndarray] = None      # shape (21, 3)
+    left_hand:  np.ndarray | None = None      # shape (21, 3)
+    right_hand: np.ndarray | None = None      # shape (21, 3)
     # Face: 468 landmarks × 3 (used for head pose)
-    face: Optional[np.ndarray] = None            # shape (468, 3)
+    face: np.ndarray | None = None            # shape (468, 3)
 
 
 class GestureClassifier:
@@ -90,7 +88,7 @@ class GestureClassifier:
 
     # ── Public API ────────────────────────────────────────────────────────
 
-    def ingest(self, frame: LandmarkFrame) -> Optional[GestureEvent]:
+    def ingest(self, frame: LandmarkFrame) -> GestureEvent | None:
         """Feed one landmark frame. Returns a GestureEvent if one fires."""
         self._frame_buffer.append(frame)
         event = self._classify()
@@ -100,7 +98,7 @@ class GestureClassifier:
 
     # ── Classification ────────────────────────────────────────────────────
 
-    def _classify(self) -> Optional[GestureEvent]:
+    def _classify(self) -> GestureEvent | None:
         if len(self._frame_buffer) < 2:
             return None
 
@@ -132,7 +130,7 @@ class GestureClassifier:
         deltas = [positions[i+1] - positions[i] for i in range(len(positions)-1)]
         return float(np.mean(deltas))
 
-    def _check_dynamic_sweep(self, frame: LandmarkFrame) -> Optional[GestureEvent]:
+    def _check_dynamic_sweep(self, frame: LandmarkFrame) -> GestureEvent | None:
         """Detect lateral (x-axis) wrist sweep on either hand."""
         for hand_attr, hand_label in [("right_hand", "right"), ("left_hand", "left")]:
             vx = self._hand_velocity(hand_attr, axis=0)  # x axis
@@ -147,7 +145,7 @@ class GestureClassifier:
                 )
         return None
 
-    def _check_dynamic_vertical(self, frame: LandmarkFrame) -> Optional[GestureEvent]:
+    def _check_dynamic_vertical(self, frame: LandmarkFrame) -> GestureEvent | None:
         """Detect both-hands vertical movement."""
         vy_r = self._hand_velocity("right_hand", axis=1)
         vy_l = self._hand_velocity("left_hand",  axis=1)
@@ -165,7 +163,7 @@ class GestureClassifier:
                 )
         return None
 
-    def _check_head_lean(self, frame: LandmarkFrame) -> Optional[GestureEvent]:
+    def _check_head_lean(self, frame: LandmarkFrame) -> GestureEvent | None:
         """Detect head yaw (lean left/right) from face mesh landmarks."""
         if frame.face is None or len(frame.face) < 468:
             # Fall back to pose nose/ear if no face mesh
@@ -202,7 +200,7 @@ class GestureClassifier:
             )
         return None
 
-    def _check_head_vertical(self, frame: LandmarkFrame) -> Optional[GestureEvent]:
+    def _check_head_vertical(self, frame: LandmarkFrame) -> GestureEvent | None:
         """Detect head pitch (nod up/down) from pose nose landmark."""
         if frame.pose is None:
             return None
@@ -230,7 +228,7 @@ class GestureClassifier:
             )
         return None
 
-    def _check_pinch(self, frame: LandmarkFrame) -> Optional[GestureEvent]:
+    def _check_pinch(self, frame: LandmarkFrame) -> GestureEvent | None:
         """Index-thumb pinch on either hand."""
         for hand_attr, hand_label in [("right_hand", "right"), ("left_hand", "left")]:
             lm = getattr(frame, hand_attr)
@@ -247,7 +245,7 @@ class GestureClassifier:
                 )
         return None
 
-    def _check_expand(self, frame: LandmarkFrame) -> Optional[GestureEvent]:
+    def _check_expand(self, frame: LandmarkFrame) -> GestureEvent | None:
         """Both hands moving apart horizontally (stereo widen)."""
         ll = frame.left_hand
         rl = frame.right_hand
@@ -259,8 +257,8 @@ class GestureClassifier:
         if len(self._frame_buffer) < 5:
             return None
         prev = self._frame_buffer[-5]
-        pl = getattr(prev, "left_hand")
-        pr = getattr(prev, "right_hand")
+        pl = prev.left_hand
+        pr = prev.right_hand
         if pl is None or pr is None:
             return None
         prev_span = abs(pr[0, 0] - pl[0, 0])
@@ -274,7 +272,7 @@ class GestureClassifier:
             )
         return None
 
-    def _check_static_palm(self, frame: LandmarkFrame) -> Optional[GestureEvent]:
+    def _check_static_palm(self, frame: LandmarkFrame) -> GestureEvent | None:
         """Open palm held for STATIC_HOLD_MS ms → bypass insert."""
         for hand_attr, hand_label in [("right_hand", "right"), ("left_hand", "left")]:
             lm = getattr(frame, hand_attr)
@@ -294,7 +292,7 @@ class GestureClassifier:
                 self._static_start.pop(GestureType.OPEN_PALM, None)
         return None
 
-    def _check_static_fist(self, frame: LandmarkFrame) -> Optional[GestureEvent]:
+    def _check_static_fist(self, frame: LandmarkFrame) -> GestureEvent | None:
         """Closed fist held for STATIC_HOLD_MS ms → mute channel."""
         for hand_attr, hand_label in [("right_hand", "right"), ("left_hand", "left")]:
             lm = getattr(frame, hand_attr)

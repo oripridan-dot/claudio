@@ -1,7 +1,7 @@
 """
 knowledge_base.py — Pro-Tip Mentorship Knowledge Base
 
-Structured database of verified acoustic & engineering principles, 
+Structured database of verified acoustic & engineering principles,
 grounded in real-world testimonials from top-tier studio engineers.
 
 Each MentorTip is:
@@ -15,9 +15,8 @@ with the engineer's photo, their quote, and an interactive action guide.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 
 class ProductionPhase(Enum):
@@ -534,13 +533,13 @@ class MentorKnowledgeBase:
         for tip in MENTOR_TIPS:
             self._by_trigger.setdefault(tip.trigger, []).append(tip)
 
-    def get_tip(self, tip_id: str) -> Optional[MentorTip]:
+    def get_tip(self, tip_id: str) -> MentorTip | None:
         return self._tips.get(tip_id)
 
     def find_tips(
         self,
         trigger: TriggerCategory,
-        phase: Optional[ProductionPhase] = None,
+        phase: ProductionPhase | None = None,
         confidence: float = 0.0,
     ) -> list[MentorTip]:
         """Find all tips matching a trigger category, filtered by phase and confidence."""
@@ -557,9 +556,9 @@ class MentorKnowledgeBase:
     def find_best_tip(
         self,
         trigger: TriggerCategory,
-        phase: Optional[ProductionPhase] = None,
+        phase: ProductionPhase | None = None,
         confidence: float = 0.0,
-    ) -> Optional[MentorTip]:
+    ) -> MentorTip | None:
         """Return the single most relevant tip for the detection."""
         tips = self.find_tips(trigger, phase, confidence)
         if not tips:

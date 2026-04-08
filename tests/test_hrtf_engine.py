@@ -1,14 +1,16 @@
 """test_hrtf_engine.py — Unit tests for the HRTF binaural engine."""
 from __future__ import annotations
+
 import math
+
 import numpy as np
 import pytest
 
 from claudio.hrtf_engine import (
-    HRTFBinauralEngine, AudioSource,
-    _azimuth_elevation_from_position,
-    _quat_conjugate,
     FFT_SIZE,
+    AudioSource,
+    HRTFBinauralEngine,
+    _azimuth_elevation_from_position,
 )
 
 
@@ -28,7 +30,6 @@ def test_source_on_right_gives_positive_azimuth():
 def test_proximity_gain_increases_closer():
     from claudio.hrtf_engine import HRTFBinauralEngine
     engine = HRTFBinauralEngine.__new__(HRTFBinauralEngine)
-    from claudio.hrtf_engine import AudioSource as AS
     gain_far  = engine._proximity_gain(np.array([0.0, 0.0, -4.0]))
     gain_near = engine._proximity_gain(np.array([0.0, 0.0, -0.3]))
     assert gain_near > gain_far
@@ -59,7 +60,7 @@ def test_hrtf_update_is_lock_free(benchmark):
     """
     engine = HRTFBinauralEngine()
     quat = (math.cos(math.pi/4), 0.0, math.sin(math.pi/4), 0.0)
-    result = benchmark(engine.update_head_pose, quat)
+    benchmark(engine.update_head_pose, quat)
     # No assertion on time here — benchmark reports it.
     # Integration test in ci/spatial_latency_gate.py enforces <1.5 ms.
 

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 from .knowledge_base import ProductionPhase
 
@@ -320,7 +319,7 @@ class RoadmapEngine:
                     return True
         return False
 
-    def advance_phase(self) -> Optional[ProductionPhase]:
+    def advance_phase(self) -> ProductionPhase | None:
         """Manually advance to the next phase (skip gate)."""
         if self._current_idx < len(self._phases) - 1:
             self._phases[self._current_idx].status = PhaseStatus.COMPLETED

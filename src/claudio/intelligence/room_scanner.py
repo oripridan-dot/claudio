@@ -14,8 +14,7 @@ measurement, and adds diagnostic visualization data.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -66,9 +65,9 @@ class RoomScanResult:
     treatment_plan: list[str]
 
     # Visualization data
-    impulse_response: Optional[np.ndarray] = None
-    frequency_response_db: Optional[np.ndarray] = None
-    freq_axis_hz: Optional[np.ndarray] = None
+    impulse_response: np.ndarray | None = None
+    frequency_response_db: np.ndarray | None = None
+    freq_axis_hz: np.ndarray | None = None
 
 
 class RoomScanner:

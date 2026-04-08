@@ -7,17 +7,47 @@ room scanning, sweet spot engine, knowledge base, and roadmap engine.
 import math
 
 import numpy as np
-import pytest
 
 # ── Instrument Classifier ────────────────────────────────────────────────
 from claudio.intelligence.instrument_classifier import (
     HarmonicProfiler,
     InstrumentClassifier,
     InstrumentFamily,
-    PickupType,
     SpectralExtractor,
     TransientAnalyzer,
 )
+
+# ── Multimodal Fusion ────────────────────────────────────────────────────
+from claudio.intelligence.multimodal_fusion import (
+    INSTRUMENT_MODEL_DB,
+    BoundingBox,
+    MultimodalFusion,
+    VisionDetection,
+    VisualCategory,
+)
+
+# ── Phase Detector ────────────────────────────────────────────────────────
+from claudio.intelligence.phase_detector import PhaseCorrelationMeter
+
+# ── Room Scanner ──────────────────────────────────────────────────────────
+from claudio.intelligence.room_scanner import RoomScanner
+
+# ── Sweet Spot Engine ─────────────────────────────────────────────────────
+from claudio.intelligence.sweet_spot_engine import (
+    ListenerPosition,
+    ListeningMode,
+    SweetSpotEngine,
+)
+
+# ── Knowledge Base ────────────────────────────────────────────────────────
+from claudio.mentor.knowledge_base import (
+    MentorKnowledgeBase,
+    ProductionPhase,
+    TriggerCategory,
+)
+
+# ── Roadmap Engine ────────────────────────────────────────────────────────
+from claudio.mentor.roadmap_engine import RoadmapEngine
 
 
 class TestSpectralExtractor:
@@ -118,10 +148,6 @@ class TestInstrumentClassifier:
         assert det.family in InstrumentFamily.__members__.values()
 
 
-# ── Phase Detector ────────────────────────────────────────────────────────
-
-from claudio.intelligence.phase_detector import PhaseCorrelationMeter
-
 
 class TestPhaseCorrelationMeter:
     def setup_method(self):
@@ -165,10 +191,6 @@ class TestPhaseCorrelationMeter:
         frame = self.meter.analyze(a, b)
         assert abs(abs(frame.time_offset_samples) - 100) < 10, f"offset={frame.time_offset_samples}"
 
-
-# ── Room Scanner ──────────────────────────────────────────────────────────
-
-from claudio.intelligence.room_scanner import RoomScanner
 
 
 class TestRoomScanner:
@@ -216,15 +238,6 @@ class TestRoomScanner:
         assert isinstance(result.has_flutter_echo, bool)
 
 
-# ── Sweet Spot Engine ─────────────────────────────────────────────────────
-
-from claudio.intelligence.sweet_spot_engine import (
-    ListenerPosition,
-    ListeningMode,
-    SpeakerConfig,
-    SweetSpotEngine,
-)
-
 
 class TestSweetSpotEngine:
     def setup_method(self):
@@ -263,14 +276,6 @@ class TestSweetSpotEngine:
         assert frame.coaching_message != ""
         assert frame.zone_quality < 0.8
 
-
-# ── Knowledge Base ────────────────────────────────────────────────────────
-
-from claudio.mentor.knowledge_base import (
-    MentorKnowledgeBase,
-    ProductionPhase,
-    TriggerCategory,
-)
 
 
 class TestMentorKnowledgeBase:
@@ -314,11 +319,6 @@ class TestMentorKnowledgeBase:
     def test_knowledge_base_has_minimum_tips(self):
         assert len(self.kb.all_tips) >= 10, "KB should have at least 10 tips"
 
-
-# ── Roadmap Engine ────────────────────────────────────────────────────────
-
-from claudio.mentor.knowledge_base import ProductionPhase
-from claudio.mentor.roadmap_engine import RoadmapEngine
 
 
 class TestRoadmapEngine:
@@ -366,16 +366,6 @@ class TestRoadmapEngine:
             ProductionPhase.MIXING,  # some phases might not auto-advance
         )
 
-
-# ── Multimodal Fusion (smoke test) ───────────────────────────────────────
-
-from claudio.intelligence.multimodal_fusion import (
-    INSTRUMENT_MODEL_DB,
-    BoundingBox,
-    MultimodalFusion,
-    VisionDetection,
-    VisualCategory,
-)
 
 
 class TestMultimodalFusion:

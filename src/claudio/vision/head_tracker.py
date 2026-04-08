@@ -19,7 +19,6 @@ import math
 import time
 from collections import deque
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 
@@ -142,9 +141,9 @@ class SpatialHeadTracker:
         self.quaternion_ring: deque[tuple[float, float, float, float]] = deque(
             maxlen=self.RING_SIZE
         )
-        self._latest: Optional[HeadPose] = None
+        self._latest: HeadPose | None = None
 
-    def update(self, face_landmarks: np.ndarray) -> Optional[HeadPose]:
+    def update(self, face_landmarks: np.ndarray) -> HeadPose | None:
         """
         Ingest one face mesh frame (468×3 normalised landmarks).
         Returns a HeadPose or None if estimation fails.
@@ -189,7 +188,7 @@ class SpatialHeadTracker:
 
     def _solve_pnp(
         self, image_points: np.ndarray
-    ) -> tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    ) -> tuple[np.ndarray | None, np.ndarray | None]:
         """
         Minimal iterative PnP solver using DLT initialisation.
         Returns (rvec, tvec) or (None, None) on failure.
