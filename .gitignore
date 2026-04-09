@@ -30,3 +30,4 @@ coverage/
 data/
 demo_output/
 .benchmarks/
+opportunist_report_*.json

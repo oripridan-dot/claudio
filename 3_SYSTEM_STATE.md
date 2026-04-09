@@ -21,8 +21,8 @@ Last updated: 2026-04-09
 | Component | Status | Notes |
 |---|---|---|
 | Session Manager (`collab/session_manager.py`) | ✅ Production | Room lifecycle, peer join/leave, token-bucket rate limiting (64KB/s), stale room TTL cleanup |
-| Collaboration Server (`server/claudio_server.py`) | ✅ Production | Stateless JWT-Auth protocol, WS binary + JSON signaling, snapshot-safe broadcast |
-| Authentication (`server/auth.py`) | ✅ Production | PyJWT symmetric HS256 tokens, Ephemeral/ENV-based secrets |
+| Collaboration Server (`server/claudio_server.py`) | ✅ Production | WS binary + JSON signaling, JSON parse safety, snapshot-safe broadcast |
+| Authentication (`server/auth.py`) | ✅ Production | Stateless JWT validation for WebSocket endpoints |
 | Frontend IntentEngine (`frontend/src/engine/IntentEngine.ts`) | ✅ Production | 120Hz capture, Ping latency tracking, RTCP Jitter & Packet Loss |
 | CollabPage (`frontend/src/pages/CollabPage.tsx`) | ✅ Built | Room connection UI with Dynamic Network Telemetry rendering |
 | IntentVisualizer (`frontend/src/components/IntentVisualizer.ts`) | ✅ Built | Real-time intent packet visualization |
