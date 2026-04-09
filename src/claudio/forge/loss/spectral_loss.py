@@ -40,19 +40,27 @@ class MultiScaleSpectralLoss(nn.Module):
         -------
         scalar loss tensor
         """
+        # Ensure same length
+        min_len = min(pred.shape[-1], target.shape[-1])
+        pred = pred[..., :min_len]
+        target = target[..., :min_len]
+
         loss = torch.zeros(1, device=pred.device)
         for fft_size in self.fft_sizes:
+            if min_len < fft_size:
+                continue  # Skip FFT sizes larger than the signal
             hop = max(1, int(fft_size * _HOP_RATIO))
             win = torch.hann_window(fft_size, device=pred.device)
 
+            p = pred.reshape(-1, min_len) if pred.dim() > 1 else pred.unsqueeze(0)
+            t = target.reshape(-1, min_len) if target.dim() > 1 else target.unsqueeze(0)
+
             s_pred = torch.stft(
-                pred.reshape(-1, pred.shape[-1]),
-                n_fft=fft_size, hop_length=hop, win_length=fft_size,
+                p, n_fft=fft_size, hop_length=hop, win_length=fft_size,
                 window=win, return_complex=True,
             )
             s_tgt = torch.stft(
-                target.reshape(-1, target.shape[-1]),
-                n_fft=fft_size, hop_length=hop, win_length=fft_size,
+                t, n_fft=fft_size, hop_length=hop, win_length=fft_size,
                 window=win, return_complex=True,
             )
 

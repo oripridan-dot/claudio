@@ -97,6 +97,14 @@ class DDSPDecoder(nn.Module):
             size=T_audio, mode="linear", align_corners=False,
         ).squeeze(1)                        # (B, T_audio)
 
+        # Ensure all components match T_audio (rounding can cause ±1 mismatch)
+        audio_harm = audio_harm[..., :T_audio]
+        audio_noise = audio_noise[..., :T_audio]
+        if audio_harm.shape[-1] < T_audio:
+            audio_harm = F.pad(audio_harm, (0, T_audio - audio_harm.shape[-1]))
+        if audio_noise.shape[-1] < T_audio:
+            audio_noise = F.pad(audio_noise, (0, T_audio - audio_noise.shape[-1]))
+
         return (audio_harm + audio_noise) * env
 
     # ── Private helpers ─────────────────────────────────────────────────────
@@ -149,33 +157,35 @@ class DDSPDecoder(nn.Module):
         # White noise
         noise = torch.randn(B, T_audio, device=device)
 
-        # Convert magnitude spectrum → minimum-phase FIR via windowed sinc
-        # Upsample per-frame filter to per-sample resolution
+        # Convert magnitude spectrum → FIR filter via IFFT
+        # For efficiency: use frame-averaged magnitude per batch item
         mags_up = F.interpolate(
             n_mags.permute(0, 2, 1),    # (B, N_bins, T)
             size=T_audio, mode="linear", align_corners=False,
         )  # (B, N_bins, T_audio)
 
-        # For efficiency: apply a single mean filter (frame-averaged) per batch
         mean_mags = mags_up.mean(-1)   # (B, N_bins)
 
-        # Build symmetric FIR kernel from magnitude spectrum (IFFT)
-        # Pad to next power of two for FFT
-        fft_size = self.n_filter_bins * 2
-        half = torch.zeros(B, fft_size // 2 + 1, device=device, dtype=torch.complex64)
-        half.real[:, : self.n_filter_bins] = mean_mags
+        # FFT-based filtering: multiply in frequency domain
+        # FFT the noise
+        fft_n = max(T_audio, self.n_filter_bins * 2)
+        noise_fft = torch.fft.rfft(noise, n=fft_n)  # (B, fft_n//2+1)
 
-        kernel = torch.fft.irfft(half, n=fft_size)   # (B, fft_size)
-        # Apply Hann window
-        win = torch.hann_window(fft_size, device=device)
-        kernel = kernel * win.unsqueeze(0)
+        # Build frequency-domain filter from magnitudes
+        n_freq_bins = noise_fft.shape[-1]
+        filt = torch.ones(B, n_freq_bins, device=device)
+        # Map n_filter_bins magnitude values into the frequency domain
+        for b in range(B):
+            # Interpolate filter magnitudes to match FFT size
+            mags_b = mean_mags[b]  # (N_filter_bins,)
+            filt_interp = F.interpolate(
+                mags_b.unsqueeze(0).unsqueeze(0),  # (1, 1, N_filter_bins)
+                size=n_freq_bins, mode="linear", align_corners=False,
+            ).squeeze(0).squeeze(0)  # (n_freq_bins,)
+            filt[b] = filt_interp
 
-        # Convolve noise with per-sample kernel (grouped conv trick: B separate filters)
-        noise_filtered = F.conv1d(
-            noise.unsqueeze(1),            # (B, 1, T_audio)
-            kernel.unsqueeze(1),           # (B, 1, fft_size)
-            padding=fft_size // 2,
-            groups=1,                      # simplified: use mean kernel for all batch
-        ).squeeze(1)[:, :T_audio]          # (B, T_audio)
+        # Apply filter in frequency domain
+        filtered_fft = noise_fft * filt
+        noise_filtered = torch.fft.irfft(filtered_fft, n=fft_n)[:, :T_audio]
 
         return noise_filtered * 0.1   # scale noise contribution

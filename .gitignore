@@ -26,3 +26,6 @@ wandb/
 htmlcov/
 coverage/
 *.lcov
+data/
+demo_output/
+.benchmarks/
