@@ -12,9 +12,9 @@ Last updated: 2026-04-09
 |---|---|---|
 | Intent Encoder (`intent/intent_encoder.py`) | ✅ Production | YIN F0 + MFCC + loudness + onset + vibrato at 250Hz, NaN/Inf sanitized |
 | Intent Protocol (`intent/intent_protocol.py`) | ✅ Production | Binary wire format, delta compression (~55% savings), rms_energy serialized |
-| Intent Decoder (`intent/intent_decoder.py`) | ✅ Production | 40-harmonic additive synthesis, gain smoothing, MFCC carry-forward for delta |
+| Intent Decoder (`intent/intent_decoder.py`) | ✅ Production | Dual-mode: DDSP neural synthesis + additive fallback, gain smoothing, MFCC carry-forward |
 | Intent Stream (`intent/intent_protocol.py`) | ✅ Production | Stateful packer with FULL_FRAME, DELTA, SILENCE, KEY_FRAME modes |
-| DDSP Forge (`forge/`) | ✅ Training | ForgeModel (FeatureExtractor → GRUEncoder → DDSPDecoder), calibrating on multitracks |
+| DDSP Forge (`forge/`) | ✅ Trained | GRUEncoder → DDSPDecoder, 100 epochs, loss 3.50→2.55 (26% improvement), 832KB checkpoint |
 
 ### Collaboration Infrastructure
 
@@ -34,9 +34,9 @@ Last updated: 2026-04-09
 | Intent Hardening (edge cases) | 15 | `test_intent_hardening.py` |
 | Collab Session (room mgmt) | 9 | `test_collab_session.py` |
 | Collab E2E (network/wire) | 19 | `test_collab_e2e.py` |
-| DDSP Forge Model | 4 | `test_forge_model.py` |
+| DDSP Forge + Decoder Integration | 9 | `test_forge_model.py` |
 | HRTF, Metering, Intelligence | 101 | Various |
-| **Total** | **168 passed** | 1 xfailed |
+| **Total** | **173 passed** | 1 xfailed |
 
 ### Feature Modules (Secondary Priority)
 
@@ -115,11 +115,18 @@ Last updated: 2026-04-09
 - **Server**: JSON parse safety, snapshot-safe broadcast (both binary + JSON), stale room TTL cleanup
 - **Session Manager**: Token-bucket rate limiting (64KB/s per sender), room lifecycle cleanup
 - **Frontend**: 120Hz capture rate, WebSocket reconnection with exponential backoff, ping/pong latency measurement
-- **Tests**: 33 → 67 intent/collab tests, 168 total suite passing
+- **Tests**: 33 → 67 intent/collab tests
+
+### DDSP Neural Decoder
+
+- **Training**: ForgeModel calibrated on 5 multitrack WAVs (guitar, bass, piano, vocal), 100 epochs on MPS
+- **Loss**: Multi-scale spectral loss 3.50 → 2.55 (26% improvement)
+- **Integration**: IntentDecoder dual-mode — `model_path` enables DDSP, None uses additive fallback
+- **Vectorization**: DDSPDecoder._filtered_noise batch loop eliminated
+- **Checkpoint**: `checkpoints/forge_model_best.pt` (832KB)
+- **Tests**: 4 → 9 forge tests (convergence, checkpoint save/load, integration, fallback)
 
 ## Pending
 
-- ⚠️ Complete DDSP training calibration on full multitrack dataset
 - ⚠️ Build WebRTC data channels for P2P transport (replace WebSocket relay)
 - ⚠️ End-to-end browser demo: mic → intent → network → regen → playback
-- ⚠️ Add DDSP-based decoder option to IntentDecoder (currently additive synthesis)
