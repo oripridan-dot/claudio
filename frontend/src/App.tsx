@@ -1,5 +1,5 @@
-import StudioPage from './pages/StudioPage'
+import CollabPage from './pages/CollabPage'
 
 export default function App() {
-  return <StudioPage />
+  return <CollabPage />
 }

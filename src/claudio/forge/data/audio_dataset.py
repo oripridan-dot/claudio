@@ -36,17 +36,36 @@ class AudioDataset(Dataset):
 
     def __getitem__(self, idx: int) -> torch.Tensor:
         path = self.paths[idx]
+        waveform = None
+
         if _HAS_TORCHAUDIO:
-            waveform, sr = torchaudio.load(str(path))
-            if sr != self.SR:
-                waveform = torchaudio.functional.resample(waveform, sr, self.SR)
-        else:
-            import array
+            try:
+                waveform, sr = torchaudio.load(str(path))
+                if sr != self.SR:
+                    waveform = torchaudio.functional.resample(waveform, sr, self.SR)
+            except (ImportError, RuntimeError):
+                waveform = None  # Fall through to wave fallback
+
+        if waveform is None:
             import wave
+
             with wave.open(str(path)) as wf:
                 raw = wf.readframes(wf.getnframes())
-                samples = array.array('h', raw)
-                waveform = torch.tensor(samples, dtype=torch.float32).unsqueeze(0) / 32768.0
+                n_ch = wf.getnchannels()
+                sw = wf.getsampwidth()
+                if sw == 2:
+                    import numpy as np
+                    samples = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+                else:
+                    import array
+                    samples = array.array('h', raw)
+                    samples = torch.tensor(samples, dtype=torch.float32) / 32768.0
+                    samples = samples.numpy()
+                import numpy as np
+                samples_np = np.asarray(samples, dtype=np.float32)
+                if n_ch > 1:
+                    samples_np = samples_np.reshape(-1, n_ch).mean(axis=1)
+                waveform = torch.from_numpy(samples_np).unsqueeze(0)
 
         # Downmix to mono
         if waveform.shape[0] > 1:
@@ -60,4 +79,4 @@ class AudioDataset(Dataset):
             start = random.randint(0, audio.shape[0] - self.clip_len)
             audio = audio[start : start + self.clip_len]
 
-        return audio.unsqueeze(0)   # (1, clip_len) — batch expects (B, C, T) but model wants (B, T)
+        return audio   # (clip_len,) — DataLoader stacks to (B, T)

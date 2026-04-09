@@ -17,6 +17,7 @@ The live audio path is never touched by this server.
 """
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import asdict
 from typing import Any
@@ -24,7 +25,9 @@ from typing import Any
 import numpy as np
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.websockets import WebSocketState
 
+from claudio.collab.session_manager import PeerRole, SessionManager
 from claudio.intelligence.instrument_classifier import InstrumentClassifier
 from claudio.intelligence.multimodal_fusion import (
     BoundingBox,
@@ -78,6 +81,7 @@ pocket_radar = PocketRadar()
 freq_map = TopographicFreqMap(sample_rate=48_000)
 coach = PerformanceCoach()
 advisor = AcousticEnvironmentAdvisor()
+collab_manager = SessionManager()
 
 
 def _serialize(obj: Any) -> Any:
@@ -285,3 +289,129 @@ async def _check_coaching_triggers(session, detection, ws):
 def _treatment_text_to_trigger(text):
     """Delegate to ws_session module."""
     return treatment_text_to_trigger(text)
+
+
+# ─── Collaboration Endpoints ─────────────────────────────────────────────────
+
+
+@app.post("/api/collab/create")
+async def create_collab_room() -> dict:
+    """Create a new collaboration room."""
+    room_id = await collab_manager.create_room()
+    return {"room_id": room_id, "ws_url": f"/ws/collab/{room_id}"}
+
+
+@app.get("/api/collab/rooms")
+async def list_collab_rooms() -> dict:
+    return {
+        "active_rooms": collab_manager.room_count(),
+        "active_peers": collab_manager.active_peers(),
+    }
+
+
+@app.websocket("/ws/collab/{room_id}")
+async def collab_ws(ws: WebSocket, room_id: str) -> None:
+    """Collaboration WebSocket: binary intent packets + JSON signaling.
+
+    Protocol:
+      - Binary frames: raw intent packets, broadcast to all other peers
+      - JSON frames:   signaling (join, leave, ping, instrument_set, metrics)
+    """
+    await ws.accept()
+
+    # Parse query params
+    params = dict(ws.query_params)
+    display_name = params.get("name", "Musician")
+    role = PeerRole(params.get("role", "both"))
+
+    # Join room
+    peer = await collab_manager.join_room(room_id, ws, display_name, role)
+    if peer is None:
+        await ws.send_json({"type": "error", "message": "Room full or not found"})
+        await ws.close()
+        return
+
+    # Notify room of new peer
+    room = collab_manager.get_room(room_id)
+    await collab_manager.broadcast_json(room_id, None, {
+        "type": "peer_joined",
+        "peer_id": peer.peer_id,
+        "display_name": peer.display_name,
+        "peers": room.peer_list() if room else [],
+    })
+
+    # Send welcome
+    await ws.send_json({
+        "type": "welcome",
+        "peer_id": peer.peer_id,
+        "room_id": room_id,
+        "peers": room.peer_list() if room else [],
+    })
+
+    try:
+        while True:
+            message = await ws.receive()
+
+            if message["type"] == "websocket.receive":
+                if "bytes" in message and message["bytes"]:
+                    # Binary frame: intent packet → broadcast
+                    await collab_manager.broadcast_intent(
+                        room_id, peer.peer_id, message["bytes"],
+                    )
+                elif "text" in message and message["text"]:
+                    try:
+                        data = json.loads(message["text"])
+                    except json.JSONDecodeError:
+                        continue  # Ignore malformed JSON
+                    msg_type = data.get("type", "")
+
+                    if msg_type == "ping":
+                        await ws.send_json({
+                            "type": "pong",
+                            "ts": time.time(),
+                            "server_ts": time.time(),
+                        })
+
+                    elif msg_type == "latency_report":
+                        peer.latency_ms = data.get("latency_ms", 0.0)
+
+                    elif msg_type == "instrument_set":
+                        peer.instrument = data.get("instrument", "unknown")
+                        room = collab_manager.get_room(room_id)
+                        await collab_manager.broadcast_json(room_id, None, {
+                            "type": "peer_updated",
+                            "peer_id": peer.peer_id,
+                            "instrument": peer.instrument,
+                            "peers": room.peer_list() if room else [],
+                        })
+
+                    elif msg_type == "metrics_request":
+                        room = collab_manager.get_room(room_id)
+                        if room:
+                            m = room.metrics()
+                            await ws.send_json({
+                                "type": "metrics",
+                                "peer_count": m.peer_count,
+                                "total_packets": m.total_packets,
+                                "bytes_transmitted": m.bytes_transmitted,
+                                "avg_latency_ms": round(m.avg_latency_ms, 1),
+                                "uptime_seconds": round(m.uptime_seconds, 1),
+                                "bandwidth_kbps": round(m.bandwidth_kbps, 2),
+                            })
+
+            elif message["type"] == "websocket.disconnect":
+                break
+
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await collab_manager.leave_room(room_id, peer.peer_id)
+        room = collab_manager.get_room(room_id)
+        if room:
+            await collab_manager.broadcast_json(room_id, None, {
+                "type": "peer_left",
+                "peer_id": peer.peer_id,
+                "peers": room.peer_list(),
+            })
+        if ws.client_state == WebSocketState.CONNECTED:
+            await ws.close()
