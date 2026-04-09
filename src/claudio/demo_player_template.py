@@ -4,6 +4,7 @@ demo_player_template.py — HTML Template for the A/B Comparison Player
 Extracted from audio_demo_runner.py for 300-line compliance.
 Contains only the HTML/CSS template used by the demo player generator.
 """
+
 from __future__ import annotations
 
 import textwrap

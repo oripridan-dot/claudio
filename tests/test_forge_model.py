@@ -1,4 +1,5 @@
 """Smoke test for the DDSP forge pipeline."""
+
 import tempfile
 from pathlib import Path
 
@@ -90,13 +91,16 @@ def test_checkpoint_save_load():
     with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as f:
         ckpt_path = f.name
 
-    torch.save({
-        "encoder_state_dict": encoder.state_dict(),
-        "decoder_state_dict": decoder.state_dict(),
-        "latent_dim": 64,
-        "epoch": 1,
-        "loss": 3.5,
-    }, ckpt_path)
+    torch.save(
+        {
+            "encoder_state_dict": encoder.state_dict(),
+            "decoder_state_dict": decoder.state_dict(),
+            "latent_dim": 64,
+            "epoch": 1,
+            "loss": 3.5,
+        },
+        ckpt_path,
+    )
 
     # Load into fresh models
     enc2 = GRUEncoder(input_dim=2, hidden_dim=32, latent_dim=64, num_layers=1)
@@ -126,11 +130,14 @@ def test_ddsp_decoder_integration():
     with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as f:
         ckpt_path = f.name
 
-    torch.save({
-        "encoder_state_dict": encoder.state_dict(),
-        "decoder_state_dict": decoder.state_dict(),
-        "latent_dim": 128,
-    }, ckpt_path)
+    torch.save(
+        {
+            "encoder_state_dict": encoder.state_dict(),
+            "decoder_state_dict": decoder.state_dict(),
+            "latent_dim": 128,
+        },
+        ckpt_path,
+    )
 
     # Create IntentDecoder with DDSP model
     dec = IntentDecoder(sample_rate=44100, model_path=ckpt_path)
@@ -159,7 +166,7 @@ def test_decoder_fallback_without_model():
     frames = enc.encode_block(tone)
 
     audio_out = dec.decode_frames(frames[:50])
-    rms = float(np.sqrt(np.mean(audio_out ** 2)))
+    rms = float(np.sqrt(np.mean(audio_out**2)))
     assert rms > 0.01, f"Fallback decoder produced near-silence: rms={rms}"
 
 
@@ -167,4 +174,3 @@ def test_decoder_nonexistent_model_path():
     """IntentDecoder with bad model_path falls back gracefully."""
     dec = IntentDecoder(sample_rate=44100, model_path="/nonexistent/model.pt")
     assert dec.use_ddsp is False  # Should NOT enable DDSP
-

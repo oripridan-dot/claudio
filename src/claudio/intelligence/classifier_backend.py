@@ -9,6 +9,7 @@ The top-level InstrumentClassifier uses this interface to delegate
 primary classification to a neural model, falling back to heuristics
 when neural confidence is below threshold.
 """
+
 from __future__ import annotations
 
 import time
@@ -95,18 +96,21 @@ def map_label_to_family(label: str) -> InstrumentFamily:
 
 # ─── Classification Result ───────────────────────────────────────────────────
 
+
 @dataclass
 class ClassificationResult:
     """A single classification from a neural backend."""
-    label: str                         # raw model output label
-    confidence: float                  # 0.0-1.0
-    family: InstrumentFamily           # mapped to Claudio taxonomy
-    latency_ms: float = 0.0           # time taken for inference
+
+    label: str  # raw model output label
+    confidence: float  # 0.0-1.0
+    family: InstrumentFamily  # mapped to Claudio taxonomy
+    latency_ms: float = 0.0  # time taken for inference
 
 
 @dataclass
 class BenchmarkResult:
     """Performance benchmark for a single backend."""
+
     backend_name: str
     results: list[ClassificationResult]
     total_latency_ms: float
@@ -118,6 +122,7 @@ class BenchmarkResult:
 
 
 # ─── Abstract Backend ────────────────────────────────────────────────────────
+
 
 class AudioClassifierBackend(ABC):
     """Abstract interface for neural audio classification backends."""
@@ -133,7 +138,10 @@ class AudioClassifierBackend(ABC):
 
     @abstractmethod
     def classify(
-        self, audio: np.ndarray, sample_rate: int, top_k: int = 5,
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        top_k: int = 5,
     ) -> list[ClassificationResult]:
         """
         Classify audio and return top-K results.
@@ -148,7 +156,10 @@ class AudioClassifierBackend(ABC):
         """
 
     def benchmark(
-        self, audio: np.ndarray, sample_rate: int, n_runs: int = 10,
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        n_runs: int = 10,
     ) -> BenchmarkResult:
         """Run inference multiple times and return timing stats."""
         latencies = []

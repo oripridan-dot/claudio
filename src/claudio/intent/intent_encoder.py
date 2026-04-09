@@ -16,6 +16,7 @@ Bandwidth comparison at 44.1kHz mono 16-bit:
   Intent:     250 × ~80 = 20,000 bytes/sec  (~20 KB/s)
   With delta compression: ~2-5 KB/s typical
 """
+
 from __future__ import annotations
 
 import math
@@ -29,13 +30,13 @@ class IntentFrame:
     """Single frame of semantic intent extracted from audio."""
 
     timestamp_ms: float
-    f0_hz: float               # Fundamental frequency (0 = unvoiced)
-    f0_confidence: float       # Pitch detection confidence [0, 1]
-    loudness_db: float         # A-weighted RMS loudness in dB
-    loudness_norm: float       # Normalised loudness [0, 1]
+    f0_hz: float  # Fundamental frequency (0 = unvoiced)
+    f0_confidence: float  # Pitch detection confidence [0, 1]
+    loudness_db: float  # A-weighted RMS loudness in dB
+    loudness_norm: float  # Normalised loudness [0, 1]
     spectral_centroid_hz: float
     mfcc: list[float] = field(default_factory=list)  # 13 MFCC coefficients (timbre)
-    is_onset: bool = False     # Transient onset detected
+    is_onset: bool = False  # Transient onset detected
     onset_strength: float = 0.0
     vibrato_rate_hz: float = 0.0
     vibrato_depth_cents: float = 0.0
@@ -43,7 +44,7 @@ class IntentFrame:
 
 
 FRAME_RATE_HZ = 250
-F0_MIN_HZ = 32.7   # C1
+F0_MIN_HZ = 32.7  # C1
 F0_MAX_HZ = 4186.0  # C8
 N_MFCC = 13
 
@@ -67,7 +68,9 @@ class IntentEncoder:
 
         # Pre-compute mel filterbank matrix (vectorized MFCC)
         self._mel_fb = self._build_mel_filterbank(
-            self.frame_len, sample_rate, n_mels=26,
+            self.frame_len,
+            sample_rate,
+            n_mels=26,
         )
 
         # Onset detection state
@@ -102,7 +105,7 @@ class IntentEncoder:
 
         for i in range(n_frames):
             start = i * self.hop
-            frame_audio = audio[start: start + self.frame_len]
+            frame_audio = audio[start : start + self.frame_len]
             ts = start_time_ms + (start / self.sample_rate) * 1000.0
 
             intent = self._extract_frame(frame_audio, ts)
@@ -124,7 +127,7 @@ class IntentEncoder:
         # 2. Loudness — dual measurement:
         #    loudness_db:   time-domain RMS (for decoder gain matching)
         #    loudness_norm: A-weighted (for perceptual display/silence detection)
-        rms = float(np.sqrt(np.mean(frame64 ** 2) + 1e-10))
+        rms = float(np.sqrt(np.mean(frame64**2) + 1e-10))
         loudness_db = 20.0 * math.log10(rms + 1e-10)
 
         # A-weighted perceptual loudness for normalised display
@@ -184,13 +187,13 @@ class IntentEncoder:
         if max_tau <= min_tau + 2:
             return 0.0, 0.0
 
-        x = frame[:w + max_tau].astype(np.float64)
+        x = frame[: w + max_tau].astype(np.float64)
 
         # Vectorized difference function: d(tau) = sum_j (x[j] - x[j+tau])^2
         # Each iteration is a single vectorized numpy operation
         diff = np.zeros(max_tau + 1)
         for tau in range(1, max_tau + 1):
-            diff[tau] = np.sum((x[:w] - x[tau:tau + w]) ** 2)
+            diff[tau] = np.sum((x[:w] - x[tau : tau + w]) ** 2)
 
         # Cumulative mean normalised difference (CMND) — vectorized
         cum_diff = np.cumsum(diff)
@@ -317,15 +320,8 @@ class IntentEncoder:
         """A-weighting curve for perceptual loudness."""
         freqs = np.fft.rfftfreq(n_fft, 1.0 / sr)
         freqs = np.maximum(freqs, 1e-6)
-        f2 = freqs ** 2
-        ra = (
-            (12194.0 ** 2 * f2 ** 2)
-            / (
-                (f2 + 20.6 ** 2)
-                * np.sqrt((f2 + 107.7 ** 2) * (f2 + 737.9 ** 2))
-                * (f2 + 12194.0 ** 2)
-            )
-        )
+        f2 = freqs**2
+        ra = (12194.0**2 * f2**2) / ((f2 + 20.6**2) * np.sqrt((f2 + 107.7**2) * (f2 + 737.9**2)) * (f2 + 12194.0**2))
         return ra / (np.max(ra) + 1e-10)
 
     @staticmethod

@@ -21,6 +21,7 @@ Dependencies:
     - h5py (optional, for reading real SOFA files)
     - Falls back to stub HRIR if h5py is unavailable
 """
+
 from __future__ import annotations
 
 import logging
@@ -38,6 +39,7 @@ SOFA_DATASET_PATH = "assets/hrtf"
 @dataclass
 class SOFAMetadata:
     """Metadata from a SOFA file header."""
+
     title: str = ""
     database_name: str = ""
     listener_description: str = ""
@@ -58,11 +60,13 @@ class SOFADatabase:
     Stores all measurements indexed by (azimuth, elevation) grid for
     O(1) nearest-neighbour lookup with optional bilinear interpolation.
     """
+
     metadata: SOFAMetadata
     source_positions: np.ndarray  # (N, 3): azimuth, elevation, distance
-    ir_data: np.ndarray           # (N, 2, hrir_len): left+right HRIRs
+    ir_data: np.ndarray  # (N, 2, hrir_len): left+right HRIRs
     _grid_index: dict[tuple[int, int], int] = field(
-        default_factory=dict, repr=False,
+        default_factory=dict,
+        repr=False,
     )
 
     def __post_init__(self) -> None:
@@ -108,22 +112,26 @@ class SOFADatabase:
         """Find the index of the closest measurement to the query direction."""
         az_rad = math.radians(az_deg)
         el_rad = math.radians(el_deg)
-        query = np.array([
-            math.cos(el_rad) * math.cos(az_rad),
-            math.cos(el_rad) * math.sin(az_rad),
-            math.sin(el_rad),
-        ])
+        query = np.array(
+            [
+                math.cos(el_rad) * math.cos(az_rad),
+                math.cos(el_rad) * math.sin(az_rad),
+                math.sin(el_rad),
+            ]
+        )
 
         best_idx = 0
         best_dot = -2.0
         for i in range(len(self.source_positions)):
             sp_az = math.radians(self.source_positions[i, 0])
             sp_el = math.radians(self.source_positions[i, 1])
-            sp = np.array([
-                math.cos(sp_el) * math.cos(sp_az),
-                math.cos(sp_el) * math.sin(sp_az),
-                math.sin(sp_el),
-            ])
+            sp = np.array(
+                [
+                    math.cos(sp_el) * math.cos(sp_az),
+                    math.cos(sp_el) * math.sin(sp_az),
+                    math.sin(sp_el),
+                ]
+            )
             dot = float(np.dot(query, sp))
             if dot > best_dot:
                 best_dot = dot
@@ -148,11 +156,12 @@ def _resize_hrir(hrir: np.ndarray, target_len: int) -> np.ndarray:
     if len(hrir) >= target_len:
         return hrir[:target_len]
     padded = np.zeros(target_len, dtype=np.float32)
-    padded[:len(hrir)] = hrir
+    padded[: len(hrir)] = hrir
     return padded
 
 
 # ─── SOFA File Loading ───────────────────────────────────────────────────────
+
 
 def load_sofa(filepath: str) -> SOFADatabase:
     """
@@ -211,7 +220,10 @@ def _load_sofa_h5py(filepath: str, h5py: object) -> SOFADatabase:
 
     logger.info(
         "Loaded SOFA: %s — %d measurements, %d samples, %.0f Hz",
-        filepath, meta.num_measurements, meta.hrir_length, meta.sample_rate,
+        filepath,
+        meta.num_measurements,
+        meta.hrir_length,
+        meta.sample_rate,
     )
     return SOFADatabase(
         metadata=meta,
@@ -263,8 +275,4 @@ def list_sofa_files(directory: str = SOFA_DATASET_PATH) -> list[str]:
     """List all .sofa files in the HRTF asset directory."""
     if not os.path.isdir(directory):
         return []
-    return sorted(
-        os.path.join(directory, f)
-        for f in os.listdir(directory)
-        if f.endswith(".sofa")
-    )
+    return sorted(os.path.join(directory, f) for f in os.listdir(directory) if f.endswith(".sofa"))

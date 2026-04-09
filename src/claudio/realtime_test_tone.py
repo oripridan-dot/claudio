@@ -11,6 +11,7 @@ system volume.
 Usage:
     cd claudio && .venv/bin/python -m claudio.realtime_test_tone
 """
+
 from __future__ import annotations
 
 import math
@@ -34,14 +35,14 @@ MAKEUP_GAIN = 8.0
 MIC_GAIN = 12.0
 
 POSITIONS = {
-    "1": ("Center",          np.array([0.0, 0.0, -2.0])),
-    "2": ("Left 45°",        np.array([-1.4, 0.0, -1.4])),
-    "3": ("Right 45°",       np.array([1.4, 0.0, -1.4])),
-    "4": ("Hard Left",       np.array([-2.0, 0.0, 0.0])),
-    "5": ("Hard Right",      np.array([2.0, 0.0, 0.0])),
-    "6": ("Behind",          np.array([0.0, 0.0, 2.0])),
-    "7": ("Above",           np.array([0.0, 2.0, -1.0])),
-    "9": ("Orbit",           np.array([2.0, 0.0, -1.0])),
+    "1": ("Center", np.array([0.0, 0.0, -2.0])),
+    "2": ("Left 45°", np.array([-1.4, 0.0, -1.4])),
+    "3": ("Right 45°", np.array([1.4, 0.0, -1.4])),
+    "4": ("Hard Left", np.array([-2.0, 0.0, 0.0])),
+    "5": ("Hard Right", np.array([2.0, 0.0, 0.0])),
+    "6": ("Behind", np.array([0.0, 0.0, 2.0])),
+    "7": ("Above", np.array([0.0, 2.0, -1.0])),
+    "9": ("Orbit", np.array([2.0, 0.0, -1.0])),
 }
 
 
@@ -96,7 +97,6 @@ def choose_devices() -> tuple[int | None, int, int, int]:
             print(f"  → Using: [{out_idx}] {out_dev['name']} ({out_ch}ch, {out_sr}Hz)")
 
     return in_idx, out_idx, out_sr, out_ch
-
 
 
 def apply_makeup_gain(left: np.ndarray, right: np.ndarray, gain: float) -> tuple[np.ndarray, np.ndarray]:
@@ -161,7 +161,7 @@ def play_test_tone() -> None:
 
     # Report peak level
     peak = float(np.max(np.abs(output_buffer)))
-    print(f"  Peak output level: {peak:.3f} ({20*math.log10(peak+1e-10):.1f} dBFS)")
+    print(f"  Peak output level: {peak:.3f} ({20 * math.log10(peak + 1e-10):.1f} dBFS)")
 
     sd.play(output_buffer, samplerate=sample_rate, device=out_idx)
     sd.wait()
@@ -192,8 +192,10 @@ def play_test_tone() -> None:
     print("  Controls: 1-7 position, 9 orbit, +/- volume, s stats, q quit\n")
 
     cfg2 = SignalFlowConfig(
-        capture_sample_rate=live_sr, render_sample_rate=live_sr,
-        fft_size=BLOCK_SIZE, hrir_length=256,
+        capture_sample_rate=live_sr,
+        render_sample_rate=live_sr,
+        fft_size=BLOCK_SIZE,
+        hrir_length=256,
     )
     engine2 = HRTFBinauralEngine(config=cfg2)
     mic_src = AudioSource(source_id="mic", position=POSITIONS["1"][1].copy())
@@ -230,8 +232,7 @@ def play_test_tone() -> None:
         elapsed = (time.perf_counter() - t0) * 1e6
 
         # Apply makeup gain with soft clipping
-        left, right = apply_makeup_gain(
-            frame.left, frame.right, output_gain[0])
+        left, right = apply_makeup_gain(frame.left, frame.right, output_gain[0])
 
         with lock:
             render_times.append(elapsed)
@@ -242,7 +243,7 @@ def play_test_tone() -> None:
             outdata[:, 0] = left[:frames]
             outdata[:, 1] = right[:frames]
         else:
-            outdata[:, 0] = ((left[:frames] + right[:frames]) * 0.5)
+            outdata[:, 0] = (left[:frames] + right[:frames]) * 0.5
 
         out_peak = float(np.max(np.abs(outdata)))
         peak_out[0] = max(peak_out[0], out_peak)
@@ -250,10 +251,13 @@ def play_test_tone() -> None:
 
     try:
         with sd.Stream(
-            samplerate=live_sr, blocksize=BLOCK_SIZE,
+            samplerate=live_sr,
+            blocksize=BLOCK_SIZE,
             device=(in_idx, out_idx),
             channels=(1, out_channels),
-            dtype="float32", callback=callback, latency="low",
+            dtype="float32",
+            callback=callback,
+            latency="low",
         ):
             while running[0]:
                 try:
@@ -268,13 +272,16 @@ def play_test_tone() -> None:
                         times = render_times.copy()
                     if times:
                         import statistics
+
                         mean = statistics.mean(times)
                         mx = max(times)
                         deadline = (BLOCK_SIZE / live_sr) * 1e6
-                        print(f"  Render: {mean:.0f}µs (max {mx:.0f}µs) "
-                              f"headroom={((1-mean/deadline)*100):.1f}%  "
-                              f"peak_in={peak_in[0]:.4f}  peak_out={peak_out[0]:.4f}  "
-                              f"gain_in={input_gain[0]:.1f}x  gain_out={output_gain[0]:.1f}x")
+                        print(
+                            f"  Render: {mean:.0f}µs (max {mx:.0f}µs) "
+                            f"headroom={((1 - mean / deadline) * 100):.1f}%  "
+                            f"peak_in={peak_in[0]:.4f}  peak_out={peak_out[0]:.4f}  "
+                            f"gain_in={input_gain[0]:.1f}x  gain_out={output_gain[0]:.1f}x"
+                        )
                 elif key == "+":
                     output_gain[0] = min(output_gain[0] * 1.5, 50.0)
                     print(f"  Volume UP → output gain = {output_gain[0]:.1f}x")

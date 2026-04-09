@@ -4,6 +4,7 @@ quality_tests_dynamic.py — Impulse, Dynamic Range, and Latency Tests
 Tests 3, 5, 7 from the audio quality proof suite.
 Extracted from audio_quality_proof.py for 300-line compliance.
 """
+
 from __future__ import annotations
 
 import math
@@ -39,26 +40,33 @@ def test_impulse_response() -> dict:
         out = process_through_hifi(impulse, mode)
         ax = axes.flat[idx]
         time_ms = np.arange(min(512, len(out))) / SAMPLE_RATE * 1000
-        ax.plot(time_ms, out[:len(time_ms)], color=color, linewidth=1.0)
+        ax.plot(time_ms, out[: len(time_ms)], color=color, linewidth=1.0)
         ax.set_xlabel("Time (ms)")
         ax.set_ylabel("Amplitude")
         ax.set_title(f"{mode} — Impulse Response", fontweight="bold")
         ax.set_xlim(0, time_ms[-1])
 
         peak = float(np.max(np.abs(out)))
-        energy = float(np.sum(out ** 2))
+        energy = float(np.sum(out**2))
         results[mode] = {"peak": peak, "energy": energy}
-        ax.text(0.98, 0.95, f"Peak: {peak:.4f}\nEnergy: {energy:.4f}",
-                transform=ax.transAxes, fontsize=9, color=color,
-                verticalalignment="top", horizontalalignment="right",
-                bbox={"facecolor": COLORS["bg"], "alpha": 0.8, "edgecolor": color})
+        ax.text(
+            0.98,
+            0.95,
+            f"Peak: {peak:.4f}\nEnergy: {energy:.4f}",
+            transform=ax.transAxes,
+            fontsize=9,
+            color=color,
+            verticalalignment="top",
+            horizontalalignment="right",
+            bbox={"facecolor": COLORS["bg"], "alpha": 0.8, "edgecolor": color},
+        )
 
     # HRTF impulse
     out_l, out_r = process_through_engine(impulse)
     ax = axes.flat[3]
     time_ms = np.arange(min(512, len(out_l))) / SAMPLE_RATE * 1000
-    ax.plot(time_ms, out_l[:len(time_ms)], color=COLORS["cyan"], linewidth=1.0, alpha=0.8, label="Left")
-    ax.plot(time_ms, out_r[:len(time_ms)], color=COLORS["amber"], linewidth=1.0, alpha=0.8, label="Right")
+    ax.plot(time_ms, out_l[: len(time_ms)], color=COLORS["cyan"], linewidth=1.0, alpha=0.8, label="Left")
+    ax.plot(time_ms, out_r[: len(time_ms)], color=COLORS["amber"], linewidth=1.0, alpha=0.8, label="Right")
     ax.set_xlabel("Time (ms)")
     ax.set_ylabel("Amplitude")
     ax.set_title("HRTF Spatial — Impulse Response (L/R)", fontweight="bold")
@@ -98,13 +106,19 @@ def test_dynamic_range() -> dict:
         ax.set_title(f"{mode} — Noise Floor", fontweight="bold")
 
         peak_noise = float(np.max(np.abs(out)))
-        rms_noise = float(np.sqrt(np.mean(out ** 2)))
+        rms_noise = float(np.sqrt(np.mean(out**2)))
         dr_db = -20 * math.log10(rms_noise + 1e-30)
         results[mode] = {"peak_noise": peak_noise, "rms_noise": rms_noise, "dynamic_range_db": dr_db}
-        ax.text(0.02, 0.95, f"DR: {dr_db:.0f}dB\nPeak: {peak_noise:.2e}",
-                transform=ax.transAxes, fontsize=9, color=color,
-                verticalalignment="top",
-                bbox={"facecolor": COLORS["bg"], "alpha": 0.8, "edgecolor": color})
+        ax.text(
+            0.02,
+            0.95,
+            f"DR: {dr_db:.0f}dB\nPeak: {peak_noise:.2e}",
+            transform=ax.transAxes,
+            fontsize=9,
+            color=color,
+            verticalalignment="top",
+            bbox={"facecolor": COLORS["bg"], "alpha": 0.8, "edgecolor": color},
+        )
 
     fig.suptitle("Noise Floor & Dynamic Range (Silence Input)", fontsize=14, fontweight="bold")
     fig.tight_layout()
@@ -134,12 +148,13 @@ def test_latency_histogram() -> dict:
         n_blocks = len(audio) // BLOCK_SIZE
         times_us = []
         for b in range(n_blocks):
-            chunk = audio[b * BLOCK_SIZE:(b + 1) * BLOCK_SIZE]
+            chunk = audio[b * BLOCK_SIZE : (b + 1) * BLOCK_SIZE]
             t0 = time.perf_counter()
             proc.process_block(chunk)
             times_us.append((time.perf_counter() - t0) * 1e6)
 
         import statistics
+
         mean = statistics.mean(times_us)
         p99 = sorted(times_us)[int(0.99 * len(times_us))]
         mx = max(times_us)
@@ -157,17 +172,25 @@ def test_latency_histogram() -> dict:
 
         headroom = (1 - mean / deadline) * 100
         results[mode] = {"mean_us": mean, "p99_us": p99, "max_us": mx, "headroom_pct": headroom}
-        ax.text(0.98, 0.75, f"Headroom: {headroom:.1f}%",
-                transform=ax.transAxes, fontsize=10, color=color,
-                horizontalalignment="right",
-                bbox={"facecolor": COLORS["bg"], "alpha": 0.8, "edgecolor": color})
+        ax.text(
+            0.98,
+            0.75,
+            f"Headroom: {headroom:.1f}%",
+            transform=ax.transAxes,
+            fontsize=10,
+            color=color,
+            horizontalalignment="right",
+            bbox={"facecolor": COLORS["bg"], "alpha": 0.8, "edgecolor": color},
+        )
 
     fig.suptitle("Real-Time Render Latency Distribution", fontsize=14, fontweight="bold")
     fig.tight_layout()
     save_plot(fig, "07_latency_histogram")
 
     for mode, data in results.items():
-        print(f"    {mode:10s}: mean={data['mean_us']:.0f}µs  P99={data['p99_us']:.0f}µs  "
-              f"headroom={data['headroom_pct']:.1f}%")
+        print(
+            f"    {mode:10s}: mean={data['mean_us']:.0f}µs  P99={data['p99_us']:.0f}µs  "
+            f"headroom={data['headroom_pct']:.1f}%"
+        )
 
     return results

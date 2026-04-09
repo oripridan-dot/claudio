@@ -4,6 +4,7 @@ quality_tests_distortion.py — THD+N and IMD Measurement Tests
 Tests 1 and 8 from the audio quality proof suite.
 Extracted from audio_quality_proof.py for 300-line compliance.
 """
+
 from __future__ import annotations
 
 import math
@@ -24,6 +25,7 @@ from claudio.quality_config import (
 # TEST 1: THD+N Analysis
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def test_thdn() -> dict:
     """Measure THD+N at multiple frequencies."""
     print("\n  ── TEST 1: THD+N Analysis ──")
@@ -41,7 +43,7 @@ def test_thdn() -> dict:
 
             fund_idx = np.argmin(np.abs(freqs_axis - f))
             fund_power = spectrum[fund_idx] ** 2
-            total_power = np.sum(spectrum ** 2)
+            total_power = np.sum(spectrum**2)
             noise_power = total_power - fund_power
             thdn_pct = math.sqrt(noise_power / (total_power + 1e-30)) * 100
             results[mode_name].append(thdn_pct)
@@ -53,7 +55,7 @@ def test_thdn() -> dict:
         freqs_axis = np.fft.rfftfreq(n_fft, 1 / SAMPLE_RATE)
         fund_idx = np.argmin(np.abs(freqs_axis - f))
         fund_power = spectrum[fund_idx] ** 2
-        total_power = np.sum(spectrum ** 2)
+        total_power = np.sum(spectrum**2)
         noise_power = total_power - fund_power
         thdn_pct = math.sqrt(noise_power / (total_power + 1e-30)) * 100
         results["hrtf"].append(thdn_pct)
@@ -85,6 +87,7 @@ def test_thdn() -> dict:
 # ═══════════════════════════════════════════════════════════════════════════════
 # TEST 8: IMD — Intermodulation Distortion
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def test_imd() -> dict:
     """SMPTE IMD test: 60Hz + 7kHz mixed 4:1."""

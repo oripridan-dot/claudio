@@ -12,6 +12,7 @@ Thread model:
   - Camera/6DoF thread calls update_head_pose() — lock-free
   - SpatialLatencyGate: <1.5 ms HRTF update on 90° head turn
 """
+
 from __future__ import annotations
 
 import time
@@ -36,19 +37,21 @@ from claudio.signal_flow_config import (
 _azimuth_elevation_from_position = azimuth_elevation_from_position
 _get_hrir = get_hrir
 
-FFT_SIZE       = 512
+FFT_SIZE = 512
 SPEED_OF_SOUND = 343.0
 SOFA_DATASET_PATH = "assets/hrtf"
 
 
 # ─── Data Structures ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class AudioSource:
     """A single mono audio source placed in 3D space."""
-    source_id:   str
-    position:    np.ndarray
-    gain_db:     float = 0.0
+
+    source_id: str
+    position: np.ndarray
+    gain_db: float = 0.0
     _hrtf_l_fd: np.ndarray | None = field(default=None, repr=False, compare=False)
     _hrtf_r_fd: np.ndarray | None = field(default=None, repr=False, compare=False)
     _prev_hrtf_l_fd: np.ndarray | None = field(default=None, repr=False, compare=False)
@@ -61,13 +64,15 @@ class AudioSource:
 @dataclass
 class BinauralFrame:
     """One audio callback's worth of rendered binaural output."""
-    left:   np.ndarray
-    right:  np.ndarray
+
+    left: np.ndarray
+    right: np.ndarray
     sources_rendered: int
     render_time_us: float = 0.0
 
 
 # ─── Binaural Rendering Engine ────────────────────────────────────────────────
+
 
 class HRTFBinauralEngine:
     """Real-time holographic binaural rendering engine."""
@@ -124,7 +129,8 @@ class HRTFBinauralEngine:
     # ── Head Tracking ─────────────────────────────────────────────────────
 
     def update_head_pose(
-        self, quat: tuple[float, float, float, float],
+        self,
+        quat: tuple[float, float, float, float],
     ) -> None:
         self._head_quat = quat
         self._hrtf_dirty = True
@@ -167,11 +173,9 @@ class HRTFBinauralEngine:
         for src in self._sources.values():
             az, el = azimuth_elevation_from_position(src.position, quat)
             if self._interpolation == HRTFInterpolation.BILINEAR:
-                hrir_l, hrir_r = interpolate_hrir_bilinear(
-                    az, el, self._hrir_len, self._sample_rate, self._grid_res)
+                hrir_l, hrir_r = interpolate_hrir_bilinear(az, el, self._hrir_len, self._sample_rate, self._grid_res)
             else:
-                hrir_l, hrir_r = get_hrir(
-                    az, el, self._hrir_len, self._sample_rate, self._grid_res)
+                hrir_l, hrir_r = get_hrir(az, el, self._hrir_len, self._sample_rate, self._grid_res)
 
             n_fft = self._fft_size + self._hrir_len - 1
             new_l = np.fft.rfft(hrir_l, n=n_fft).astype(np.complex64)
@@ -186,23 +190,25 @@ class HRTFBinauralEngine:
 
     @staticmethod
     def _ola_convolve(
-        x: np.ndarray, h_fd: np.ndarray, ola_tail: np.ndarray,
+        x: np.ndarray,
+        h_fd: np.ndarray,
+        ola_tail: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray]:
         n_fft = len(h_fd) * 2 - 2
         x_padded = np.zeros(n_fft)
-        x_padded[:len(x)] = x
+        x_padded[: len(x)] = x
         y_time = np.fft.irfft(np.fft.rfft(x_padded) * h_fd).real
         tail_len = len(ola_tail)
         y_time[:tail_len] += ola_tail
         block = len(x)
-        output   = y_time[:block].astype(np.float32)
-        new_tail = y_time[block:block + tail_len].astype(np.float32)
+        output = y_time[:block].astype(np.float32)
+        new_tail = y_time[block : block + tail_len].astype(np.float32)
         return output, new_tail
 
     def _proximity_gain(self, position: np.ndarray) -> float:
         dist = float(np.linalg.norm(position)) + 0.01
         cap = 10 ** (self._proximity_cap_db / 20.0)
-        return min(cap, 1.0 / (dist ** 2))
+        return min(cap, 1.0 / (dist**2))
 
     @staticmethod
     def _air_absorption_factor(position: np.ndarray) -> float:

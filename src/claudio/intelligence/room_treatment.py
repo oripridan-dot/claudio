@@ -6,6 +6,7 @@ measured room characteristics: RT60, room modes, flutter echo, reflections.
 
 Extracted from room_scanner.py for single-responsibility compliance.
 """
+
 from __future__ import annotations
 
 from .room_scanner import EarlyReflection, RoomMode

@@ -11,6 +11,7 @@ with camera data.
 Supports optional neural backend (PANNs/CLAP/BEATs) for primary
 classification with heuristic fallback when neural confidence is low.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -50,17 +51,18 @@ class InstrumentFamily(Enum):
 @dataclass
 class InstrumentDetection:
     """Result of instrument classification."""
+
     family: InstrumentFamily
-    confidence: float                      # 0.0-1.0
+    confidence: float  # 0.0-1.0
     pickup_type: PickupType = PickupType.UNKNOWN
-    model_guess: str = ""                  # e.g. "Fender Stratocaster" (from fusion with vision)
+    model_guess: str = ""  # e.g. "Fender Stratocaster" (from fusion with vision)
     model_confidence: float = 0.0
     spectral_fingerprint: SpectralFingerprint | None = None
     transient_profile: TransientProfile | None = None
     harmonic_profile: HarmonicProfile | None = None
     coaching_hints: list[str] = field(default_factory=list)
-    neural_label: str = ""                 # raw neural model output label
-    neural_confidence: float = 0.0         # neural model confidence
+    neural_label: str = ""  # raw neural model output label
+    neural_confidence: float = 0.0  # neural model confidence
     classification_source: str = "heuristic"  # "heuristic", "neural", "fused"
 
 
@@ -283,8 +285,7 @@ class InstrumentClassifier:
         if family == InstrumentFamily.VOCAL_MALE or family == InstrumentFamily.VOCAL_FEMALE:
             if fp.spectral_centroid_hz < 800:
                 hints.append(
-                    "Your vocal sounds muffled — check mic proximity. "
-                    "Step back 6 inches to reduce proximity effect."
+                    "Your vocal sounds muffled — check mic proximity. Step back 6 inches to reduce proximity effect."
                 )
 
         if family in (InstrumentFamily.DRUMS_SNARE,):

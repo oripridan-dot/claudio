@@ -20,6 +20,7 @@ Usage:
     scanner.analyze(buffer)
     logger.log_outcome("room_scanner", "RT60 = 0.42s, room classified as studio")
 """
+
 from __future__ import annotations
 
 import json
@@ -42,6 +43,7 @@ MAX_LOG_ENTRIES = 10_000  # Rotate after this many entries
 @dataclass
 class ThoughtEntry:
     """A single pre-action reasoning record."""
+
     timestamp: str
     agent_id: str
     action: str
@@ -149,7 +151,7 @@ class ThoughtLogger:
 
         # Rotate if too large
         if len(self._entries) > MAX_LOG_ENTRIES:
-            self._entries = self._entries[-MAX_LOG_ENTRIES // 2:]
+            self._entries = self._entries[-MAX_LOG_ENTRIES // 2 :]
 
     @property
     def pending_count(self) -> int:
@@ -179,11 +181,17 @@ def thought_context(
         yield
         duration_ms = (time.perf_counter() - t0) * 1000
         thought_logger.log_outcome(
-            agent_id, "completed", success=True, duration_ms=duration_ms,
+            agent_id,
+            "completed",
+            success=True,
+            duration_ms=duration_ms,
         )
     except Exception as e:
         duration_ms = (time.perf_counter() - t0) * 1000
         thought_logger.log_outcome(
-            agent_id, f"FAILED: {e!r}", success=False, duration_ms=duration_ms,
+            agent_id,
+            f"FAILED: {e!r}",
+            success=False,
+            duration_ms=duration_ms,
         )
         raise

@@ -16,7 +16,7 @@ import torch
 import torch.nn as nn
 
 _FFT_SIZES = [64, 128, 256, 512, 1024, 2048]
-_HOP_RATIO = 0.25   # hop = fft_size × 0.25
+_HOP_RATIO = 0.25  # hop = fft_size × 0.25
 
 
 class MultiScaleSpectralLoss(nn.Module):
@@ -56,16 +56,24 @@ class MultiScaleSpectralLoss(nn.Module):
             t = target.reshape(-1, min_len) if target.dim() > 1 else target.unsqueeze(0)
 
             s_pred = torch.stft(
-                p, n_fft=fft_size, hop_length=hop, win_length=fft_size,
-                window=win, return_complex=True,
+                p,
+                n_fft=fft_size,
+                hop_length=hop,
+                win_length=fft_size,
+                window=win,
+                return_complex=True,
             )
             s_tgt = torch.stft(
-                t, n_fft=fft_size, hop_length=hop, win_length=fft_size,
-                window=win, return_complex=True,
+                t,
+                n_fft=fft_size,
+                hop_length=hop,
+                win_length=fft_size,
+                window=win,
+                return_complex=True,
             )
 
             log_pred = torch.log(s_pred.abs() + self.eps)
-            log_tgt  = torch.log(s_tgt.abs()  + self.eps)
+            log_tgt = torch.log(s_tgt.abs() + self.eps)
             loss = loss + torch.mean(torch.abs(log_pred - log_tgt))
 
         return loss / len(self.fft_sizes)

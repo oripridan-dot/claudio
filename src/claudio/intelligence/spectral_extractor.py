@@ -7,6 +7,7 @@ zero-crossing rate, RMS energy, and harmonic ratio.
 
 Extracted from instrument_classifier.py for single-responsibility compliance.
 """
+
 from __future__ import annotations
 
 import math
@@ -18,14 +19,15 @@ import numpy as np
 @dataclass
 class SpectralFingerprint:
     """Compact acoustic signature extracted from a short audio window."""
-    mfcc_coefficients: np.ndarray          # (13,) mel-frequency cepstral coefficients
-    spectral_centroid_hz: float            # brightness indicator
-    spectral_rolloff_hz: float             # frequency below which 85% energy lives
-    spectral_flatness: float               # 0=tonal, 1=noise-like
-    spectral_bandwidth_hz: float           # spread of the spectrum
-    zero_crossing_rate: float              # transient/noise indicator
-    rms_energy: float                      # loudness
-    harmonic_ratio: float                  # harmonic vs noise energy (0-1)
+
+    mfcc_coefficients: np.ndarray  # (13,) mel-frequency cepstral coefficients
+    spectral_centroid_hz: float  # brightness indicator
+    spectral_rolloff_hz: float  # frequency below which 85% energy lives
+    spectral_flatness: float  # 0=tonal, 1=noise-like
+    spectral_bandwidth_hz: float  # spread of the spectrum
+    zero_crossing_rate: float  # transient/noise indicator
+    rms_energy: float  # loudness
+    harmonic_ratio: float  # harmonic vs noise energy (0-1)
 
 
 class SpectralExtractor:
@@ -43,10 +45,10 @@ class SpectralExtractor:
             audio = np.pad(audio, (0, self._n_fft - len(audio)))
 
         window = np.hanning(self._n_fft)
-        windowed = audio[:self._n_fft] * window
+        windowed = audio[: self._n_fft] * window
         spectrum = np.abs(np.fft.rfft(windowed))
         freqs = np.fft.rfftfreq(self._n_fft, d=1.0 / self._sr)
-        power = spectrum ** 2 + 1e-10
+        power = spectrum**2 + 1e-10
 
         # Spectral centroid
         centroid = float(np.sum(freqs * power) / np.sum(power))
@@ -66,19 +68,19 @@ class SpectralExtractor:
         bandwidth = float(np.sqrt(np.sum(((freqs - centroid) ** 2) * power) / np.sum(power)))
 
         # Zero crossing rate
-        zcr = float(np.mean(np.abs(np.diff(np.sign(audio[:self._n_fft])))) / 2)
+        zcr = float(np.mean(np.abs(np.diff(np.sign(audio[: self._n_fft])))) / 2)
 
         # RMS energy
-        rms = float(np.sqrt(np.mean(audio[:self._n_fft] ** 2)))
+        rms = float(np.sqrt(np.mean(audio[: self._n_fft] ** 2)))
 
         # MFCC (simplified — 13 coefficients)
-        mel_spectrum = self._mel_fb @ power[:self._mel_fb.shape[1]]
+        mel_spectrum = self._mel_fb @ power[: self._mel_fb.shape[1]]
         log_mel = np.log(mel_spectrum + 1e-10)
         mfcc = self._dct(log_mel, 13)
 
         # Harmonic ratio (autocorrelation-based)
-        ac = np.correlate(windowed, windowed, mode='full')
-        ac = ac[len(ac) // 2:]
+        ac = np.correlate(windowed, windowed, mode="full")
+        ac = ac[len(ac) // 2 :]
         if ac[0] > 0:
             harmonic_ratio = float(np.max(ac[20:]) / ac[0])
         else:

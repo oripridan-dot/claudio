@@ -11,6 +11,7 @@ Ties together:
 
 Entry point: python -m claudio.vision.sensor_loop
 """
+
 from __future__ import annotations
 
 import argparse
@@ -28,6 +29,7 @@ def _make_osc_sink(host: str, port: int):
     """Build an OSC sender if python-osc is available."""
     try:
         from pythonosc.udp_client import SimpleUDPClient
+
         client = SimpleUDPClient(host, port)
 
         def send(action: ControlAction) -> None:
@@ -35,8 +37,10 @@ def _make_osc_sink(host: str, port: int):
 
         return send
     except ImportError:
+
         def send(action: ControlAction) -> None:
             print(f"[OSC] {action.address} = {action.value:.3f}")
+
         return send
 
 
@@ -44,12 +48,13 @@ def _make_dmx_sink(serial_port: str):
     """Build a DMX sender over serial (Enttec Open DMX protocol)."""
     try:
         import serial
+
         ser = serial.Serial(serial_port, baudrate=250000, stopbits=2)
 
         def send(action: ControlAction) -> None:
             channel = int(action.address.split("_")[-1])
-            value   = int(action.value * 255)
-            packet  = bytes([0x00] + [0] * (channel - 1) + [value] + [0] * (512 - channel))
+            value = int(action.value * 255)
+            packet = bytes([0x00] + [0] * (channel - 1) + [value] + [0] * (512 - channel))
             ser.break_condition = True
             time.sleep(0.0001)
             ser.break_condition = False
@@ -57,8 +62,10 @@ def _make_dmx_sink(serial_port: str):
 
         return send
     except (ImportError, Exception):
+
         def send(action: ControlAction) -> None:
             print(f"[DMX] ch={action.address} val={action.value:.3f}")
+
         return send
 
 
@@ -90,7 +97,7 @@ def run(
     classifier = GestureClassifier()
     head_tracker = SpatialHeadTracker()
     router = GestureRoutingMatrix()
-    router.register_sink("osc",     _make_osc_sink(osc_host, osc_port))
+    router.register_sink("osc", _make_osc_sink(osc_host, osc_port))
     router.register_sink("acoustic", lambda a: print(f"[ACOUSTIC] {a.address}={a.value:.3f}"))
     if dmx_port:
         router.register_sink("dmx", _make_dmx_sink(dmx_port))
@@ -114,8 +121,8 @@ def run(
                 break
 
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            results   = holistic.process(frame_rgb)
-            ts        = time.perf_counter()
+            results = holistic.process(frame_rgb)
+            ts = time.perf_counter()
 
             def _lm_to_array(landmarks, n: int) -> np.ndarray | None:
                 if landmarks is None:
@@ -123,11 +130,11 @@ def run(
                 return np.array([[lm.x, lm.y, lm.z] for lm in landmarks.landmark[:n]])
 
             lf = LandmarkFrame(
-                timestamp  = ts,
-                pose       = _lm_to_array(results.pose_landmarks, 33),
-                left_hand  = _lm_to_array(results.left_hand_landmarks, 21),
-                right_hand = _lm_to_array(results.right_hand_landmarks, 21),
-                face       = _lm_to_array(results.face_landmarks, 468),
+                timestamp=ts,
+                pose=_lm_to_array(results.pose_landmarks, 33),
+                left_hand=_lm_to_array(results.left_hand_landmarks, 21),
+                right_hand=_lm_to_array(results.right_hand_landmarks, 21),
+                face=_lm_to_array(results.face_landmarks, 468),
             )
 
             gesture_event = classifier.ingest(lf)
@@ -169,12 +176,12 @@ def run(
 
 def main() -> None:
     p = argparse.ArgumentParser(description="Claudio Kinetic Studio sensor loop")
-    p.add_argument("--camera",    default=0,             type=int)
-    p.add_argument("--osc-host",  default="127.0.0.1")
-    p.add_argument("--osc-port",  default=9000,          type=int)
-    p.add_argument("--dmx-port",  default=None)
-    p.add_argument("--preview",   action="store_true")
-    p.add_argument("--max-frames",default=0,             type=int)
+    p.add_argument("--camera", default=0, type=int)
+    p.add_argument("--osc-host", default="127.0.0.1")
+    p.add_argument("--osc-port", default=9000, type=int)
+    p.add_argument("--dmx-port", default=None)
+    p.add_argument("--preview", action="store_true")
+    p.add_argument("--max-frames", default=0, type=int)
     args = p.parse_args()
     run(
         camera_index=args.camera,

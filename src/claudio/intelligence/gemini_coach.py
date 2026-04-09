@@ -5,6 +5,7 @@ Generates context-aware coaching from Gemini based on instrument detection.
 Rate-limited (10s), cached, with curated fallback tips when API unavailable.
 Runs on the intelligence thread — never on the audio thread.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -17,25 +18,27 @@ from dataclasses import dataclass, field
 @dataclass
 class CoachingContext:
     """Context sent to Gemini for coaching generation."""
-    instrument: str                    # e.g. "electric guitar (humbucker)"
-    confidence: float                  # classification confidence
+
+    instrument: str  # e.g. "electric guitar (humbucker)"
+    confidence: float  # classification confidence
     spectral_centroid_hz: float = 0.0  # brightness indicator
-    spectral_rolloff_hz: float = 0.0   # high-freq energy cutoff
-    transient_sharpness: float = 0.0   # 0=soft, 1=extremely sharp attack
-    rms_level: float = 0.0            # current volume level
-    session_duration_s: float = 0.0    # how long they've been playing
+    spectral_rolloff_hz: float = 0.0  # high-freq energy cutoff
+    transient_sharpness: float = 0.0  # 0=soft, 1=extremely sharp attack
+    rms_level: float = 0.0  # current volume level
+    session_duration_s: float = 0.0  # how long they've been playing
     recent_instruments: list[str] = field(default_factory=list)
     pickup_type: str = "unknown"
-    playing_style: str = "unknown"     # "fingerpicking", "strumming", etc.
+    playing_style: str = "unknown"  # "fingerpicking", "strumming", etc.
 
 
 @dataclass
 class CoachingResponse:
     """Response from the Gemini coaching engine."""
-    tip: str                     # the main coaching message
-    category: str                # "technique", "tone", "dynamics", "encouragement"
-    confidence: float            # how confident the coach is in this advice
-    source: str = "gemini"       # "gemini", "fallback", "cached"
+
+    tip: str  # the main coaching message
+    category: str  # "technique", "tone", "dynamics", "encouragement"
+    confidence: float  # how confident the coach is in this advice
+    source: str = "gemini"  # "gemini", "fallback", "cached"
     latency_ms: float = 0.0
 
 
@@ -201,18 +204,20 @@ class GeminiCoach:
         t0 = time.perf_counter()
 
         # Build the context message
-        context_json = json.dumps({
-            "instrument": ctx.instrument,
-            "confidence": round(ctx.confidence, 3),
-            "spectral_centroid_hz": round(ctx.spectral_centroid_hz),
-            "spectral_rolloff_hz": round(ctx.spectral_rolloff_hz),
-            "transient_sharpness": round(ctx.transient_sharpness, 2),
-            "rms_level": round(ctx.rms_level, 4),
-            "session_duration_minutes": round(ctx.session_duration_s / 60, 1),
-            "pickup_type": ctx.pickup_type,
-            "playing_style": ctx.playing_style,
-            "recent_instruments": ctx.recent_instruments[-5:],
-        })
+        context_json = json.dumps(
+            {
+                "instrument": ctx.instrument,
+                "confidence": round(ctx.confidence, 3),
+                "spectral_centroid_hz": round(ctx.spectral_centroid_hz),
+                "spectral_rolloff_hz": round(ctx.spectral_rolloff_hz),
+                "transient_sharpness": round(ctx.transient_sharpness, 2),
+                "rms_level": round(ctx.rms_level, 4),
+                "session_duration_minutes": round(ctx.session_duration_s / 60, 1),
+                "pickup_type": ctx.pickup_type,
+                "playing_style": ctx.playing_style,
+                "recent_instruments": ctx.recent_instruments[-5:],
+            }
+        )
 
         config = types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT,

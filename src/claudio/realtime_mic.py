@@ -14,6 +14,7 @@ Controls (keyboard during playback):
 Usage:
     cd claudio && .venv/bin/python -m claudio.realtime_mic
 """
+
 from __future__ import annotations
 
 import math
@@ -36,15 +37,15 @@ CHANNELS_IN = 1
 CHANNELS_OUT = 2
 
 POSITIONS = {
-    "1": ("Center (front)",       np.array([0.0, 0.0, -2.0])),
-    "2": ("Left 45°",             np.array([-1.4, 0.0, -1.4])),
-    "3": ("Right 45°",            np.array([1.4, 0.0, -1.4])),
-    "4": ("Hard Left (90°)",      np.array([-2.0, 0.0, 0.0])),
-    "5": ("Hard Right (90°)",     np.array([2.0, 0.0, 0.0])),
-    "6": ("Behind",               np.array([0.0, 0.0, 2.0])),
-    "7": ("Above",                np.array([0.0, 2.0, -1.0])),
-    "8": ("Left 30° + elevated",  np.array([-1.0, 1.0, -1.73])),
-    "9": ("Orbiting (auto)",      np.array([2.0, 0.0, -1.0])),
+    "1": ("Center (front)", np.array([0.0, 0.0, -2.0])),
+    "2": ("Left 45°", np.array([-1.4, 0.0, -1.4])),
+    "3": ("Right 45°", np.array([1.4, 0.0, -1.4])),
+    "4": ("Hard Left (90°)", np.array([-2.0, 0.0, 0.0])),
+    "5": ("Hard Right (90°)", np.array([2.0, 0.0, 0.0])),
+    "6": ("Behind", np.array([0.0, 0.0, 2.0])),
+    "7": ("Above", np.array([0.0, 2.0, -1.0])),
+    "8": ("Left 30° + elevated", np.array([-1.0, 1.0, -1.73])),
+    "9": ("Orbiting (auto)", np.array([2.0, 0.0, -1.0])),
 }
 
 
@@ -150,6 +151,7 @@ class LiveProcessor:
             return
 
         import statistics
+
         mean = statistics.mean(times)
         p99 = sorted(times)[int(0.99 * len(times))]
         mx = max(times)
@@ -159,7 +161,7 @@ class LiveProcessor:
         pos_name = POSITIONS[self._current_pos_key][0]
         print("\n  ┌── Real-Time Stats ──────────────────────────────┐")
         print(f"  │ Position:    {pos_name:37s}│")
-        print(f"  │ Block size:  {BLOCK_SIZE} samples ({BLOCK_SIZE/SAMPLE_RATE*1000:.1f}ms)          │")
+        print(f"  │ Block size:  {BLOCK_SIZE} samples ({BLOCK_SIZE / SAMPLE_RATE * 1000:.1f}ms)          │")
         print(f"  │ Sample rate: {SAMPLE_RATE} Hz                        │")
         print(f"  │ Mean render: {mean:>7.1f} µs                         │")
         print(f"  │ P99 render:  {p99:>7.1f} µs                         │")
@@ -183,12 +185,12 @@ class LiveProcessor:
                 det = event.instrument
                 print(f"  │ Confidence:  {det.confidence:>6.1%}                          │")
                 print(f"  │ Source:      {det.classification_source:<37s}│")
-                if det.pickup_type.value != 'unknown':
+                if det.pickup_type.value != "unknown":
                     print(f"  │ Pickup:      {det.pickup_type.value:<37s}│")
                 if event.coaching_hints:
                     for hint in event.coaching_hints[:2]:
                         # Truncate to fit the box
-                        short = hint[:47] + '...' if len(hint) > 50 else hint
+                        short = hint[:47] + "..." if len(hint) > 50 else hint
                         print(f"  │ 💡 {short:<45s}│")
                 if event.mentor_tip:
                     tip = event.mentor_tip
@@ -196,13 +198,15 @@ class LiveProcessor:
                 if event.gemini_tip:
                     gt = event.gemini_tip
                     src = f"[{gt.source}]"
-                    short = gt.tip[:42] + '...' if len(gt.tip) > 45 else gt.tip
+                    short = gt.tip[:42] + "..." if len(gt.tip) > 45 else gt.tip
                     print(f"  │ 🤖 {src} {short:<42s}│")
             # Gemini stats
             gemini_stats = ai_stats.get("gemini")
             if gemini_stats:
                 status = "ACTIVE" if gemini_stats["available"] else "fallback"
-                print(f"  │ Gemini:      {status} (calls: {gemini_stats['total_calls']}, cached: {gemini_stats['total_cached']}) │")
+                print(
+                    f"  │ Gemini:      {status} (calls: {gemini_stats['total_calls']}, cached: {gemini_stats['total_cached']}) │"
+                )
             print("  └─────────────────────────────────────────────────┘")
 
     def run(self) -> None:

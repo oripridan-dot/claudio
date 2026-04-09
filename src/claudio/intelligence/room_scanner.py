@@ -14,6 +14,7 @@ measurement, and adds diagnostic visualization data.
 Treatment plan generation lives in room_treatment.py (extracted for
 single-responsibility compliance).
 """
+
 from __future__ import annotations
 
 import math
@@ -25,25 +26,28 @@ import numpy as np
 @dataclass
 class RoomMode:
     """A detected standing wave resonance in the room."""
+
     frequency_hz: float
     magnitude_db: float
-    q_factor: float           # sharpness of the resonance peak
-    likely_dimension: str     # "length", "width", "height" (estimated)
+    q_factor: float  # sharpness of the resonance peak
+    likely_dimension: str  # "length", "width", "height" (estimated)
     treatment_advice: str
 
 
 @dataclass
 class EarlyReflection:
     """A detected early reflection from the impulse response."""
-    delay_ms: float           # time after direct sound
-    level_db: float           # relative to direct sound
-    surface: str              # estimated reflecting surface
-    azimuth_deg: float        # estimated direction (0=front, 90=right)
+
+    delay_ms: float  # time after direct sound
+    level_db: float  # relative to direct sound
+    surface: str  # estimated reflecting surface
+    azimuth_deg: float  # estimated direction (0=front, 90=right)
 
 
 @dataclass
 class RoomScanResult:
     """Complete room acoustic analysis result."""
+
     rt60_ms: float
     rt60_category: str
     room_modes: list[RoomMode]
@@ -133,7 +137,7 @@ class RoomScanner:
 
     def _estimate_rt60(self, ir: np.ndarray) -> float:
         """Schroeder backward integration method for RT60."""
-        energy = ir ** 2
+        energy = ir**2
         schroeder = np.cumsum(energy[::-1])[::-1]
         schroeder_db = 10 * np.log10(schroeder / (schroeder[0] + 1e-10) + 1e-10)
 
@@ -180,9 +184,7 @@ class RoomScanner:
         speed_of_sound = 343.0
 
         for i in range(1, len(mode_mag) - 1):
-            if (mode_mag[i] > mode_mag[i - 1]
-                    and mode_mag[i] > mode_mag[i + 1]
-                    and mode_mag[i] > threshold):
+            if mode_mag[i] > mode_mag[i - 1] and mode_mag[i] > mode_mag[i + 1] and mode_mag[i] > threshold:
                 freq = float(mode_freqs[i])
                 mag = float(mode_mag[i])
 
@@ -205,10 +207,15 @@ class RoomScanner:
                     f"perpendicular to the room's {dim}."
                 )
 
-                modes.append(RoomMode(
-                    frequency_hz=freq, magnitude_db=mag, q_factor=q,
-                    likely_dimension=dim, treatment_advice=advice,
-                ))
+                modes.append(
+                    RoomMode(
+                        frequency_hz=freq,
+                        magnitude_db=mag,
+                        q_factor=q,
+                        likely_dimension=dim,
+                        treatment_advice=advice,
+                    )
+                )
 
         modes.sort(key=lambda m: m.magnitude_db, reverse=True)
         return modes[:10]
@@ -218,7 +225,7 @@ class RoomScanner:
     def _detect_early_reflections(self, ir: np.ndarray) -> list[EarlyReflection]:
         """Detect early reflections from IR peak analysis."""
         envelope = np.abs(ir)
-        direct_idx = int(np.argmax(envelope[:int(self._sr * 0.01)]))
+        direct_idx = int(np.argmax(envelope[: int(self._sr * 0.01)]))
         direct_level = envelope[direct_idx]
 
         if direct_level < 1e-8:
@@ -230,9 +237,7 @@ class RoomScanner:
 
         threshold = direct_level * 0.1
         for i in range(start + 1, end - 1):
-            if (envelope[i] > envelope[i - 1]
-                    and envelope[i] > envelope[i + 1]
-                    and envelope[i] > threshold):
+            if envelope[i] > envelope[i - 1] and envelope[i] > envelope[i + 1] and envelope[i] > threshold:
                 delay_ms = ((i - direct_idx) / self._sr) * 1000
                 level_db = 20 * math.log10(envelope[i] / (direct_level + 1e-10))
                 distance_m = delay_ms * 0.343 / 2
@@ -247,10 +252,14 @@ class RoomScanner:
                 else:
                     surface, azimuth = "back_wall", 180.0
 
-                reflections.append(EarlyReflection(
-                    delay_ms=delay_ms, level_db=level_db,
-                    surface=surface, azimuth_deg=azimuth,
-                ))
+                reflections.append(
+                    EarlyReflection(
+                        delay_ms=delay_ms,
+                        level_db=level_db,
+                        surface=surface,
+                        azimuth_deg=azimuth,
+                    )
+                )
 
         reflections.sort(key=lambda r: r.delay_ms)
         return reflections[:8]
@@ -300,7 +309,7 @@ class RoomScanner:
         if tail_start >= len(ir):
             return -96.0
         tail = ir[tail_start:]
-        rms = float(np.sqrt(np.mean(tail ** 2))) + 1e-10
+        rms = float(np.sqrt(np.mean(tail**2))) + 1e-10
         return 20 * math.log10(rms)
 
     # ── Clap IR Extraction ───────────────────────────────────────────────
@@ -310,5 +319,5 @@ class RoomScanner:
         envelope = np.abs(audio)
         peak_idx = int(np.argmax(envelope))
         ir_length = min(self._sr, len(audio) - peak_idx)
-        ir = audio[peak_idx:peak_idx + ir_length].copy()
+        ir = audio[peak_idx : peak_idx + ir_length].copy()
         return ir

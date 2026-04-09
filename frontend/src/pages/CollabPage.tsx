@@ -23,11 +23,13 @@ export default function CollabPage() {
   const [engine] = useState(() => new IntentEngine());
   const [connected, setConnected] = useState(false);
   const [capturing, setCapturing] = useState(false);
+  const [ddspMode, setDdspMode] = useState(false);
   const [roomId, setRoomId] = useState('');
   const [inputRoom, setInputRoom] = useState('');
   const [userName, setUserName] = useState('Musician');
   const [peers, setPeers] = useState<PeerInfo[]>([]);
   const [metrics, setMetrics] = useState<CollabMetrics | null>(null);
+  const [telemetry, setTelemetry] = useState({ jitter: 0, loss: 0 });
 
   const [localFrame, setLocalFrame] = useState<IntentFrame | null>(null);
   const [remoteFrame, setRemoteFrame] = useState<IntentFrame | null>(null);
@@ -75,7 +77,10 @@ export default function CollabPage() {
 
   useEffect(() => {
     if (!connected) return;
-    const interval = setInterval(() => engine.requestMetrics(), 2000);
+    const interval = setInterval(() => {
+      engine.requestMetrics();
+      setTelemetry({ jitter: engine.jitterMs, loss: engine.packetLossPercent });
+    }, 1000);
     return () => clearInterval(interval);
   }, [connected, engine]);
 
@@ -131,6 +136,15 @@ export default function CollabPage() {
           <span style={styles.statusText}>
             {connected ? `Room: ${roomId}` : 'Disconnected'}
           </span>
+          {connected && (
+             <label style={{ marginLeft: '20px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: '#ccc', fontSize: '0.9rem' }}>
+                <input type="checkbox" checked={ddspMode} onChange={e => {
+                   setDdspMode(e.target.checked);
+                   engine.setDDSPMode(e.target.checked);
+                }} />
+                High-Fidelity DDSP Mode (Server-Side)
+             </label>
+          )}
         </div>
         {connected && (
           <button style={styles.disconnectBtn} onClick={handleDisconnect}>Disconnect</button>
@@ -176,7 +190,21 @@ export default function CollabPage() {
               <div style={styles.sideSection}>
                 <h3 style={styles.sideTitle}>Network</h3>
                 <div style={styles.metricRow}><span style={styles.metricLabel}>Bandwidth</span><span style={styles.metricValue}>{metrics.bandwidth_kbps.toFixed(1)} KB/s</span></div>
-                <div style={styles.metricRow}><span style={styles.metricLabel}>Latency</span><span style={styles.metricValue}>{metrics.avg_latency_ms} ms</span></div>
+                <div style={styles.metricRow}>
+                  <span style={styles.metricLabel}>Latency / Jitter</span>
+                  <span style={styles.metricValue}>
+                    {metrics.avg_latency_ms} ms /{' '}
+                    <span style={{ color: telemetry.jitter < 20 ? '#00ff88' : telemetry.jitter < 50 ? '#ffaa00' : '#ff4444' }}>
+                      {telemetry.jitter.toFixed(1)} ms
+                    </span>
+                  </span>
+                </div>
+                <div style={styles.metricRow}>
+                  <span style={styles.metricLabel}>Packet Loss</span>
+                  <span style={{ ...styles.metricValue, color: telemetry.loss < 1 ? '#00ff88' : telemetry.loss < 5 ? '#ffaa00' : '#ff4444' }}>
+                    {telemetry.loss.toFixed(1)}%
+                  </span>
+                </div>
                 <div style={styles.metricRow}><span style={styles.metricLabel}>Packets</span><span style={styles.metricValue}>{metrics.total_packets.toLocaleString()}</span></div>
                 <div style={styles.metricRow}><span style={styles.metricLabel}>Data</span><span style={styles.metricValue}>{(metrics.bytes_transmitted / 1024).toFixed(1)} KB</span></div>
               </div>

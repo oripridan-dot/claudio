@@ -10,6 +10,7 @@ Usage:
     cd claudio && .venv/bin/python -m claudio.audio_demo_server
     # Opens http://localhost:8787
 """
+
 from __future__ import annotations
 
 import io
@@ -44,7 +45,7 @@ def _read_wav(data: bytes) -> tuple[np.ndarray, int]:
         n_samples = len(raw_bytes) // 3
         samples = np.zeros(n_samples, dtype=np.float32)
         for i in range(n_samples):
-            b = raw_bytes[i * 3: i * 3 + 3]
+            b = raw_bytes[i * 3 : i * 3 + 3]
             val = int.from_bytes(b, byteorder="little", signed=True)
             samples[i] = val / 8388608.0
     elif sampwidth == 4:
@@ -77,15 +78,15 @@ def _wav_bytes_stereo(left: np.ndarray, right: np.ndarray, sr: int) -> bytes:
 
 
 POSITIONS = {
-    "center":     [0.0, 0.0, -2.0],
-    "left_30":    [-1.0, 0.0, -1.73],
-    "left_45":    [-1.4, 0.0, -1.4],
-    "left_90":    [-2.0, 0.0, 0.0],
-    "right_30":   [1.0, 0.0, -1.73],
-    "right_45":   [1.4, 0.0, -1.4],
-    "right_90":   [2.0, 0.0, 0.0],
-    "behind":     [0.0, 0.0, 2.0],
-    "above":      [0.0, 2.0, -1.0],
+    "center": [0.0, 0.0, -2.0],
+    "left_30": [-1.0, 0.0, -1.73],
+    "left_45": [-1.4, 0.0, -1.4],
+    "left_90": [-2.0, 0.0, 0.0],
+    "right_30": [1.0, 0.0, -1.73],
+    "right_45": [1.4, 0.0, -1.4],
+    "right_90": [2.0, 0.0, 0.0],
+    "behind": [0.0, 0.0, 2.0],
+    "above": [0.0, 2.0, -1.0],
 }
 
 
@@ -153,14 +154,16 @@ class ClaudioHandler(SimpleHTTPRequestHandler):
                 with open(orig_path, "wb") as f:
                     f.write(file_bytes)
 
-                results.append({
-                    "filename": filename,
-                    "original_url": f"/uploads/{filename}",
-                    "binaural_url": f"/uploads/{out_name}",
-                    "position": position_key,
-                    "duration_s": len(mono) / sr,
-                    "sample_rate": sr,
-                })
+                results.append(
+                    {
+                        "filename": filename,
+                        "original_url": f"/uploads/{filename}",
+                        "binaural_url": f"/uploads/{out_name}",
+                        "position": position_key,
+                        "duration_s": len(mono) / sr,
+                        "sample_rate": sr,
+                    }
+                )
             except Exception as e:
                 results.append({"filename": filename, "error": str(e)})
 
@@ -180,7 +183,7 @@ class ClaudioHandler(SimpleHTTPRequestHandler):
             if header_end < 0:
                 continue
             header = seg[:header_end].decode("utf-8", errors="replace")
-            content = seg[header_end + 4:]
+            content = seg[header_end + 4 :]
             if content.endswith(b"\r\n"):
                 content = content[:-2]
 
@@ -229,8 +232,8 @@ class ClaudioHandler(SimpleHTTPRequestHandler):
 
 def _upload_page_html() -> str:
     from claudio.demo_upload_template import upload_page_html
-    return upload_page_html()
 
+    return upload_page_html()
 
 
 def main():

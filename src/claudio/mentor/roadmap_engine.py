@@ -12,6 +12,7 @@ Architecture:
 
 Phase configurations (checklist items, UI panels) are defined in roadmap_phases.py.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -30,18 +31,20 @@ class PhaseStatus(Enum):
 @dataclass
 class ChecklistItem:
     """A single task within a production phase."""
+
     item_id: str
     label: str
     description: str
-    is_automated: bool          # True = Claudio can auto-detect completion
+    is_automated: bool  # True = Claudio can auto-detect completion
     completed: bool = False
     auto_detection_key: str = ""  # key from AI detections that marks this done
-    mentor_tip_id: str = ""     # linked mentor tip to surface when working on this
+    mentor_tip_id: str = ""  # linked mentor tip to surface when working on this
 
 
 @dataclass
 class PhaseConfig:
     """Configuration for a single production phase."""
+
     phase: ProductionPhase
     title: str
     subtitle: str
@@ -55,12 +58,14 @@ class PhaseConfig:
 @dataclass
 class RoadmapState:
     """Full roadmap state for serialization to the UI."""
+
     current_phase: ProductionPhase
     phases: list[PhaseConfig]
     overall_progress: float  # 0-100%
 
 
 # ─── Roadmap Engine ──────────────────────────────────────────────────────────
+
 
 class RoadmapEngine:
     """
@@ -94,9 +99,7 @@ class RoadmapEngine:
     @property
     def state(self) -> RoadmapState:
         total_items = sum(len(p.checklist) for p in self._phases)
-        completed_items = sum(
-            sum(1 for item in p.checklist if item.completed) for p in self._phases
-        )
+        completed_items = sum(sum(1 for item in p.checklist if item.completed) for p in self._phases)
         return RoadmapState(
             current_phase=self._phases[self._current_idx].phase,
             phases=self._phases,

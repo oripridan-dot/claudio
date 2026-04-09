@@ -11,6 +11,7 @@ and collaboration infrastructure under realistic conditions:
   - Room capacity limits
   - Network simulation: packet loss, reordering
 """
+
 from __future__ import annotations
 
 import struct
@@ -68,6 +69,7 @@ class MockWebSocket:
 # Test: Full Wire Roundtrip (Encode → Serialize → Deserialize → Decode)
 # ═══════════════════════════════════════════════════════════════════════
 
+
 class TestWireRoundtrip:
     """Verify full pipeline fidelity through the wire format."""
 
@@ -93,9 +95,7 @@ class TestWireRoundtrip:
         assert len(voiced_wire) > 0, "No voiced frames after wire roundtrip"
 
         for orig, wire in zip(voiced_orig, voiced_wire, strict=False):
-            assert abs(orig.f0_hz - wire.f0_hz) < 0.01, (
-                f"F0 drift: {orig.f0_hz} → {wire.f0_hz}"
-            )
+            assert abs(orig.f0_hz - wire.f0_hz) < 0.01, f"F0 drift: {orig.f0_hz} → {wire.f0_hz}"
 
     def test_delta_frames_carry_forward_mfcc(self) -> None:
         """Decoder should use carried-forward MFCCs for delta frames."""
@@ -120,9 +120,7 @@ class TestWireRoundtrip:
         decoded = dec.decode_frames(wire_frames)
 
         # Verify decoder has remembered the MFCCs
-        assert len(dec._last_mfcc) >= 2, (
-            "Decoder did not carry forward MFCCs from full frame"
-        )
+        assert len(dec._last_mfcc) >= 2, "Decoder did not carry forward MFCCs from full frame"
         assert len(decoded) > 0, "Decoded audio is empty"
 
     def test_roundtrip_audio_quality(self) -> None:
@@ -142,7 +140,7 @@ class TestWireRoundtrip:
                 wire_frames.append(restored.frame)
 
         decoded = dec.decode_frames(wire_frames)
-        rms = float(np.sqrt(np.mean(decoded ** 2)))
+        rms = float(np.sqrt(np.mean(decoded**2)))
 
         # Should not be silent
         assert rms > 0.01, f"Roundtrip audio too quiet: rms={rms:.4f}"
@@ -152,30 +150,43 @@ class TestWireRoundtrip:
 # Test: Frontend 34-byte Packet Compatibility
 # ═══════════════════════════════════════════════════════════════════════
 
+
 class TestFrontendCompatibility:
     """Verify backend can parse frontend's 34-byte packets."""
 
     def _make_frontend_packet(
-        self, seq: int, ts: float, f0: float, conf: float,
-        db: float, norm: float, centroid: float,
-        onset: bool = False, onset_str: float = 0.0,
+        self,
+        seq: int,
+        ts: float,
+        f0: float,
+        conf: float,
+        db: float,
+        norm: float,
+        centroid: float,
+        onset: bool = False,
+        onset_str: float = 0.0,
     ) -> bytes:
         """Simulate a frontend-generated 34-byte packet."""
         buf = bytearray(34)
         flags = 0x08 if norm < 0.01 else (0x05 if onset else 0x01)
         struct.pack_into("<IfB", buf, 0, seq & 0xFFFFFFFF, ts, flags)
         struct.pack_into(
-            "<fffffBf", buf, 9,
-            f0, conf, db, norm, centroid,
-            1 if onset else 0, onset_str,
+            "<fffffBf",
+            buf,
+            9,
+            f0,
+            conf,
+            db,
+            norm,
+            centroid,
+            1 if onset else 0,
+            onset_str,
         )
         return bytes(buf)
 
     def test_parse_voiced_packet(self) -> None:
         """Backend should parse a voiced 34-byte packet correctly."""
-        pkt = IntentPacket.from_bytes(
-            self._make_frontend_packet(1, 100.0, 440.0, 0.95, -12.0, 0.85, 2500.0)
-        )
+        pkt = IntentPacket.from_bytes(self._make_frontend_packet(1, 100.0, 440.0, 0.95, -12.0, 0.85, 2500.0))
         assert pkt.frame is not None
         assert abs(pkt.frame.f0_hz - 440.0) < 0.1
         assert abs(pkt.frame.loudness_db - (-12.0)) < 0.1
@@ -183,17 +194,14 @@ class TestFrontendCompatibility:
 
     def test_parse_silence_packet(self) -> None:
         """Backend should parse a silence 34-byte packet correctly."""
-        pkt = IntentPacket.from_bytes(
-            self._make_frontend_packet(2, 200.0, 0, 0, -80.0, 0.0, 0)
-        )
+        pkt = IntentPacket.from_bytes(self._make_frontend_packet(2, 200.0, 0, 0, -80.0, 0.0, 0))
         assert pkt.frame is None  # Silence packet has no frame
         assert pkt.flags & PacketFlags.SILENCE
 
     def test_parse_onset_packet(self) -> None:
         """Backend should parse an onset 34-byte packet correctly."""
         pkt = IntentPacket.from_bytes(
-            self._make_frontend_packet(3, 300.0, 440.0, 0.9, -10.0, 0.9, 3000.0,
-                                       onset=True, onset_str=0.6)
+            self._make_frontend_packet(3, 300.0, 440.0, 0.9, -10.0, 0.9, 3000.0, onset=True, onset_str=0.6)
         )
         assert pkt.frame is not None
         assert pkt.frame.is_onset is True
@@ -201,9 +209,7 @@ class TestFrontendCompatibility:
 
     def test_decode_frontend_packet(self) -> None:
         """Decoder should handle a frontend packet (no MFCCs) gracefully."""
-        pkt = IntentPacket.from_bytes(
-            self._make_frontend_packet(1, 100.0, 440.0, 0.95, -12.0, 0.85, 2500.0)
-        )
+        pkt = IntentPacket.from_bytes(self._make_frontend_packet(1, 100.0, 440.0, 0.95, -12.0, 0.85, 2500.0))
         dec = IntentDecoder(sample_rate=SAMPLE_RATE)
         audio = dec.decode_frames([pkt.frame])
         assert len(audio) > 0
@@ -213,6 +219,7 @@ class TestFrontendCompatibility:
 # ═══════════════════════════════════════════════════════════════════════
 # Test: Network Simulation (packet loss, reordering)
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class TestNetworkSimulation:
     """Verify pipeline handles network impairments gracefully."""
@@ -272,6 +279,7 @@ class TestNetworkSimulation:
 # Test: Multi-Peer Concurrent Operations
 # ═══════════════════════════════════════════════════════════════════════
 
+
 class TestMultiPeerOperations:
     """Verify session manager handles concurrent peer operations."""
 
@@ -291,7 +299,9 @@ class TestMultiPeerOperations:
 
         # Alice broadcasts — Bob's send fails, Carol should still receive
         await mgr.broadcast_intent(
-            room_id, p1.peer_id, b"\x01\x02\x03",
+            room_id,
+            p1.peer_id,
+            b"\x01\x02\x03",
         )
         # Bob's send raised but was caught
         assert len(ws3.sent_bytes) == 1, "Carol didn't receive packet"
@@ -382,6 +392,7 @@ class TestMultiPeerOperations:
 # Test: Protocol rms_energy Serialization
 # ═══════════════════════════════════════════════════════════════════════
 
+
 class TestRmsEnergySerialization:
     """Verify rms_energy survives the wire format."""
 
@@ -390,9 +401,13 @@ class TestRmsEnergySerialization:
         from claudio.intent.intent_encoder import IntentFrame
 
         frame = IntentFrame(
-            timestamp_ms=0, f0_hz=440, f0_confidence=0.9,
-            loudness_db=-12, loudness_norm=0.85,
-            spectral_centroid_hz=2500, mfcc=[1.0] * 13,
+            timestamp_ms=0,
+            f0_hz=440,
+            f0_confidence=0.9,
+            loudness_db=-12,
+            loudness_norm=0.85,
+            spectral_centroid_hz=2500,
+            mfcc=[1.0] * 13,
             rms_energy=0.42,
         )
         pkt = IntentPacket(1, 0, PacketFlags.FULL_FRAME, frame)
@@ -400,9 +415,7 @@ class TestRmsEnergySerialization:
         restored = IntentPacket.from_bytes(data)
 
         assert restored.frame is not None
-        assert abs(restored.frame.rms_energy - 0.42) < 0.001, (
-            f"rms_energy lost: {restored.frame.rms_energy}"
-        )
+        assert abs(restored.frame.rms_energy - 0.42) < 0.001, f"rms_energy lost: {restored.frame.rms_energy}"
 
     def test_rms_energy_backward_compat(self) -> None:
         """Old 94-byte packets (no rms_energy) should decode with rms=0."""
@@ -410,7 +423,13 @@ class TestRmsEnergySerialization:
         header = struct.pack("<IfB", 1, 100.0, int(PacketFlags.FULL_FRAME))
         frame_data = struct.pack(
             "<fffffBf",
-            440.0, 0.9, -12.0, 0.85, 2500.0, 0, 0.0,
+            440.0,
+            0.9,
+            -12.0,
+            0.85,
+            2500.0,
+            0,
+            0.0,
         )
         mfcc_data = np.ones(13, dtype=np.float32).tobytes()
         vib_data = struct.pack("<ff", 0.0, 0.0)
@@ -425,6 +444,7 @@ class TestRmsEnergySerialization:
 # ═══════════════════════════════════════════════════════════════════════
 # Test: Rate Limiting
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class TestRateLimiting:
     """Verify per-sender token bucket rate limiting."""
@@ -446,7 +466,9 @@ class TestRateLimiting:
         dropped = 0
         for _ in range(100):  # 100 × 8KB = 800KB in one go
             result = await mgr.broadcast_intent(
-                room_id, sender.peer_id, big_packet,
+                room_id,
+                sender.peer_id,
+                big_packet,
             )
             if result == 0:
                 dropped += 1
@@ -468,7 +490,8 @@ class TestRateLimiting:
         # Simulate a single normal packet
         normal_packet = b"\x00" * 98
         result = await mgr.broadcast_intent(
-            room_id, sender.peer_id, normal_packet,
+            room_id,
+            sender.peer_id,
+            normal_packet,
         )
         assert result == 1, "Normal packet was incorrectly rate-limited"
-

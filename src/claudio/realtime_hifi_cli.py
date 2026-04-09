@@ -4,6 +4,7 @@ realtime_hifi_cli.py — CLI Entry Point for the Hi-Fi Real-Time Audio Demo
 Interactive mode selector and audio stream manager for the HiFi processor.
 Extracted from realtime_hifi.py for 300-line compliance.
 """
+
 from __future__ import annotations
 
 import sys
@@ -143,6 +144,7 @@ def _print_stats(
         times = processor._render_times.copy()
     if times:
         import statistics
+
         mean_us = statistics.mean(times)
         p99_us = sorted(times)[int(0.99 * len(times))]
         mx = max(times)
@@ -159,7 +161,7 @@ def _print_stats(
             total = bt_latency_ms + buffer_ms + mean_us / 1000
             print(f"  │ BT latency:  ~{bt_latency_ms:.0f}ms (codec)                   │")
             print(f"  │ Total E2E:   ~{total:.1f}ms                          │")
-            print(f"  │ Claudio add: {mean_us/1000:.3f}ms ({mean_us:.0f}µs)              │")
+            print(f"  │ Claudio add: {mean_us / 1000:.3f}ms ({mean_us:.0f}µs)              │")
         print(f"  │ Peak in:     {processor._peak_in:>7.4f}                        │")
         print(f"  │ Peak out:    {processor._peak_out:>7.4f}                        │")
         print(f"  │ Blocks:      {processor._block_count:>7d}                        │")

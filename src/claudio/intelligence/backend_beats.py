@@ -10,6 +10,7 @@ Expects 16kHz mono audio.
 
 Requirements: pip install transformers torch
 """
+
 from __future__ import annotations
 
 import time
@@ -61,7 +62,10 @@ class BEATsBackend(AudioClassifierBackend):
         print(f"[AST] Model loaded ({len(self._id2label)} AudioSet classes)")
 
     def classify(
-        self, audio: np.ndarray, sample_rate: int, top_k: int = 5,
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        top_k: int = 5,
     ) -> list[ClassificationResult]:
         import torch
 
@@ -75,8 +79,10 @@ class BEATsBackend(AudioClassifierBackend):
 
         # Process through feature extractor
         inputs = self._processor(
-            resampled, sampling_rate=self._target_sr,
-            return_tensors="pt", padding=True,
+            resampled,
+            sampling_rate=self._target_sr,
+            return_tensors="pt",
+            padding=True,
         )
 
         device = next(self._model.parameters()).device
@@ -97,12 +103,14 @@ class BEATsBackend(AudioClassifierBackend):
             label = self._id2label.get(int(idx), f"class_{idx}")
             confidence = float(probs[idx])
             family = map_label_to_family(label)
-            results.append(ClassificationResult(
-                label=label,
-                confidence=confidence,
-                family=family,
-                latency_ms=latency_ms,
-            ))
+            results.append(
+                ClassificationResult(
+                    label=label,
+                    confidence=confidence,
+                    family=family,
+                    latency_ms=latency_ms,
+                )
+            )
 
         return results
 

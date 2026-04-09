@@ -7,6 +7,7 @@ grounded in real-world testimonials from top-tier studio engineers.
 Extracted from knowledge_base.py for single-responsibility compliance.
 The data here is consumed by MentorKnowledgeBase in knowledge_base.py.
 """
+
 from __future__ import annotations
 
 from .knowledge_base import (
@@ -126,8 +127,7 @@ MENTOR_TIPS: list[MentorTip] = [
         context_location="Sound City Studios, Los Angeles",
         context_date="1993",
         physical_action=(
-            "Press the Ø (phase reverse) button on your preamp or console for "
-            "the snare bottom microphone channel."
+            "Press the Ø (phase reverse) button on your preamp or console for the snare bottom microphone channel."
         ),
         ui_action="HIGHLIGHT_PHASE_BUTTON",
         severity="critical",
@@ -190,8 +190,7 @@ MENTOR_TIPS: list[MentorTip] = [
         context_location="Pensado's Place Studio, Los Angeles",
         context_date="2018",
         physical_action=(
-            "Step back 4-6 inches from the microphone to reduce "
-            "excessive low-end buildup from proximity effect."
+            "Step back 4-6 inches from the microphone to reduce excessive low-end buildup from proximity effect."
         ),
         ui_action="SHOW_DISTANCE_INDICATOR",
         severity="tip",
@@ -360,8 +359,7 @@ MENTOR_TIPS: list[MentorTip] = [
         context_location="Sound City Studios, Van Nuys",
         context_date="1994",
         physical_action=(
-            "Move the SM57 1-2 inches off the center of the speaker cone "
-            "toward the edge of the dust cap."
+            "Move the SM57 1-2 inches off the center of the speaker cone toward the edge of the dust cap."
         ),
         ui_action="SHOW_MIC_POSITION_GUIDE",
         severity="tip",
@@ -422,10 +420,7 @@ MENTOR_TIPS: list[MentorTip] = [
         ),
         context_location="Punkerpad Studios, London",
         context_date="2021",
-        physical_action=(
-            "Roll the guitar's tone knob back from 10 to 7-8 to tame "
-            "excessive brightness at the source."
-        ),
+        physical_action=("Roll the guitar's tone knob back from 10 to 7-8 to tame excessive brightness at the source."),
         ui_action="SHOW_TONE_KNOB_GUIDE",
         severity="tip",
         confidence_threshold=0.65,

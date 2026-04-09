@@ -4,6 +4,7 @@ gesture_heuristics.py — Static Gesture Detection Heuristics
 Low-level finger/hand pose detection rules for MediaPipe landmarks.
 Extracted from gesture_classifier.py for 300-line compliance.
 """
+
 from __future__ import annotations
 
 import numpy as np

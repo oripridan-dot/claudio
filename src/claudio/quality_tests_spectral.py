@@ -4,6 +4,7 @@ quality_tests_spectral.py — Frequency Response, Spectrum, and Waterfall Tests
 Tests 2, 4, 6 from the audio quality proof suite.
 Extracted from audio_quality_proof.py for 300-line compliance.
 """
+
 from __future__ import annotations
 
 import matplotlib.pyplot as plt
@@ -41,7 +42,7 @@ def test_freq_response() -> dict:
         out_spectrum = np.abs(np.fft.rfft(out * np.hanning(len(out))))
         out_freqs = np.fft.rfftfreq(len(out), 1 / SAMPLE_RATE)
 
-        ref_trimmed = ref_spectrum[:len(out_spectrum)]
+        ref_trimmed = ref_spectrum[: len(out_spectrum)]
         transfer = out_spectrum / (ref_trimmed + 1e-10)
         transfer_db = 20 * np.log10(transfer + 1e-10)
 
@@ -59,16 +60,22 @@ def test_freq_response() -> dict:
             band_db = transfer_db[mask]
             flatness = float(np.max(band_db) - np.min(band_db))
             results[mode] = flatness
-            ax.text(0.02, 0.95, f"Flatness: ±{flatness/2:.1f}dB",
-                    transform=ax.transAxes, fontsize=10, color=color,
-                    verticalalignment="top",
-                    bbox={"facecolor": COLORS["bg"], "alpha": 0.8, "edgecolor": color})
+            ax.text(
+                0.02,
+                0.95,
+                f"Flatness: ±{flatness / 2:.1f}dB",
+                transform=ax.transAxes,
+                fontsize=10,
+                color=color,
+                verticalalignment="top",
+                bbox={"facecolor": COLORS["bg"], "alpha": 0.8, "edgecolor": color},
+            )
 
     out_l, out_r = process_through_engine(sweep)
     out_spectrum_l = np.abs(np.fft.rfft(out_l * np.hanning(len(out_l))))
     out_spectrum_r = np.abs(np.fft.rfft(out_r * np.hanning(len(out_r))))
     out_freqs = np.fft.rfftfreq(len(out_l), 1 / SAMPLE_RATE)
-    ref_trimmed = ref_spectrum[:len(out_spectrum_l)]
+    ref_trimmed = ref_spectrum[: len(out_spectrum_l)]
     transfer_l = 20 * np.log10(out_spectrum_l / (ref_trimmed + 1e-10) + 1e-10)
     transfer_r = 20 * np.log10(out_spectrum_r / (ref_trimmed + 1e-10) + 1e-10)
 
@@ -87,7 +94,7 @@ def test_freq_response() -> dict:
     save_plot(fig, "02_frequency_response")
 
     for mode, flatness in results.items():
-        print(f"    {mode:10s}: ±{flatness/2:.1f}dB (100Hz–16kHz)")
+        print(f"    {mode:10s}: ±{flatness / 2:.1f}dB (100Hz–16kHz)")
 
     return results
 
@@ -131,10 +138,17 @@ def test_spectrum_detail() -> dict:
         if np.any(noise_mask):
             noise_floor = float(np.median(spectrum_db[noise_mask]))
             results[label] = noise_floor
-            ax.text(0.98, 0.05, f"Noise floor: {noise_floor:.1f}dB",
-                    transform=ax.transAxes, fontsize=9, color=color,
-                    verticalalignment="bottom", horizontalalignment="right",
-                    bbox={"facecolor": COLORS["bg"], "alpha": 0.8, "edgecolor": color})
+            ax.text(
+                0.98,
+                0.05,
+                f"Noise floor: {noise_floor:.1f}dB",
+                transform=ax.transAxes,
+                fontsize=9,
+                color=color,
+                verticalalignment="bottom",
+                horizontalalignment="right",
+                bbox={"facecolor": COLORS["bg"], "alpha": 0.8, "edgecolor": color},
+            )
 
     fig.suptitle("Spectrum Analysis — 1 kHz Sine Test", fontsize=16, fontweight="bold", y=1.02)
     fig.tight_layout()
@@ -167,11 +181,14 @@ def test_waterfall() -> dict:
 
         ax = axes.flat[idx]
         f_vals, t_vals, sxx = scipy_signal.spectrogram(
-            out, fs=SAMPLE_RATE, nperseg=1024, noverlap=768, nfft=2048,
+            out,
+            fs=SAMPLE_RATE,
+            nperseg=1024,
+            noverlap=768,
+            nfft=2048,
         )
         sxx_db = 10 * np.log10(sxx + 1e-10)
-        im = ax.pcolormesh(t_vals, f_vals, sxx_db, shading="gouraud",
-                           cmap="magma", vmin=-80, vmax=0)
+        im = ax.pcolormesh(t_vals, f_vals, sxx_db, shading="gouraud", cmap="magma", vmin=-80, vmax=0)
         ax.set_ylabel("Frequency (Hz)")
         ax.set_xlabel("Time (s)")
         ax.set_title(label, fontweight="bold")

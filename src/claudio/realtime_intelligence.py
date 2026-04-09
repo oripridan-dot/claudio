@@ -4,6 +4,7 @@ realtime_intelligence.py — Real-Time AI Intelligence Loop
 Observation thread: mic callback → ring buffer → classifier → coach → mentor.
 Zero-latency audio path (Architecture Rule #3: observation-only COPY of signal).
 """
+
 from __future__ import annotations
 
 import threading
@@ -21,12 +22,13 @@ from .mentor.knowledge_base import MentorKnowledgeBase, MentorTip, TriggerCatego
 @dataclass
 class CoachingEvent:
     """A coaching event emitted by the intelligence loop."""
-    timestamp: float                 # time.time()
+
+    timestamp: float  # time.time()
     instrument: InstrumentDetection | None = None
     mentor_tip: MentorTip | None = None
     gemini_tip: CoachingResponse | None = None
     coaching_hints: list[str] = field(default_factory=list)
-    detection_source: str = ""       # "heuristic", "neural", "fused"
+    detection_source: str = ""  # "heuristic", "neural", "fused"
 
 
 class IntelligenceLoop:
@@ -56,6 +58,7 @@ class IntelligenceLoop:
         if neural_backend is None and auto_load_neural:
             try:
                 from .intelligence.backend_factory import BackendStrategy, create_backend
+
                 neural_backend = create_backend(BackendStrategy.AUTO)
             except Exception as e:
                 print(f"[Intelligence] Neural backend auto-load failed: {e}")
@@ -107,7 +110,7 @@ class IntelligenceLoop:
             # Wrap around
             first_chunk = self._buffer_size - pos
             self._buffer[pos:] = audio[:first_chunk]
-            self._buffer[:n - first_chunk] = audio[first_chunk:]
+            self._buffer[: n - first_chunk] = audio[first_chunk:]
         self._write_pos = end % self._buffer_size
         self._total_frames += n
 
@@ -149,10 +152,7 @@ class IntelligenceLoop:
             "total_detections": self._total_detections,
             "buffer_fill": self._write_pos / self._buffer_size,
             "events_queued": len(self._events),
-            "last_detection": (
-                self._last_detection.family.value
-                if self._last_detection else "none"
-            ),
+            "last_detection": (self._last_detection.family.value if self._last_detection else "none"),
         }
         if self._gemini_coach:
             result["gemini"] = self._gemini_coach.stats
@@ -176,7 +176,7 @@ class IntelligenceLoop:
                 continue
 
             # Skip silence
-            rms = float(np.sqrt(np.mean(audio ** 2)))
+            rms = float(np.sqrt(np.mean(audio**2)))
             if rms < 0.005:  # -46 dBFS threshold
                 continue
 
@@ -232,9 +232,11 @@ class IntelligenceLoop:
         from .intelligence.instrument_classifier import InstrumentFamily
 
         # High transient sharpness → harsh attack tip
-        if (det.transient_profile
-                and det.transient_profile.transient_sharpness > 0.8
-                and det.family in (InstrumentFamily.GUITAR_ELECTRIC, InstrumentFamily.GUITAR_ACOUSTIC)):
+        if (
+            det.transient_profile
+            and det.transient_profile.transient_sharpness > 0.8
+            and det.family in (InstrumentFamily.GUITAR_ELECTRIC, InstrumentFamily.GUITAR_ACOUSTIC)
+        ):
             tip = self._mentor_kb.find_best_tip(
                 TriggerCategory.HARSH_TRANSIENT,
                 confidence=det.confidence,
@@ -263,7 +265,9 @@ class IntelligenceLoop:
         return None
 
     def _get_gemini_coaching(
-        self, det: InstrumentDetection, rms: float,
+        self,
+        det: InstrumentDetection,
+        rms: float,
     ) -> CoachingResponse | None:
         """Get a coaching tip from Gemini based on the current detection."""
         if not self._gemini_coach:
@@ -274,17 +278,10 @@ class IntelligenceLoop:
                 instrument=det.family.value,
                 confidence=det.confidence,
                 spectral_centroid_hz=(
-                    det.spectral_fingerprint.spectral_centroid_hz
-                    if det.spectral_fingerprint else 0.0
+                    det.spectral_fingerprint.spectral_centroid_hz if det.spectral_fingerprint else 0.0
                 ),
-                spectral_rolloff_hz=(
-                    det.spectral_fingerprint.spectral_rolloff_hz
-                    if det.spectral_fingerprint else 0.0
-                ),
-                transient_sharpness=(
-                    det.transient_profile.transient_sharpness
-                    if det.transient_profile else 0.0
-                ),
+                spectral_rolloff_hz=(det.spectral_fingerprint.spectral_rolloff_hz if det.spectral_fingerprint else 0.0),
+                transient_sharpness=(det.transient_profile.transient_sharpness if det.transient_profile else 0.0),
                 rms_level=rms,
                 session_duration_s=time.time() - self._start_time,
                 recent_instruments=self._recent_instruments[-5:],

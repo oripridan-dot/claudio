@@ -17,6 +17,7 @@ return visualisation-ready data structures.  No side effects.
 The UI (claudio-studio-app) consumes these data structures to render the
 real-time holographic displays.
 """
+
 from __future__ import annotations
 
 import math
@@ -29,6 +30,7 @@ from .acoustic_advisor import AcousticAdvice, AcousticEnvironmentAdvisor
 
 # ─── 1. Pocket Radar ─────────────────────────────────────────────────────────
 
+
 @dataclass
 class PocketRadarFrame:
     """
@@ -40,14 +42,15 @@ class PocketRadarFrame:
       - "Aura" around the radar point indicates consistency
       - Colour: green=locked, amber=expressive, red=erratic
     """
-    bassist_deviation_ms:   float   # mean offset from drummer's kick grid
-    bassist_consistency_ms: float   # std-dev of offset (expressiveness vs. error)
-    drummer_grid_bpm:       float
-    pocket_score:           float   # 0.0 (erratic) – 1.0 (locked)
+
+    bassist_deviation_ms: float  # mean offset from drummer's kick grid
+    bassist_consistency_ms: float  # std-dev of offset (expressiveness vs. error)
+    drummer_grid_bpm: float
+    pocket_score: float  # 0.0 (erratic) – 1.0 (locked)
     # Normalised angle for radar display (-1.0=rushing, +1.0=dragging)
-    radar_angle:            float
-    radar_magnitude:        float   # 0.0 (centre) – 1.0 (edge)
-    aura_colour:            str     # "green", "amber", "red"
+    radar_angle: float
+    radar_magnitude: float  # 0.0 (centre) – 1.0 (edge)
+    aura_colour: str  # "green", "amber", "red"
 
 
 class PocketRadar:
@@ -64,9 +67,9 @@ class PocketRadar:
     and beyond ±35 ms starts sounding unintentional.
     """
 
-    LOCKED_MS    = 6.0    # within this = perfectly pocket
+    LOCKED_MS = 6.0  # within this = perfectly pocket
     EXPRESSIVE_MS = 20.0  # within this = intentional groove feel
-    ERRATIC_MS   = 35.0   # beyond this = likely unintentional
+    ERRATIC_MS = 35.0  # beyond this = likely unintentional
 
     def compute(
         self,
@@ -98,17 +101,15 @@ class PocketRadar:
         if not deviations:
             return None
 
-        mean_dev   = float(np.mean(deviations))
-        std_dev    = float(np.std(deviations))
+        mean_dev = float(np.mean(deviations))
+        std_dev = float(np.std(deviations))
 
         # Pocket score: high when deviation AND std-dev are small
-        pocket_score = math.exp(
-            -(mean_dev**2) / (2 * self.EXPRESSIVE_MS**2)
-        ) * math.exp(
+        pocket_score = math.exp(-(mean_dev**2) / (2 * self.EXPRESSIVE_MS**2)) * math.exp(
             -(std_dev**2) / (2 * self.EXPRESSIVE_MS**2)
         )
 
-        radar_angle     = np.clip(mean_dev / self.ERRATIC_MS, -1.0, 1.0)
+        radar_angle = np.clip(mean_dev / self.ERRATIC_MS, -1.0, 1.0)
         radar_magnitude = min(1.0, std_dev / self.ERRATIC_MS)
 
         if abs(mean_dev) <= self.LOCKED_MS and std_dev <= self.LOCKED_MS:
@@ -119,13 +120,13 @@ class PocketRadar:
             colour = "red"
 
         return PocketRadarFrame(
-            bassist_deviation_ms   = mean_dev,
-            bassist_consistency_ms = std_dev,
-            drummer_grid_bpm       = bpm,
-            pocket_score           = float(pocket_score),
-            radar_angle            = float(radar_angle),
-            radar_magnitude        = float(radar_magnitude),
-            aura_colour            = colour,
+            bassist_deviation_ms=mean_dev,
+            bassist_consistency_ms=std_dev,
+            drummer_grid_bpm=bpm,
+            pocket_score=float(pocket_score),
+            radar_angle=float(radar_angle),
+            radar_magnitude=float(radar_magnitude),
+            aura_colour=colour,
         )
 
 
@@ -135,14 +136,16 @@ from .topographic_map import FreqCollisionZone, TopographicFreqMap, TopographicF
 
 # ─── 3. Performance Coach ─────────────────────────────────────────────────────
 
+
 @dataclass
 class CoachingNote:
     """A single coaching suggestion."""
-    domain:     str    # "timing", "dynamics", "tone", "room"
-    severity:   str    # "info", "tip", "warning"
-    message:    str
-    metric:     float  # the measured value that triggered this note
-    threshold:  float  # the threshold that was crossed
+
+    domain: str  # "timing", "dynamics", "tone", "room"
+    severity: str  # "info", "tip", "warning"
+    message: str
+    metric: float  # the measured value that triggered this note
+    threshold: float  # the threshold that was crossed
 
 
 class PerformanceCoach:
@@ -160,69 +163,89 @@ class PerformanceCoach:
         groove_lean_ms: float,
         groove_consistency_ms: float,
         velocity_range_ratio: float,
-        pick_attack_ratio: float = 0.0,   # 0–1; 1 = extremely harsh attack
+        pick_attack_ratio: float = 0.0,  # 0–1; 1 = extremely harsh attack
     ) -> list[CoachingNote]:
         notes: list[CoachingNote] = []
 
         # Timing: rushing
         if groove_lean_ms < -10.0:
-            notes.append(CoachingNote(
-                domain="timing", severity="tip",
-                message=(
-                    f"You are rushing the beat by {abs(groove_lean_ms):.1f} ms on average. "
-                    "Try relaxing your wrist and letting the downbeat come to you — "
-                    "the pocket is just behind the click."
-                ),
-                metric=groove_lean_ms, threshold=-10.0,
-            ))
+            notes.append(
+                CoachingNote(
+                    domain="timing",
+                    severity="tip",
+                    message=(
+                        f"You are rushing the beat by {abs(groove_lean_ms):.1f} ms on average. "
+                        "Try relaxing your wrist and letting the downbeat come to you — "
+                        "the pocket is just behind the click."
+                    ),
+                    metric=groove_lean_ms,
+                    threshold=-10.0,
+                )
+            )
 
         # Timing: dragging
         if groove_lean_ms > 15.0:
-            notes.append(CoachingNote(
-                domain="timing", severity="tip",
-                message=(
-                    f"Your groove is sitting {groove_lean_ms:.1f} ms behind the grid. "
-                    "This can feel intentionally heavy — confirm it is deliberate "
-                    "or try leading with your pick/finger slightly earlier."
-                ),
-                metric=groove_lean_ms, threshold=15.0,
-            ))
+            notes.append(
+                CoachingNote(
+                    domain="timing",
+                    severity="tip",
+                    message=(
+                        f"Your groove is sitting {groove_lean_ms:.1f} ms behind the grid. "
+                        "This can feel intentionally heavy — confirm it is deliberate "
+                        "or try leading with your pick/finger slightly earlier."
+                    ),
+                    metric=groove_lean_ms,
+                    threshold=15.0,
+                )
+            )
 
         # Timing: inconsistency
         if groove_consistency_ms > 12.0:
-            notes.append(CoachingNote(
-                domain="timing", severity="warning",
-                message=(
-                    f"Your timing consistency is {groove_consistency_ms:.1f} ms std-dev. "
-                    "High variance suggests fatigue or concentration drift. "
-                    "Take a short break and reset before the next take."
-                ),
-                metric=groove_consistency_ms, threshold=12.0,
-            ))
+            notes.append(
+                CoachingNote(
+                    domain="timing",
+                    severity="warning",
+                    message=(
+                        f"Your timing consistency is {groove_consistency_ms:.1f} ms std-dev. "
+                        "High variance suggests fatigue or concentration drift. "
+                        "Take a short break and reset before the next take."
+                    ),
+                    metric=groove_consistency_ms,
+                    threshold=12.0,
+                )
+            )
 
         # Dynamics: monotony
         if velocity_range_ratio < 0.15:
-            notes.append(CoachingNote(
-                domain="dynamics", severity="info",
-                message=(
-                    "Your velocity range is very narrow this take. "
-                    "Try exaggerating the natural strong/weak beats — "
-                    "let your accents speak and your ghost notes whisper."
-                ),
-                metric=velocity_range_ratio, threshold=0.15,
-            ))
+            notes.append(
+                CoachingNote(
+                    domain="dynamics",
+                    severity="info",
+                    message=(
+                        "Your velocity range is very narrow this take. "
+                        "Try exaggerating the natural strong/weak beats — "
+                        "let your accents speak and your ghost notes whisper."
+                    ),
+                    metric=velocity_range_ratio,
+                    threshold=0.15,
+                )
+            )
 
         # Tone: harsh pick attack
         if pick_attack_ratio > 0.7:
-            notes.append(CoachingNote(
-                domain="tone", severity="tip",
-                message=(
-                    "High transient energy detected in the 3–6 kHz range — "
-                    "this usually indicates a sharp pick angle hitting the string. "
-                    "Try rotating your pick 10–15 degrees and softening your wrist. "
-                    "You will retain attack clarity while losing the scrape."
-                ),
-                metric=pick_attack_ratio, threshold=0.7,
-            ))
+            notes.append(
+                CoachingNote(
+                    domain="tone",
+                    severity="tip",
+                    message=(
+                        "High transient energy detected in the 3–6 kHz range — "
+                        "this usually indicates a sharp pick angle hitting the string. "
+                        "Try rotating your pick 10–15 degrees and softening your wrist. "
+                        "You will retain attack clarity while losing the scrape."
+                    ),
+                    metric=pick_attack_ratio,
+                    threshold=0.7,
+                )
+            )
 
         return notes

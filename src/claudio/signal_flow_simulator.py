@@ -10,6 +10,7 @@ Pipeline stages:
   3. HRTF     — binaural convolution via HRTFBinauralEngine
   4. Output   — simulates DAC buffer at render_sample_rate
 """
+
 from __future__ import annotations
 
 import math
@@ -29,6 +30,7 @@ from claudio.signal_flow_metrics import (
 @dataclass
 class StageLatency:
     """Latency measurement for a single pipeline stage."""
+
     name: str
     buffer_latency_ms: float = 0.0
     cpu_time_us: float = 0.0
@@ -37,6 +39,7 @@ class StageLatency:
 @dataclass
 class QualityMetrics:
     """Measured quality metrics from a simulation run."""
+
     total_latency_ms: float = 0.0
     snr_db: float = 0.0
     thdn_percent: float = 0.0
@@ -52,6 +55,7 @@ class QualityMetrics:
 @dataclass
 class SimulationResult:
     """Complete result from a signal flow simulation run."""
+
     config: SignalFlowConfig
     metrics: QualityMetrics
     passed_all_gates: bool = False
@@ -78,7 +82,10 @@ class SignalFlowSimulator:
 
     @staticmethod
     def generate_sine(
-        freq_hz: float, duration_s: float, sample_rate: int, amplitude: float = 0.8,
+        freq_hz: float,
+        duration_s: float,
+        sample_rate: int,
+        amplitude: float = 0.8,
     ) -> np.ndarray:
         t = np.arange(int(sample_rate * duration_s), dtype=np.float64) / sample_rate
         return (np.sin(2 * np.pi * freq_hz * t) * amplitude).astype(np.float32)
@@ -91,21 +98,31 @@ class SignalFlowSimulator:
 
     @staticmethod
     def generate_sweep(
-        f_start: float, f_end: float, duration_s: float,
-        sample_rate: int, amplitude: float = 0.8,
+        f_start: float,
+        f_end: float,
+        duration_s: float,
+        sample_rate: int,
+        amplitude: float = 0.8,
     ) -> np.ndarray:
         """Logarithmic sine sweep (Farina method)."""
         n = int(sample_rate * duration_s)
         t = np.arange(n, dtype=np.float64) / sample_rate
-        phase = 2 * np.pi * f_start * duration_s / np.log(f_end / f_start) * (
-            np.exp(t / duration_s * np.log(f_end / f_start)) - 1
+        phase = (
+            2
+            * np.pi
+            * f_start
+            * duration_s
+            / np.log(f_end / f_start)
+            * (np.exp(t / duration_s * np.log(f_end / f_start)) - 1)
         )
         return (np.sin(phase) * amplitude).astype(np.float32)
 
     # ── Simulation Runs ──────────────────────────────────────────────────
 
     def run_sine_test(
-        self, freq_hz: float = 1000.0, duration_s: float = 0.5,
+        self,
+        freq_hz: float = 1000.0,
+        duration_s: float = 0.5,
         source_position: np.ndarray | None = None,
         head_quat: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0),
     ) -> SimulationResult:
@@ -115,7 +132,8 @@ class SignalFlowSimulator:
         return self._run_pipeline(audio, source_position, head_quat, f"sine_{freq_hz}Hz")
 
     def run_impulse_test(
-        self, source_position: np.ndarray | None = None,
+        self,
+        source_position: np.ndarray | None = None,
         head_quat: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0),
     ) -> SimulationResult:
         if source_position is None:
@@ -124,7 +142,9 @@ class SignalFlowSimulator:
         return self._run_pipeline(audio, source_position, head_quat, "impulse")
 
     def run_multi_source_stress(
-        self, n_sources: int = 8, duration_s: float = 0.5,
+        self,
+        n_sources: int = 8,
+        duration_s: float = 0.5,
     ) -> SimulationResult:
         sr = self._config.capture_sample_rate
         block = self._config.fft_size
@@ -163,8 +183,11 @@ class SignalFlowSimulator:
     # ── Pipeline Execution ───────────────────────────────────────────────
 
     def _run_pipeline(
-        self, audio: np.ndarray, source_position: np.ndarray,
-        head_quat: tuple[float, float, float, float], label: str,
+        self,
+        audio: np.ndarray,
+        source_position: np.ndarray,
+        head_quat: tuple[float, float, float, float],
+        label: str,
     ) -> SimulationResult:
         block = self._config.fft_size
         src = AudioSource(source_id=label, position=source_position)
@@ -180,7 +203,7 @@ class SignalFlowSimulator:
         out_l_all, out_r_all = [], []
 
         for b in range(n_blocks):
-            chunk = audio[b * block:(b + 1) * block]
+            chunk = audio[b * block : (b + 1) * block]
             frame = self._engine.render({label: chunk})
             self._render_times.append(frame.render_time_us)
             out_l_all.append(frame.left)
@@ -190,13 +213,16 @@ class SignalFlowSimulator:
 
         out_l = np.concatenate(out_l_all) if out_l_all else np.zeros(0, dtype=np.float32)
         out_r = np.concatenate(out_r_all) if out_r_all else np.zeros(0, dtype=np.float32)
-        metrics = self._compute_metrics(out_l, out_r, audio[:len(out_l)])
+        metrics = self._compute_metrics(out_l, out_r, audio[: len(out_l)])
         return self._evaluate_gates(metrics)
 
     # ── Quality Measurement ──────────────────────────────────────────────
 
     def _compute_metrics(
-        self, out_l: np.ndarray, out_r: np.ndarray, reference: np.ndarray | None,
+        self,
+        out_l: np.ndarray,
+        out_r: np.ndarray,
+        reference: np.ndarray | None,
     ) -> QualityMetrics:
         cfg = self._config
         stages = [
@@ -213,9 +239,13 @@ class SignalFlowSimulator:
         coherence = measure_phase_coherence(out_l, out_r)
 
         return QualityMetrics(
-            total_latency_ms=total_lat, snr_db=snr, thdn_percent=thdn,
-            phase_coherence=coherence, avg_render_time_us=avg_render,
-            peak_render_time_us=peak_render, stage_latencies=stages,
+            total_latency_ms=total_lat,
+            snr_db=snr,
+            thdn_percent=thdn,
+            phase_coherence=coherence,
+            avg_render_time_us=avg_render,
+            peak_render_time_us=peak_render,
+            stage_latencies=stages,
         )
 
     def _evaluate_gates(self, metrics: QualityMetrics) -> SimulationResult:
@@ -226,8 +256,10 @@ class SignalFlowSimulator:
         if metrics.avg_render_time_us > q.max_render_time_per_block_us:
             failures.append(f"render {metrics.avg_render_time_us:.0f}µs > {q.max_render_time_per_block_us}µs")
         return SimulationResult(
-            config=self._config, metrics=metrics,
-            passed_all_gates=len(failures) == 0, gate_failures=failures,
+            config=self._config,
+            metrics=metrics,
+            passed_all_gates=len(failures) == 0,
+            gate_failures=failures,
         )
 
 

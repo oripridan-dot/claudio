@@ -4,6 +4,7 @@ demo_upload_template.py — HTML Template for the Claudio Upload Page
 Extracted from audio_demo_server.py for 300-line compliance.
 Contains only the HTML/CSS/JS string used by the upload handler.
 """
+
 from __future__ import annotations
 
 

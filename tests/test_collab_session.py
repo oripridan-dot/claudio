@@ -8,6 +8,7 @@ Tests the collaboration infrastructure:
   - Metrics tracking
   - Server endpoint integration
 """
+
 from __future__ import annotations
 
 import pytest
@@ -20,6 +21,7 @@ from claudio.collab.session_manager import (
 # ═══════════════════════════════════════════════════════════════════════
 # Mock WebSocket for testing
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class MockWebSocket:
     """Minimal WebSocket mock for testing broadcast logic."""
@@ -42,6 +44,7 @@ class MockWebSocket:
 # ═══════════════════════════════════════════════════════════════════════
 # Test: Session Manager
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class TestSessionManager:
     """Test room lifecycle and peer management."""
@@ -106,6 +109,7 @@ class TestSessionManager:
 # Test: Intent Broadcasting
 # ═══════════════════════════════════════════════════════════════════════
 
+
 class TestIntentBroadcast:
     """Test binary intent packet broadcasting between peers."""
 
@@ -160,6 +164,7 @@ class TestIntentBroadcast:
 # ═══════════════════════════════════════════════════════════════════════
 # Test: Room Metrics
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class TestRoomMetrics:
     """Test room metrics tracking."""

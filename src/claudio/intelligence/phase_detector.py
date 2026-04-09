@@ -11,6 +11,7 @@ Meters:
 
 All outputs are structured for UI rendering and hardware control bridging.
 """
+
 from __future__ import annotations
 
 import math
@@ -22,18 +23,20 @@ import numpy as np
 @dataclass
 class PhaseCorrelationFrame:
     """Real-time phase correlation between two channels."""
-    correlation: float         # -1.0 (180° out of phase) to +1.0 (perfectly aligned)
-    phase_angle_deg: float     # dominant phase angle
-    severity: str              # "aligned", "acceptable", "warning", "critical"
-    recommendation: str        # human-readable correction advice
+
+    correlation: float  # -1.0 (180° out of phase) to +1.0 (perfectly aligned)
+    phase_angle_deg: float  # dominant phase angle
+    severity: str  # "aligned", "acceptable", "warning", "critical"
+    recommendation: str  # human-readable correction advice
     needs_polarity_flip: bool  # True if polarity inversion is the likely fix
-    time_offset_samples: int   # estimated sample offset between channels
-    time_offset_ms: float      # estimated ms offset
+    time_offset_samples: int  # estimated sample offset between channels
+    time_offset_ms: float  # estimated ms offset
 
 
 @dataclass
 class MultiMicPhaseReport:
     """Phase analysis across all active mic channels."""
+
     channel_pairs: list[tuple[str, str, PhaseCorrelationFrame]]
     worst_pair: tuple[str, str] | None = None
     overall_coherence: float = 1.0  # 0-1; 1 = all channels perfectly coherent
@@ -62,9 +65,13 @@ class PhaseCorrelationMeter:
     ) -> PhaseCorrelationFrame:
         if len(ch1) < 64 or len(ch2) < 64:
             return PhaseCorrelationFrame(
-                correlation=0.0, phase_angle_deg=0.0,
-                severity="unknown", recommendation="Insufficient audio data.",
-                needs_polarity_flip=False, time_offset_samples=0, time_offset_ms=0.0,
+                correlation=0.0,
+                phase_angle_deg=0.0,
+                severity="unknown",
+                recommendation="Insufficient audio data.",
+                needs_polarity_flip=False,
+                time_offset_samples=0,
+                time_offset_ms=0.0,
             )
 
         # Ensure same length
@@ -76,13 +83,11 @@ class PhaseCorrelationMeter:
         ch1_centered = ch1 - np.mean(ch1)
         ch2_centered = ch2 - np.mean(ch2)
         numerator = float(np.sum(ch1_centered * ch2_centered))
-        denominator = math.sqrt(
-            float(np.sum(ch1_centered ** 2)) * float(np.sum(ch2_centered ** 2))
-        ) + 1e-10
+        denominator = math.sqrt(float(np.sum(ch1_centered**2)) * float(np.sum(ch2_centered**2))) + 1e-10
         correlation = numerator / denominator
 
         # Cross-correlation for time offset estimation
-        xcorr = np.correlate(ch1_centered, ch2_centered, mode='full')
+        xcorr = np.correlate(ch1_centered, ch2_centered, mode="full")
         center = len(xcorr) // 2
         peak_idx = int(np.argmax(np.abs(xcorr)))
         time_offset_samples = peak_idx - center
@@ -149,8 +154,10 @@ class PhaseCorrelationMeter:
         for i in range(len(names)):
             for j in range(i + 1, len(names)):
                 frame = self.analyze(
-                    channels[names[i]], channels[names[j]],
-                    ch1_name=names[i], ch2_name=names[j],
+                    channels[names[i]],
+                    channels[names[j]],
+                    ch1_name=names[i],
+                    ch2_name=names[j],
                 )
                 pairs.append((names[i], names[j], frame))
                 if frame.correlation < worst_correlation:
@@ -191,8 +198,8 @@ class StereoPhaseScope:
         min_len = min(len(left), len(right))
         left_ds = left[:min_len:downsample]
         right_ds = right[:min_len:downsample]
-        x = (left_ds + right_ds) / 2.0   # Mid
-        y = (left_ds - right_ds) / 2.0   # Side
+        x = (left_ds + right_ds) / 2.0  # Mid
+        y = (left_ds - right_ds) / 2.0  # Side
         return x.astype(np.float32), y.astype(np.float32)
 
     def compute_correlation_history(
@@ -211,6 +218,6 @@ class StereoPhaseScope:
             left_w = left[start:end] - np.mean(left[start:end])
             right_w = right[start:end] - np.mean(right[start:end])
             num = float(np.sum(left_w * right_w))
-            den = math.sqrt(float(np.sum(left_w ** 2)) * float(np.sum(right_w ** 2))) + 1e-10
+            den = math.sqrt(float(np.sum(left_w**2)) * float(np.sum(right_w**2))) + 1e-10
             history[i] = num / den
         return history.astype(np.float32)

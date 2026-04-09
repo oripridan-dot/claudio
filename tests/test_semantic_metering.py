@@ -1,4 +1,5 @@
 """test_semantic_metering.py — Unit tests for the semantic metering engine."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -12,12 +13,13 @@ from claudio.metering.semantic_metering import (
 
 # ─── PocketRadar ─────────────────────────────────────────────────────────────
 
+
 def test_pocket_radar_locked_in():
     radar = PocketRadar()
     bpm = 120.0
     # Bassist exactly on the kick every beat
     kicks = [i * 0.5 for i in range(16)]
-    bass  = [k + 0.002 for k in kicks]   # 2 ms behind kick = tight pocket
+    bass = [k + 0.002 for k in kicks]  # 2 ms behind kick = tight pocket
     frame = radar.compute(bass, kicks, bpm)
     assert frame is not None
     assert frame.aura_colour == "green"
@@ -29,7 +31,7 @@ def test_pocket_radar_erratic():
     bpm = 120.0
     kicks = [i * 0.5 for i in range(16)]
     # Bass all over the place
-    rng  = np.random.default_rng(42)
+    rng = np.random.default_rng(42)
     bass = [k + float(rng.uniform(-0.06, 0.06)) for k in kicks]
     frame = radar.compute(bass, kicks, bpm)
     assert frame is not None
@@ -43,6 +45,7 @@ def test_pocket_radar_empty_returns_none():
 
 
 # ─── TopographicFreqMap ───────────────────────────────────────────────────────
+
 
 def test_collision_detected_for_identical_signals():
     mapper = TopographicFreqMap(sample_rate=48_000)
@@ -63,6 +66,7 @@ def test_no_collision_on_silence():
 
 
 # ─── PerformanceCoach ─────────────────────────────────────────────────────────
+
 
 def test_coach_rushing_note():
     coach = PerformanceCoach()
@@ -102,15 +106,13 @@ def test_coach_harsh_pick_attack():
 
 # ─── AcousticEnvironmentAdvisor ──────────────────────────────────────────────
 
+
 def test_advisor_detects_bass_buildup():
     advisor = AcousticEnvironmentAdvisor()
     sr = 48_000
-    t  = np.linspace(0, 1, sr)
+    t = np.linspace(0, 1, sr)
     # Dominant 80 Hz fundamental (room mode) + weak mid content
-    audio = (
-        np.sin(2 * np.pi * 80 * t) * 0.9
-        + np.sin(2 * np.pi * 1000 * t) * 0.05
-    ).astype(np.float32)
+    audio = (np.sin(2 * np.pi * 80 * t) * 0.9 + np.sin(2 * np.pi * 1000 * t) * 0.05).astype(np.float32)
     advice = advisor.analyse(audio, sample_rate=sr)
     categories = [a.category for a in advice]
     assert "bass_buildup" in categories
@@ -120,7 +122,7 @@ def test_advisor_clean_room_no_advice():
     advisor = AcousticEnvironmentAdvisor()
     sr = 48_000
     # Pink-noise-ish signal with balanced spectrum — no pathologies
-    rng   = np.random.default_rng(0)
+    rng = np.random.default_rng(0)
     audio = rng.standard_normal(sr).astype(np.float32) * 0.1
     advice = advisor.analyse(audio, sample_rate=sr)
     # A white-noise signal should not trigger bass_buildup or flutter

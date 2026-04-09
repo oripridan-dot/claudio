@@ -4,12 +4,14 @@ roadmap_phases.py — Default Phase Configurations for the Production Roadmap
 Pure data definitions for each production phase's checklist items and
 UI panel visibility. Extracted from roadmap_engine.py for 300-line compliance.
 """
+
 from __future__ import annotations
 
 from .knowledge_base import ProductionPhase
 from .roadmap_engine import ChecklistItem, PhaseConfig, PhaseStatus
 
 # ─── Default Phase Configurations ─────────────────────────────────────────────
+
 
 def build_setup_phase() -> PhaseConfig:
     return PhaseConfig(
@@ -58,12 +60,19 @@ def build_setup_phase() -> PhaseConfig:
             ),
         ],
         ui_panels_visible=[
-            "room_scanner", "phase_meter", "gain_meter",
-            "instrument_detector", "mic_placement_guide", "sweet_spot_hud",
+            "room_scanner",
+            "phase_meter",
+            "gain_meter",
+            "instrument_detector",
+            "mic_placement_guide",
+            "sweet_spot_hud",
         ],
         ui_panels_hidden=[
-            "mix_bus", "mastering_chain", "lufs_meter",
-            "stereo_width", "release_checklist",
+            "mix_bus",
+            "mastering_chain",
+            "lufs_meter",
+            "stereo_width",
+            "release_checklist",
         ],
     )
 
@@ -106,12 +115,18 @@ def build_tracking_phase() -> PhaseConfig:
             ),
         ],
         ui_panels_visible=[
-            "waveform", "performance_coach", "pocket_radar",
-            "instrument_detector", "mentor_overlay",
+            "waveform",
+            "performance_coach",
+            "pocket_radar",
+            "instrument_detector",
+            "mentor_overlay",
         ],
         ui_panels_hidden=[
-            "room_scanner", "mix_bus", "mastering_chain",
-            "lufs_meter", "release_checklist",
+            "room_scanner",
+            "mix_bus",
+            "mastering_chain",
+            "lufs_meter",
+            "release_checklist",
         ],
     )
 
@@ -153,11 +168,18 @@ def build_mixing_phase() -> PhaseConfig:
             ),
         ],
         ui_panels_visible=[
-            "spectrum_analyzer", "topographic_freq_map", "stereo_width",
-            "phase_meter", "mix_bus", "mentor_overlay", "sweet_spot_hud",
+            "spectrum_analyzer",
+            "topographic_freq_map",
+            "stereo_width",
+            "phase_meter",
+            "mix_bus",
+            "mentor_overlay",
+            "sweet_spot_hud",
         ],
         ui_panels_hidden=[
-            "room_scanner", "mic_placement_guide", "mastering_chain",
+            "room_scanner",
+            "mic_placement_guide",
+            "mastering_chain",
             "release_checklist",
         ],
     )
@@ -211,11 +233,16 @@ def build_mastering_phase() -> PhaseConfig:
             ),
         ],
         ui_panels_visible=[
-            "lufs_meter", "true_peak_meter", "stereo_width",
-            "mastering_chain", "mentor_overlay",
+            "lufs_meter",
+            "true_peak_meter",
+            "stereo_width",
+            "mastering_chain",
+            "mentor_overlay",
         ],
         ui_panels_hidden=[
-            "room_scanner", "mic_placement_guide", "pocket_radar",
+            "room_scanner",
+            "mic_placement_guide",
+            "pocket_radar",
             "performance_coach",
         ],
     )

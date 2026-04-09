@@ -9,6 +9,7 @@ Architecture:
   - MultimodalFusion: cross-validates audio + vision, boosts confidence
   - InstrumentModelDB: known instrument profiles for matching (in instrument_profiles.py)
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -48,7 +49,7 @@ class VisualCategory(Enum):
 
 @dataclass
 class BoundingBox:
-    x: float          # normalized 0-1
+    x: float  # normalized 0-1
     y: float
     width: float
     height: float
@@ -57,19 +58,21 @@ class BoundingBox:
 @dataclass
 class VisionDetection:
     """A single object detected by computer vision in the camera frame."""
+
     category: VisualCategory
     confidence: float
     bounding_box: BoundingBox
-    brand_text: str = ""          # OCR'd brand name (e.g. "Fender", "Shure")
-    model_text: str = ""          # OCR'd model (e.g. "SM58", "Telecaster")
-    color_dominant: str = ""      # dominant color of the object
-    body_shape: str = ""          # e.g. "single_cutaway", "double_cutaway", "dreadnought"
-    headstock_shape: str = ""     # guitar-specific: "inline_6", "3x3", "reverse"
+    brand_text: str = ""  # OCR'd brand name (e.g. "Fender", "Shure")
+    model_text: str = ""  # OCR'd model (e.g. "SM58", "Telecaster")
+    color_dominant: str = ""  # dominant color of the object
+    body_shape: str = ""  # e.g. "single_cutaway", "double_cutaway", "dreadnought"
+    headstock_shape: str = ""  # guitar-specific: "inline_6", "3x3", "reverse"
 
 
 @dataclass
 class EnvironmentDetection:
     """Room/environment visual analysis."""
+
     room_dimensions_estimate: tuple[float, float, float] = (0.0, 0.0, 0.0)
     reflective_surfaces: list[str] = field(default_factory=list)
     acoustic_treatment: list[str] = field(default_factory=list)
@@ -81,6 +84,7 @@ class EnvironmentDetection:
 @dataclass
 class FusedDetection:
     """Cross-validated detection combining audio + vision."""
+
     instrument: InstrumentDetection
     vision: VisionDetection | None
     environment: EnvironmentDetection | None
@@ -101,15 +105,19 @@ _VISUAL_TO_AUDIO_MAP: dict[VisualCategory, list[InstrumentFamily]] = {
     VisualCategory.BASS_ELECTRIC: [InstrumentFamily.BASS_ELECTRIC],
     VisualCategory.BASS_ACOUSTIC: [InstrumentFamily.BASS_ACOUSTIC],
     VisualCategory.DRUM_KIT: [
-        InstrumentFamily.DRUMS_KICK, InstrumentFamily.DRUMS_SNARE,
-        InstrumentFamily.DRUMS_HIHAT, InstrumentFamily.DRUMS_CYMBAL,
+        InstrumentFamily.DRUMS_KICK,
+        InstrumentFamily.DRUMS_SNARE,
+        InstrumentFamily.DRUMS_HIHAT,
+        InstrumentFamily.DRUMS_CYMBAL,
         InstrumentFamily.DRUMS_TOM,
     ],
     VisualCategory.DRUM_SINGLE: [
-        InstrumentFamily.DRUMS_SNARE, InstrumentFamily.DRUMS_TOM,
+        InstrumentFamily.DRUMS_SNARE,
+        InstrumentFamily.DRUMS_TOM,
     ],
     VisualCategory.KEYBOARD: [
-        InstrumentFamily.KEYS_PIANO, InstrumentFamily.KEYS_SYNTH,
+        InstrumentFamily.KEYS_PIANO,
+        InstrumentFamily.KEYS_SYNTH,
         InstrumentFamily.KEYS_ORGAN,
     ],
 }
@@ -145,7 +153,9 @@ class MultimodalFusion:
 
         if not vision_detections:
             return FusedDetection(
-                instrument=audio_det, vision=None, environment=environment,
+                instrument=audio_det,
+                vision=None,
+                environment=environment,
                 fused_confidence=audio_det.confidence,
                 model_identification=f"{audio_det.family.value} (audio-only)",
                 coaching_context=audio_det.coaching_hints,
@@ -176,11 +186,17 @@ class MultimodalFusion:
                     model_id += f" ({audio_det.pickup_type.value})"
 
         mic_vision = next(
-            (v for v in vision_detections if v.category in (
-                VisualCategory.MICROPHONE_DYNAMIC,
-                VisualCategory.MICROPHONE_CONDENSER,
-                VisualCategory.MICROPHONE_RIBBON,
-            )), None,
+            (
+                v
+                for v in vision_detections
+                if v.category
+                in (
+                    VisualCategory.MICROPHONE_DYNAMIC,
+                    VisualCategory.MICROPHONE_CONDENSER,
+                    VisualCategory.MICROPHONE_RIBBON,
+                )
+            ),
+            None,
         )
         mic_type = ""
         if mic_vision:
@@ -207,14 +223,20 @@ class MultimodalFusion:
                     )
 
         return FusedDetection(
-            instrument=audio_det, vision=best_vision, environment=environment,
-            fused_confidence=fused_conf, model_identification=model_id,
-            mic_type=mic_type, speaker_positions=speaker_positions,
+            instrument=audio_det,
+            vision=best_vision,
+            environment=environment,
+            fused_confidence=fused_conf,
+            model_identification=model_id,
+            mic_type=mic_type,
+            speaker_positions=speaker_positions,
             coaching_context=coaching,
         )
 
     def _find_best_vision_match(
-        self, audio_det: InstrumentDetection, vision_detections: list[VisionDetection],
+        self,
+        audio_det: InstrumentDetection,
+        vision_detections: list[VisionDetection],
     ) -> VisionDetection | None:
         best: VisionDetection | None = None
         best_score = -1.0
@@ -231,7 +253,9 @@ class MultimodalFusion:
         return best
 
     def _match_model(
-        self, audio_det: InstrumentDetection, vision: VisionDetection,
+        self,
+        audio_det: InstrumentDetection,
+        vision: VisionDetection,
     ) -> InstrumentModelProfile | None:
         candidates: list[tuple[InstrumentModelProfile, float]] = []
         for model in self._model_db:

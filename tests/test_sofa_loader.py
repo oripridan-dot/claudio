@@ -1,4 +1,5 @@
 """test_sofa_loader.py — Unit tests for the SOFA file loader."""
+
 from __future__ import annotations
 
 import numpy as np

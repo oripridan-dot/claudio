@@ -23,6 +23,7 @@ Modes:
 Usage:
     Terminal.app:  cd ~/claudio && .venv/bin/python -m claudio.realtime_hifi
 """
+
 from __future__ import annotations
 
 import math
@@ -41,10 +42,10 @@ class HiFiProcessor:
 
     def __init__(self, sample_rate: int) -> None:
         self._sr = sample_rate
-        self._mode = "CLEAN"     # CLEAN / ENHANCED / CRYSTAL
-        self._input_gain = 6.0   # Mic boost
+        self._mode = "CLEAN"  # CLEAN / ENHANCED / CRYSTAL
+        self._input_gain = 6.0  # Mic boost
         self._output_gain = 4.0  # Output makeup
-        self._mix = 1.0          # Dry/wet mix (1.0 = full wet)
+        self._mix = 1.0  # Dry/wet mix (1.0 = full wet)
 
         # Stats
         self._render_times: list[float] = []
@@ -108,8 +109,7 @@ class HiFiProcessor:
     def _enhanced(self, signal: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Subtle dynamics + presence. Transparent, clean boost."""
         # Gentle compression (2:1 ratio, -20dB threshold)
-        compressed = self._compress(signal, threshold=0.1, ratio=2.0,
-                                    attack_ms=5.0, release_ms=50.0)
+        compressed = self._compress(signal, threshold=0.1, ratio=2.0, attack_ms=5.0, release_ms=50.0)
         # Presence boost: gentle high-shelf via simple difference
         # Adds clarity without harshness
         boosted = self._presence_boost(compressed, amount=0.3)
@@ -118,8 +118,7 @@ class HiFiProcessor:
     def _crystal(self, signal: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Full hi-fi chain: dynamics + air + stereo width."""
         # Compression for consistent dynamics
-        compressed = self._compress(signal, threshold=0.08, ratio=3.0,
-                                    attack_ms=2.0, release_ms=30.0)
+        compressed = self._compress(signal, threshold=0.08, ratio=3.0, attack_ms=2.0, release_ms=30.0)
         # Presence + air
         bright = self._presence_boost(compressed, amount=0.5)
         # Subtle stereo widening via Haas effect (tiny delay on one channel)
@@ -132,9 +131,12 @@ class HiFiProcessor:
     # ── DSP Primitives ────────────────────────────────────────────────
 
     def _compress(
-        self, signal: np.ndarray,
-        threshold: float, ratio: float,
-        attack_ms: float, release_ms: float,
+        self,
+        signal: np.ndarray,
+        threshold: float,
+        ratio: float,
+        attack_ms: float,
+        release_ms: float,
     ) -> np.ndarray:
         """Simple feed-forward compressor."""
         attack_coeff = math.exp(-1.0 / (attack_ms * self._sr / 1000))
@@ -180,9 +182,9 @@ class HiFiProcessor:
 def main() -> None:
     """CLI entry point — delegates to realtime_hifi_cli.py."""
     from claudio.realtime_hifi_cli import main as _main
+
     _main()
 
 
 if __name__ == "__main__":
     main()
-

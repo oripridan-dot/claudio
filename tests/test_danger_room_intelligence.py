@@ -4,6 +4,7 @@ Danger Room Simulations — Claudio Intelligence Ecosystem
 End-to-end tests for instrument classification, phase detection,
 room scanning, sweet spot engine, knowledge base, and roadmap engine.
 """
+
 import math
 
 import numpy as np
@@ -70,9 +71,7 @@ class TestSpectralExtractor:
         """Pure sine at 1 kHz should have centroid near 1 kHz."""
         buf = self._sine(1000.0)
         fp = self.extractor.extract(buf)
-        assert abs(fp.spectral_centroid_hz - 1000) < 200, (
-            f"centroid {fp.spectral_centroid_hz} too far from 1 kHz"
-        )
+        assert abs(fp.spectral_centroid_hz - 1000) < 200, f"centroid {fp.spectral_centroid_hz} too far from 1 kHz"
 
     def test_spectral_flatness_noise_vs_sine(self):
         """White noise should be flatter than a pure sine."""
@@ -100,7 +99,7 @@ class TestTransientAnalyzer:
     def test_slow_pad(self):
         """Gentle fade-in should have longer attack."""
         t = np.linspace(0, 1, self.sr, dtype=np.float32)
-        buf = (t ** 3) * np.sin(2 * np.pi * 200 * t).astype(np.float32) * 0.5
+        buf = (t**3) * np.sin(2 * np.pi * 200 * t).astype(np.float32) * 0.5
         profile = self.analyzer.analyze(buf)
         assert profile.attack_time_ms > 20.0
 
@@ -148,7 +147,6 @@ class TestInstrumentClassifier:
         assert det.family in InstrumentFamily.__members__.values()
 
 
-
 class TestPhaseCorrelationMeter:
     def setup_method(self):
         self.meter = PhaseCorrelationMeter(sample_rate=44100)
@@ -190,7 +188,6 @@ class TestPhaseCorrelationMeter:
         b[100:] = a[:-100]
         frame = self.meter.analyze(a, b)
         assert abs(abs(frame.time_offset_samples) - 100) < 10, f"offset={frame.time_offset_samples}"
-
 
 
 class TestRoomScanner:
@@ -238,7 +235,6 @@ class TestRoomScanner:
         assert isinstance(result.has_flutter_echo, bool)
 
 
-
 class TestSweetSpotEngine:
     def setup_method(self):
         self.engine = SweetSpotEngine(sample_rate=44100)
@@ -275,7 +271,6 @@ class TestSweetSpotEngine:
         frame = self.engine.compute(pos)
         assert frame.coaching_message != ""
         assert frame.zone_quality < 0.8
-
 
 
 class TestMentorKnowledgeBase:
@@ -318,7 +313,6 @@ class TestMentorKnowledgeBase:
 
     def test_knowledge_base_has_minimum_tips(self):
         assert len(self.kb.all_tips) >= 10, "KB should have at least 10 tips"
-
 
 
 class TestRoadmapEngine:
@@ -365,7 +359,6 @@ class TestRoadmapEngine:
             ProductionPhase.MASTERING,
             ProductionPhase.MIXING,  # some phases might not auto-advance
         )
-
 
 
 class TestMultimodalFusion:

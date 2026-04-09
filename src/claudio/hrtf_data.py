@@ -8,14 +8,15 @@ for arbitrary azimuth/elevation angles with configurable resolution.
 This module is imported by hrtf_engine.py and handles all HRTF data
 concerns independently of the rendering engine.
 """
+
 from __future__ import annotations
 
 import math
 
 import numpy as np
 
-SAMPLE_RATE    = 192_000
-HRIR_LEN       = 256
+SAMPLE_RATE = 192_000
+HRIR_LEN = 256
 SPEED_OF_SOUND = 343.0
 
 _HRTF_CACHE: dict[tuple[int, int], tuple[np.ndarray, np.ndarray]] = {}
@@ -23,15 +24,17 @@ _HRTF_CACHE: dict[tuple[int, int], tuple[np.ndarray, np.ndarray]] = {}
 
 # ─── Quaternion Utilities ────────────────────────────────────────────────────
 
+
 def azimuth_elevation_from_position(
-    pos: np.ndarray, head_quat: tuple[float, float, float, float],
+    pos: np.ndarray,
+    head_quat: tuple[float, float, float, float],
 ) -> tuple[float, float]:
     """Convert a 3D source position to azimuth/elevation relative to head."""
     rotated = _quat_rotate_vector(pos, _quat_conjugate(head_quat))
     x, y, z = rotated
     dist = math.sqrt(x**2 + y**2 + z**2) + 1e-8
     # -Z is the listener's forward direction in Claudio's coordinate system
-    azimuth   = math.degrees(math.atan2(x, -z))
+    azimuth = math.degrees(math.atan2(x, -z))
     elevation = math.degrees(math.asin(y / dist))
     return azimuth, elevation
 
@@ -44,21 +47,26 @@ def _quat_conjugate(
 
 
 def _quat_rotate_vector(
-    v: np.ndarray, q: tuple[float, float, float, float],
+    v: np.ndarray,
+    q: tuple[float, float, float, float],
 ) -> np.ndarray:
     w, qx, qy, qz = q
     vx, vy, vz = v[0], v[1], v[2]
     t_x = 2 * (qy * vz - qz * vy)
     t_y = 2 * (qz * vx - qx * vz)
     t_z = 2 * (qx * vy - qy * vx)
-    return np.array([
-        vx + w * t_x + qy * t_z - qz * t_y,
-        vy + w * t_y + qz * t_x - qx * t_z,
-        vz + w * t_z + qx * t_y - qy * t_x,
-    ], dtype=np.float64)
+    return np.array(
+        [
+            vx + w * t_x + qy * t_z - qz * t_y,
+            vy + w * t_y + qz * t_x - qx * t_z,
+            vz + w * t_z + qx * t_y - qy * t_x,
+        ],
+        dtype=np.float64,
+    )
 
 
 # ─── HRIR Synthesis ──────────────────────────────────────────────────────────
+
 
 def get_hrir(
     azimuth_deg: float,
@@ -139,8 +147,8 @@ def get_hrir(
         notch_depth = min(0.8, abs_el / 90.0)
         notch_idx = int(hrir_len * max(0.1, 1.0 - abs_el / 90.0) * 0.4)
         notch_idx = max(2, min(notch_idx, hrir_len - 1))
-        hrir_l[notch_idx] *= (1.0 - notch_depth)
-        hrir_r[notch_idx] *= (1.0 - notch_depth)
+        hrir_l[notch_idx] *= 1.0 - notch_depth
+        hrir_r[notch_idx] *= 1.0 - notch_depth
         comb_delay = int(max(3, 12 - abs_el * 0.1))
         if comb_delay < hrir_len:
             hrir_l[comb_delay] += 0.1 * math.sin(math.radians(abs_el))
@@ -155,8 +163,11 @@ def get_hrir(
 
 
 def interpolate_hrir_bilinear(
-    azimuth_deg: float, elevation_deg: float,
-    hrir_len: int, sample_rate: int, grid_res: float,
+    azimuth_deg: float,
+    elevation_deg: float,
+    hrir_len: int,
+    sample_rate: int,
+    grid_res: float,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Bilinear spherical interpolation between 4 adjacent grid points."""
     az_lo = math.floor(azimuth_deg / grid_res) * grid_res

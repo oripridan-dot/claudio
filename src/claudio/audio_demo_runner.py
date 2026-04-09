@@ -10,6 +10,7 @@ Produces a complete before/after audio comparison:
 Usage:
     cd claudio && .venv/bin/python -m claudio.audio_demo_runner
 """
+
 from __future__ import annotations
 
 import math
@@ -33,13 +34,13 @@ from claudio.signal_flow_config import SignalFlowConfig
 
 # Spatial positions (x=right, y=up, z=behind)
 POSITIONS = {
-    "center":     np.array([0.0, 0.0, -2.0]),    # directly in front
-    "left_45":    np.array([-1.4, 0.0, -1.4]),   # 45° left
-    "right_45":   np.array([1.4, 0.0, -1.4]),    # 45° right
-    "hard_left":  np.array([-2.0, 0.0, 0.0]),    # 90° left
-    "hard_right": np.array([2.0, 0.0, 0.0]),     # 90° right
-    "behind":     np.array([0.0, 0.0, 2.0]),      # directly behind
-    "above":      np.array([0.0, 2.0, -1.0]),     # elevated
+    "center": np.array([0.0, 0.0, -2.0]),  # directly in front
+    "left_45": np.array([-1.4, 0.0, -1.4]),  # 45° left
+    "right_45": np.array([1.4, 0.0, -1.4]),  # 45° right
+    "hard_left": np.array([-2.0, 0.0, 0.0]),  # 90° left
+    "hard_right": np.array([2.0, 0.0, 0.0]),  # 90° right
+    "behind": np.array([0.0, 0.0, 2.0]),  # directly behind
+    "above": np.array([0.0, 2.0, -1.0]),  # elevated
 }
 
 
@@ -77,17 +78,19 @@ def generate_full_mix() -> str:
     """Generate a full-band mix with instruments spatially arranged."""
     sr = DEMO_SAMPLE_RATE
     cfg = SignalFlowConfig(
-        capture_sample_rate=sr, render_sample_rate=sr,
-        fft_size=512, hrir_length=256,
+        capture_sample_rate=sr,
+        render_sample_rate=sr,
+        fft_size=512,
+        hrir_length=256,
     )
     engine = HRTFBinauralEngine(config=cfg)
 
     # Arrange instruments in a realistic stage layout
     instruments = {
-        "guitar":  {"audio": _guitar_phrase(sr), "pos": np.array([-1.5, 0.0, -2.0])},
-        "bass":    {"audio": _bass_line(sr),     "pos": np.array([1.5, 0.0, -2.0])},
-        "piano":   {"audio": _piano_chord_progression(sr), "pos": np.array([0.0, 0.3, -3.0])},
-        "drums":   {"audio": synthesise_drum_pattern(4.0, bpm=120.0, sr=sr), "pos": np.array([0.0, 0.5, -4.0])},
+        "guitar": {"audio": _guitar_phrase(sr), "pos": np.array([-1.5, 0.0, -2.0])},
+        "bass": {"audio": _bass_line(sr), "pos": np.array([1.5, 0.0, -2.0])},
+        "piano": {"audio": _piano_chord_progression(sr), "pos": np.array([0.0, 0.3, -3.0])},
+        "drums": {"audio": synthesise_drum_pattern(4.0, bpm=120.0, sr=sr), "pos": np.array([0.0, 0.5, -4.0])},
     }
 
     # Find the longest audio
@@ -100,7 +103,7 @@ def generate_full_mix() -> str:
         engine.add_source(src)
         # Pad audio to max_len
         padded = np.zeros(max_len, dtype=np.float32)
-        padded[:len(data["audio"])] = data["audio"]
+        padded[: len(data["audio"])] = data["audio"]
         data["padded"] = padded
 
     n_blocks = max_len // block
@@ -109,7 +112,7 @@ def generate_full_mix() -> str:
     for b in range(n_blocks):
         buffers = {}
         for name, data in instruments.items():
-            buffers[name] = data["padded"][b * block:(b + 1) * block]
+            buffers[name] = data["padded"][b * block : (b + 1) * block]
         frame = engine.render(buffers)
         out_l_parts.append(frame.left)
         out_r_parts.append(frame.right)
@@ -128,7 +131,7 @@ def generate_full_mix() -> str:
     # Also create a dry mono downmix for comparison
     dry_mix = np.zeros(max_len, dtype=np.float32)
     for data in instruments.values():
-        dry_mix[:len(data["audio"])] += data["audio"] * 0.25
+        dry_mix[: len(data["audio"])] += data["audio"] * 0.25
     dry_path = os.path.join(DEMO_DIR, "full_mix_dry.wav")
     write_wav_mono(dry_path, dry_mix, sr)
 
@@ -141,8 +144,10 @@ def generate_head_rotation_demo() -> str:
     """Guitar playing while head slowly rotates 360° — dramatic spatial demo."""
     sr = DEMO_SAMPLE_RATE
     cfg = SignalFlowConfig(
-        capture_sample_rate=sr, render_sample_rate=sr,
-        fft_size=512, hrir_length=256,
+        capture_sample_rate=sr,
+        render_sample_rate=sr,
+        fft_size=512,
+        hrir_length=256,
     )
     engine = HRTFBinauralEngine(config=cfg)
     audio = _guitar_phrase(sr)
@@ -159,7 +164,7 @@ def generate_head_rotation_demo() -> str:
         quat = (math.cos(angle / 2), 0.0, math.sin(angle / 2), 0.0)
         engine.update_head_pose(quat)
 
-        chunk = audio[b * block:(b + 1) * block]
+        chunk = audio[b * block : (b + 1) * block]
         frame = engine.render({"guitar_rot": chunk})
         out_l_parts.append(frame.left)
         out_r_parts.append(frame.right)
@@ -184,7 +189,7 @@ def generate_html_player(demos: list[dict]) -> str:
         wet_file = os.path.basename(d["wet"])
         cards_html += f"""
         <div class="card">
-          <h3>{d['instrument'].title()} — {d['position'].replace('_', ' ').title()}</h3>
+          <h3>{d["instrument"].title()} — {d["position"].replace("_", " ").title()}</h3>
           <div class="ab-row">
             <div class="ab-col">
               <span class="label dry">DRY (Original)</span>
@@ -198,6 +203,7 @@ def generate_html_player(demos: list[dict]) -> str:
         </div>"""
 
     from claudio.demo_player_template import player_html
+
     html = player_html(cards_html)
 
     html_path = os.path.join(DEMO_DIR, "index.html")

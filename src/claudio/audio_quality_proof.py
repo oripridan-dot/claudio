@@ -8,6 +8,7 @@ and quality_tests_dynamic.py. Shared config is in quality_config.py.
 Usage:
     cd claudio && .venv/bin/python -m claudio.audio_quality_proof
 """
+
 from __future__ import annotations
 
 import os
@@ -31,6 +32,7 @@ from claudio.quality_tests_spectral import (
 # ═══════════════════════════════════════════════════════════════════════════════
 # SUMMARY DASHBOARD
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def generate_summary(all_results: dict) -> None:
     """Generate a summary dashboard plot."""
@@ -88,26 +90,37 @@ def generate_summary(all_results: dict) -> None:
     if fr:
         fr_modes = list(fr.keys())
         fr_vals = [fr[m] for m in fr_modes]
-        bars = ax.bar(fr_modes, fr_vals,
-                      color=[COLORS["green"], COLORS["cyan"], COLORS["purple"]], alpha=0.9)
+        bars = ax.bar(fr_modes, fr_vals, color=[COLORS["green"], COLORS["cyan"], COLORS["purple"]], alpha=0.9)
         ax.set_ylabel("Deviation (dB)")
         ax.set_title("Freq Response Flatness (lower = better)", fontweight="bold")
         for bar_item, val in zip(bars, fr_vals, strict=True):
-            ax.text(bar_item.get_x() + bar_item.get_width() / 2, val + 0.1,
-                    f"±{val/2:.1f}", ha="center", fontsize=9, color=COLORS["text"])
+            ax.text(
+                bar_item.get_x() + bar_item.get_width() / 2,
+                val + 0.1,
+                f"±{val / 2:.1f}",
+                ha="center",
+                fontsize=9,
+                color=COLORS["text"],
+            )
 
     # 5. Headroom gauge
     ax = axes[1, 1]
     if lat:
-        bars = ax.barh(lat_modes, headrooms,
-                       color=[COLORS["green"], COLORS["cyan"], COLORS["purple"]], alpha=0.9)
+        bars = ax.barh(lat_modes, headrooms, color=[COLORS["green"], COLORS["cyan"], COLORS["purple"]], alpha=0.9)
         ax.set_xlim(0, 100)
         ax.set_xlabel("CPU Headroom (%)")
         ax.set_title("Real-Time Headroom (higher = better)", fontweight="bold")
         for bar_item, val in zip(bars, headrooms, strict=True):
-            ax.text(val - 2, bar_item.get_y() + bar_item.get_height() / 2,
-                    f"{val:.1f}%", ha="right", va="center", fontsize=10,
-                    color=COLORS["bg"], fontweight="bold")
+            ax.text(
+                val - 2,
+                bar_item.get_y() + bar_item.get_height() / 2,
+                f"{val:.1f}%",
+                ha="right",
+                va="center",
+                fontsize=10,
+                color=COLORS["bg"],
+                fontweight="bold",
+            )
 
     # 6. Scorecard
     ax = axes[1, 2]
@@ -115,22 +128,32 @@ def generate_summary(all_results: dict) -> None:
     scorecard = [
         ("THD+N (CLEAN)", f"{avgs[0]:.4f}%" if thdn else "—", "< 1%"),
         ("Dynamic Range", f"{dr_vals[0]:.0f}dB" if dr else "—", "> 90dB"),
-        ("Freq Flatness", f"±{fr_vals[0]/2:.1f}dB" if fr else "—", "±3dB"),
+        ("Freq Flatness", f"±{fr_vals[0] / 2:.1f}dB" if fr else "—", "±3dB"),
         ("Latency (CLEAN)", f"{lat_means[0]:.0f}µs" if lat else "—", "< 1000µs"),
         ("Headroom", f"{headrooms[0]:.1f}%" if lat else "—", "> 90%"),
         ("Overruns", "0", "0"),
     ]
     y = 0.9
-    ax.text(0.5, 1.0, "QUALITY SCORECARD", transform=ax.transAxes,
-            fontsize=14, fontweight="bold", ha="center", va="top", color=COLORS["text"])
+    ax.text(
+        0.5,
+        1.0,
+        "QUALITY SCORECARD",
+        transform=ax.transAxes,
+        fontsize=14,
+        fontweight="bold",
+        ha="center",
+        va="top",
+        color=COLORS["text"],
+    )
     for metric, value, target in scorecard:
         ax.text(0.05, y, metric, transform=ax.transAxes, fontsize=10, color=COLORS["muted"])
         ax.text(0.55, y, value, transform=ax.transAxes, fontsize=10, color=COLORS["green"], fontweight="bold")
         ax.text(0.8, y, f"target: {target}", transform=ax.transAxes, fontsize=8, color=COLORS["muted"])
         y -= 0.12
 
-    fig.suptitle("CLAUDIO — Audio Quality Proof Dashboard",
-                 fontsize=18, fontweight="bold", y=1.03, color=COLORS["text"])
+    fig.suptitle(
+        "CLAUDIO — Audio Quality Proof Dashboard", fontsize=18, fontweight="bold", y=1.03, color=COLORS["text"]
+    )
     fig.tight_layout()
     save_plot(fig, "00_summary_dashboard")
 
@@ -138,6 +161,7 @@ def generate_summary(all_results: dict) -> None:
 # ═══════════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def main() -> None:
     os.makedirs(OUTPUT_DIR, exist_ok=True)

@@ -8,6 +8,7 @@ Tests added in Round 3 audit to close coverage gaps:
   - Reset behavior: encoder/decoder state cleanup
   - Decoder edge cases: extreme F0, empty lists, fallback paths
 """
+
 from __future__ import annotations
 
 import math
@@ -31,6 +32,7 @@ def _sine(freq: float, dur: float, amp: float = 0.5) -> np.ndarray:
 # ═══════════════════════════════════════════════════════════════════════
 # Test: Input Sanitization (NaN/Inf safety)
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class TestInputSanitization:
     """Verify encoder handles corrupt input without propagating NaN/Inf."""
@@ -60,6 +62,7 @@ class TestInputSanitization:
 # Test: Protocol Robustness (malformed packets)
 # ═══════════════════════════════════════════════════════════════════════
 
+
 class TestProtocolRobustness:
     """Verify protocol handles edge cases without crashing."""
 
@@ -73,13 +76,19 @@ class TestProtocolRobustness:
     def test_empty_mfcc_roundtrip(self) -> None:
         """Frame with empty MFCCs should survive serialization."""
         frame = IntentFrame(
-            timestamp_ms=0, f0_hz=440, f0_confidence=0.9,
-            loudness_db=-12, loudness_norm=0.85,
-            spectral_centroid_hz=2500, mfcc=[],
+            timestamp_ms=0,
+            f0_hz=440,
+            f0_confidence=0.9,
+            loudness_db=-12,
+            loudness_norm=0.85,
+            spectral_centroid_hz=2500,
+            mfcc=[],
         )
         pkt = IntentPacket(
-            sequence=1, timestamp_ms=0,
-            flags=PacketFlags.FULL_FRAME, frame=frame,
+            sequence=1,
+            timestamp_ms=0,
+            flags=PacketFlags.FULL_FRAME,
+            frame=frame,
         )
         data = pkt.to_bytes()
         restored = IntentPacket.from_bytes(data)
@@ -89,15 +98,24 @@ class TestProtocolRobustness:
     def test_delta_packet_smaller_than_full(self) -> None:
         """Delta packets (no MFCCs) must be smaller than full frames."""
         full_frame = IntentFrame(
-            timestamp_ms=0, f0_hz=440, f0_confidence=0.9,
-            loudness_db=-12, loudness_norm=0.85,
-            spectral_centroid_hz=2500, mfcc=[1.0] * 13,
-            vibrato_rate_hz=5.5, vibrato_depth_cents=30,
+            timestamp_ms=0,
+            f0_hz=440,
+            f0_confidence=0.9,
+            loudness_db=-12,
+            loudness_norm=0.85,
+            spectral_centroid_hz=2500,
+            mfcc=[1.0] * 13,
+            vibrato_rate_hz=5.5,
+            vibrato_depth_cents=30,
         )
         delta_frame = IntentFrame(
-            timestamp_ms=0, f0_hz=440, f0_confidence=0.9,
-            loudness_db=-12, loudness_norm=0.85,
-            spectral_centroid_hz=2500, mfcc=[],
+            timestamp_ms=0,
+            f0_hz=440,
+            f0_confidence=0.9,
+            loudness_db=-12,
+            loudness_norm=0.85,
+            spectral_centroid_hz=2500,
+            mfcc=[],
         )
         full_pkt = IntentPacket(1, 0, PacketFlags.FULL_FRAME, full_frame)
         delta_pkt = IntentPacket(2, 0, PacketFlags.DELTA, delta_frame)
@@ -105,14 +123,13 @@ class TestProtocolRobustness:
         full_bytes = len(full_pkt.to_bytes())
         delta_bytes = len(delta_pkt.to_bytes())
 
-        assert delta_bytes < full_bytes, (
-            f"Delta ({delta_bytes}B) not smaller than full ({full_bytes}B)"
-        )
+        assert delta_bytes < full_bytes, f"Delta ({delta_bytes}B) not smaller than full ({full_bytes}B)"
 
 
 # ═══════════════════════════════════════════════════════════════════════
 # Test: Phase Continuity (click prevention)
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class TestPhaseContinuity:
     """Verify decoder produces smooth audio across frame boundaries."""
@@ -122,9 +139,13 @@ class TestPhaseContinuity:
         decoder = IntentDecoder(sample_rate=SAMPLE_RATE)
         frames = [
             IntentFrame(
-                timestamp_ms=i * 4, f0_hz=440, f0_confidence=0.95,
-                loudness_db=-12, loudness_norm=0.85,
-                spectral_centroid_hz=2500, mfcc=[1.0] * 13,
+                timestamp_ms=i * 4,
+                f0_hz=440,
+                f0_confidence=0.95,
+                loudness_db=-12,
+                loudness_norm=0.85,
+                spectral_centroid_hz=2500,
+                mfcc=[1.0] * 13,
             )
             for i in range(50)
         ]
@@ -147,15 +168,27 @@ class TestPhaseContinuity:
         """Transition from silence → voiced should not produce a pop."""
         decoder = IntentDecoder(sample_rate=SAMPLE_RATE)
         silent = [
-            IntentFrame(timestamp_ms=i * 4, f0_hz=0, f0_confidence=0,
-                        loudness_db=-80, loudness_norm=0.0,
-                        spectral_centroid_hz=0, mfcc=[])
+            IntentFrame(
+                timestamp_ms=i * 4,
+                f0_hz=0,
+                f0_confidence=0,
+                loudness_db=-80,
+                loudness_norm=0.0,
+                spectral_centroid_hz=0,
+                mfcc=[],
+            )
             for i in range(20)
         ]
         voiced = [
-            IntentFrame(timestamp_ms=(20 + i) * 4, f0_hz=440, f0_confidence=0.9,
-                        loudness_db=-20, loudness_norm=0.5,
-                        spectral_centroid_hz=2500, mfcc=[1.0] * 13)
+            IntentFrame(
+                timestamp_ms=(20 + i) * 4,
+                f0_hz=440,
+                f0_confidence=0.9,
+                loudness_db=-20,
+                loudness_norm=0.5,
+                spectral_centroid_hz=2500,
+                mfcc=[1.0] * 13,
+            )
             for i in range(20)
         ]
         audio = decoder.decode_frames(silent + voiced)
@@ -164,14 +197,13 @@ class TestPhaseContinuity:
         transition_idx = 20 * hop
         if transition_idx < len(audio):
             first_voiced = abs(float(audio[transition_idx]))
-            assert first_voiced < 0.2, (
-                f"Pop on silence→voiced transition: {first_voiced:.4f}"
-            )
+            assert first_voiced < 0.2, f"Pop on silence→voiced transition: {first_voiced:.4f}"
 
 
 # ═══════════════════════════════════════════════════════════════════════
 # Test: Delta Compression
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class TestDeltaCompression:
     """Verify delta compression reduces bandwidth on sustained signals."""
@@ -181,9 +213,13 @@ class TestDeltaCompression:
         stream = IntentStream()
         frames = [
             IntentFrame(
-                timestamp_ms=i * 4, f0_hz=440.0, f0_confidence=0.95,
-                loudness_db=-12, loudness_norm=0.85,
-                spectral_centroid_hz=2500, mfcc=[1.0] * 13,
+                timestamp_ms=i * 4,
+                f0_hz=440.0,
+                f0_confidence=0.95,
+                loudness_db=-12,
+                loudness_norm=0.85,
+                spectral_centroid_hz=2500,
+                mfcc=[1.0] * 13,
             )
             for i in range(100)
         ]
@@ -197,25 +233,32 @@ class TestDeltaCompression:
             elif pkt.flags & PacketFlags.FULL_FRAME:
                 full_count += 1
 
-        assert delta_count > 50, (
-            f"Expected >50 delta packets, got {delta_count}/{len(frames)}"
-        )
+        assert delta_count > 50, f"Expected >50 delta packets, got {delta_count}/{len(frames)}"
 
     def test_onset_forces_full_frame(self) -> None:
         """Onset detection should prevent delta compression."""
         stream = IntentStream()
         f1 = IntentFrame(
-            timestamp_ms=0, f0_hz=440, f0_confidence=0.95,
-            loudness_db=-12, loudness_norm=0.85,
-            spectral_centroid_hz=2500, mfcc=[1.0] * 13,
+            timestamp_ms=0,
+            f0_hz=440,
+            f0_confidence=0.95,
+            loudness_db=-12,
+            loudness_norm=0.85,
+            spectral_centroid_hz=2500,
+            mfcc=[1.0] * 13,
         )
         stream.pack(f1)
 
         f2 = IntentFrame(
-            timestamp_ms=4, f0_hz=440, f0_confidence=0.95,
-            loudness_db=-12, loudness_norm=0.85,
-            spectral_centroid_hz=2500, mfcc=[1.0] * 13,
-            is_onset=True, onset_strength=0.5,
+            timestamp_ms=4,
+            f0_hz=440,
+            f0_confidence=0.95,
+            loudness_db=-12,
+            loudness_norm=0.85,
+            spectral_centroid_hz=2500,
+            mfcc=[1.0] * 13,
+            is_onset=True,
+            onset_strength=0.5,
         )
         pkt = stream.pack(f2)
         assert pkt.flags & PacketFlags.FULL_FRAME, "Onset should force FULL_FRAME"
@@ -235,21 +278,21 @@ class TestDeltaCompression:
             pkt = stream.pack(f)
             total_delta += len(pkt.to_bytes())
             full_pkt = IntentPacket(
-                pkt.sequence, pkt.timestamp_ms,
-                PacketFlags.FULL_FRAME, f,
+                pkt.sequence,
+                pkt.timestamp_ms,
+                PacketFlags.FULL_FRAME,
+                f,
             )
             total_no_delta += len(full_pkt.to_bytes())
 
         savings = 1.0 - (total_delta / total_no_delta)
-        assert savings > 0.2, (
-            f"Delta savings too low: {savings:.1%} "
-            f"({total_delta}B vs {total_no_delta}B)"
-        )
+        assert savings > 0.2, f"Delta savings too low: {savings:.1%} ({total_delta}B vs {total_no_delta}B)"
 
 
 # ═══════════════════════════════════════════════════════════════════════
 # Test: Encoder/Decoder Reset
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class TestResetBehavior:
     """Verify reset clears all stateful fields."""
@@ -275,9 +318,15 @@ class TestResetBehavior:
         """Decoder reset must clear phases, noise state, and prev frame."""
         decoder = IntentDecoder(sample_rate=SAMPLE_RATE)
         frames = [
-            IntentFrame(timestamp_ms=i * 4, f0_hz=440, f0_confidence=0.9,
-                        loudness_db=-12, loudness_norm=0.85,
-                        spectral_centroid_hz=2500, mfcc=[1.0] * 13)
+            IntentFrame(
+                timestamp_ms=i * 4,
+                f0_hz=440,
+                f0_confidence=0.9,
+                loudness_db=-12,
+                loudness_norm=0.85,
+                spectral_centroid_hz=2500,
+                mfcc=[1.0] * 13,
+            )
             for i in range(10)
         ]
         decoder.decode_frames(frames)
@@ -292,6 +341,7 @@ class TestResetBehavior:
 # Test: Decoder Edge Cases
 # ═══════════════════════════════════════════════════════════════════════
 
+
 class TestDecoderEdgeCases:
     """Verify decoder handles unusual input gracefully."""
 
@@ -299,9 +349,13 @@ class TestDecoderEdgeCases:
         """F0 above Nyquist should not produce aliased harmonics."""
         decoder = IntentDecoder(sample_rate=SAMPLE_RATE)
         frame = IntentFrame(
-            timestamp_ms=0, f0_hz=20000, f0_confidence=0.9,
-            loudness_db=-12, loudness_norm=0.85,
-            spectral_centroid_hz=2500, mfcc=[1.0] * 13,
+            timestamp_ms=0,
+            f0_hz=20000,
+            f0_confidence=0.9,
+            loudness_db=-12,
+            loudness_norm=0.85,
+            spectral_centroid_hz=2500,
+            mfcc=[1.0] * 13,
         )
         audio = decoder._decode_single_frame(frame)
         assert len(audio) == SAMPLE_RATE // 250
@@ -317,9 +371,13 @@ class TestDecoderEdgeCases:
         """Single MFCC value should trigger 1/h fallback safely."""
         decoder = IntentDecoder(sample_rate=SAMPLE_RATE)
         frame = IntentFrame(
-            timestamp_ms=0, f0_hz=440, f0_confidence=0.9,
-            loudness_db=-12, loudness_norm=0.85,
-            spectral_centroid_hz=2500, mfcc=[5.0],
+            timestamp_ms=0,
+            f0_hz=440,
+            f0_confidence=0.9,
+            loudness_db=-12,
+            loudness_norm=0.85,
+            spectral_centroid_hz=2500,
+            mfcc=[5.0],
         )
         audio = decoder._decode_single_frame(frame)
         assert len(audio) == SAMPLE_RATE // 250

@@ -12,6 +12,7 @@ Usage:
     # Records 5 seconds from your mic by default
     # Or: .venv/bin/python -m claudio.realtime_capture --duration 10
 """
+
 from __future__ import annotations
 
 import os
@@ -27,15 +28,15 @@ SAMPLE_RATE = 48000
 OUTPUT_DIR = "demo_output/mic_captures"
 
 POSITIONS = {
-    "center":     np.array([0.0, 0.0, -2.0]),
-    "left_30":    np.array([-1.0, 0.0, -1.73]),
-    "left_45":    np.array([-1.4, 0.0, -1.4]),
-    "left_90":    np.array([-2.0, 0.0, 0.0]),
-    "right_30":   np.array([1.0, 0.0, -1.73]),
-    "right_45":   np.array([1.4, 0.0, -1.4]),
-    "right_90":   np.array([2.0, 0.0, 0.0]),
-    "behind":     np.array([0.0, 0.0, 2.0]),
-    "above":      np.array([0.0, 2.0, -1.0]),
+    "center": np.array([0.0, 0.0, -2.0]),
+    "left_30": np.array([-1.0, 0.0, -1.73]),
+    "left_45": np.array([-1.4, 0.0, -1.4]),
+    "left_90": np.array([-2.0, 0.0, 0.0]),
+    "right_30": np.array([1.0, 0.0, -1.73]),
+    "right_45": np.array([1.4, 0.0, -1.4]),
+    "right_90": np.array([2.0, 0.0, 0.0]),
+    "behind": np.array([0.0, 0.0, 2.0]),
+    "above": np.array([0.0, 2.0, -1.0]),
 }
 
 
@@ -62,8 +63,8 @@ def record_from_mic(duration_s: float = 5.0) -> np.ndarray:
 
     mono = audio[:, 0]
     peak = float(np.max(np.abs(mono)))
-    rms = float(np.sqrt(np.mean(mono ** 2)))
-    print(f"  Peak level: {peak:.4f}  RMS: {rms:.4f} ({20*np.log10(rms+1e-10):.1f} dB)")
+    rms = float(np.sqrt(np.mean(mono**2)))
+    print(f"  Peak level: {peak:.4f}  RMS: {rms:.4f} ({20 * np.log10(rms + 1e-10):.1f} dB)")
 
     if peak < 0.01:
         print("  ⚠️  Very low signal — make sure your mic is working!")
@@ -86,11 +87,13 @@ def process_all_positions(mono: np.ndarray, tag: str = "mic") -> list[dict]:
         wet_path = os.path.join(OUTPUT_DIR, f"{tag}_{pos_name}_binaural.wav")
         write_wav_stereo(wet_path, out_l, out_r, SAMPLE_RATE)
         print(f"  ✓ {wet_path}")
-        results.append({
-            "position": pos_name,
-            "dry_path": dry_path,
-            "wet_path": wet_path,
-        })
+        results.append(
+            {
+                "position": pos_name,
+                "dry_path": dry_path,
+                "wet_path": wet_path,
+            }
+        )
 
     return results
 

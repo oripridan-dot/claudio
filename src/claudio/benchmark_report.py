@@ -5,6 +5,7 @@ Extracted from realtime_benchmark.py for 300-line compliance.
 Handles the final scorecard display. The test functions remain in
 realtime_benchmark.py.
 """
+
 from __future__ import annotations
 
 
@@ -32,7 +33,9 @@ def print_scorecard(r1: list[dict], r2: list[dict], r3: dict, r4: dict, r5: dict
         if r["passed"]:
             max_rt_sources = r["sources"]
     label_t2 = "T2 Multi-Source Ceiling"
-    print(f"  {'✅ PASS' if max_rt_sources >= 16 else '❌ FAIL'}  {label_t2:45s}  {max_rt_sources} sources in real-time")
+    print(
+        f"  {'✅ PASS' if max_rt_sources >= 16 else '❌ FAIL'}  {label_t2:45s}  {max_rt_sources} sources in real-time"
+    )
     all_results.append(max_rt_sources >= 16)
 
     # Test 3

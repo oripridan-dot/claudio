@@ -4,6 +4,7 @@ test_gesture_classifier.py — Unit tests for GestureClassifier
 These tests run without a camera by feeding synthetic LandmarkFrame sequences
 directly to the classifier.
 """
+
 from __future__ import annotations
 
 import time
@@ -95,6 +96,7 @@ def test_open_palm_static():
 
 def test_head_tracker_identity_on_none():
     from claudio.vision.head_tracker import SpatialHeadTracker
+
     tracker = SpatialHeadTracker()
     # None input must not crash and must return identity quaternion
     result = tracker.update(None)

@@ -19,6 +19,7 @@ Usage:
     python -m claudio.audio_demo
     # Outputs WAV files to demo_output/
 """
+
 from __future__ import annotations
 
 import math
@@ -35,10 +36,14 @@ DEMO_DIR = "demo_output"
 
 # ─── Instrument Synthesis ────────────────────────────────────────────────────
 
+
 def _adsr_envelope(
-    n_samples: int, sr: int,
-    attack_s: float = 0.01, decay_s: float = 0.1,
-    sustain_level: float = 0.7, release_s: float = 0.3,
+    n_samples: int,
+    sr: int,
+    attack_s: float = 0.01,
+    decay_s: float = 0.1,
+    sustain_level: float = 0.7,
+    release_s: float = 0.3,
 ) -> np.ndarray:
     """ADSR envelope generator."""
     a = min(int(attack_s * sr), n_samples)
@@ -50,16 +55,18 @@ def _adsr_envelope(
     if a > 0:
         env[:a] = np.linspace(0, 1, a)
     if d > 0:
-        env[a:a + d] = np.linspace(1, sustain_level, d)
+        env[a : a + d] = np.linspace(1, sustain_level, d)
     if s > 0:
-        env[a + d:a + d + s] = sustain_level
+        env[a + d : a + d + s] = sustain_level
     if r > 0:
-        env[a + d + s:a + d + s + r] = np.linspace(sustain_level, 0, r)
+        env[a + d + s : a + d + s + r] = np.linspace(sustain_level, 0, r)
     return env
 
 
 def synthesise_guitar_note(
-    freq: float, duration_s: float, sr: int = DEMO_SAMPLE_RATE,
+    freq: float,
+    duration_s: float,
+    sr: int = DEMO_SAMPLE_RATE,
 ) -> np.ndarray:
     """Acoustic guitar — Karplus-Strong-inspired with harmonic series."""
     n = int(sr * duration_s)
@@ -81,7 +88,9 @@ def synthesise_guitar_note(
 
 
 def synthesise_bass_note(
-    freq: float, duration_s: float, sr: int = DEMO_SAMPLE_RATE,
+    freq: float,
+    duration_s: float,
+    sr: int = DEMO_SAMPLE_RATE,
 ) -> np.ndarray:
     """Electric bass — strong fundamental, warm upper harmonics."""
     n = int(sr * duration_s)
@@ -98,7 +107,9 @@ def synthesise_bass_note(
 
 
 def synthesise_piano_note(
-    freq: float, duration_s: float, sr: int = DEMO_SAMPLE_RATE,
+    freq: float,
+    duration_s: float,
+    sr: int = DEMO_SAMPLE_RATE,
 ) -> np.ndarray:
     """Grand piano — bright attack with sustained ringing harmonics."""
     n = int(sr * duration_s)
@@ -116,7 +127,9 @@ def synthesise_piano_note(
 
 
 def synthesise_drum_pattern(
-    duration_s: float, bpm: float = 120.0, sr: int = DEMO_SAMPLE_RATE,
+    duration_s: float,
+    bpm: float = 120.0,
+    sr: int = DEMO_SAMPLE_RATE,
 ) -> np.ndarray:
     """Drum pattern — kick, snare, hi-hat."""
     n = int(sr * duration_s)
@@ -134,7 +147,7 @@ def synthesise_drum_pattern(
             t = np.arange(kick_len, dtype=np.float64) / sr
             kick_freq = 60 * np.exp(-15 * t)  # pitch sweep down
             kick = 0.8 * np.sin(2 * np.pi * np.cumsum(kick_freq) / sr) * np.exp(-12 * t)
-            signal[offset:offset + kick_len] += kick
+            signal[offset : offset + kick_len] += kick
 
         # Snare on beats 2 and 4
         if beat % 4 in (1, 3):
@@ -143,7 +156,7 @@ def synthesise_drum_pattern(
             rng = np.random.default_rng(seed=beat)
             noise = rng.standard_normal(snare_len) * 0.3 * np.exp(-15 * t)
             tone = 0.4 * np.sin(2 * np.pi * 200 * t) * np.exp(-20 * t)
-            signal[offset:offset + snare_len] += noise + tone
+            signal[offset : offset + snare_len] += noise + tone
 
         # Hi-hat on every 8th note
         hh_offset = offset + (beat_samples // 2 if beat % 2 == 1 else 0)
@@ -153,18 +166,25 @@ def synthesise_drum_pattern(
             rng = np.random.default_rng(seed=beat + 1000)
             hh = rng.standard_normal(hh_len) * 0.15 * np.exp(-40 * t)
             end = min(hh_offset + hh_len, n)
-            signal[hh_offset:end] += hh[:end - hh_offset]
+            signal[hh_offset:end] += hh[: end - hh_offset]
 
     return (signal * 0.6).astype(np.float32)
 
 
 # ─── Melody / Phrase Generators ──────────────────────────────────────────────
 
+
 def _guitar_phrase(sr: int = DEMO_SAMPLE_RATE) -> np.ndarray:
     """Am pentatonic melodic phrase — ~4 seconds."""
     notes = [
-        (220.0, 0.4), (261.6, 0.4), (293.7, 0.3), (329.6, 0.5),
-        (392.0, 0.3), (329.6, 0.4), (293.7, 0.3), (261.6, 0.5),
+        (220.0, 0.4),
+        (261.6, 0.4),
+        (293.7, 0.3),
+        (329.6, 0.5),
+        (392.0, 0.3),
+        (329.6, 0.4),
+        (293.7, 0.3),
+        (261.6, 0.5),
         (220.0, 0.8),
     ]
     parts = [synthesise_guitar_note(f, d, sr) for f, d in notes]
@@ -174,8 +194,14 @@ def _guitar_phrase(sr: int = DEMO_SAMPLE_RATE) -> np.ndarray:
 def _bass_line(sr: int = DEMO_SAMPLE_RATE) -> np.ndarray:
     """Walking bass line — ~4 seconds."""
     notes = [
-        (82.4, 0.5), (98.0, 0.5), (110.0, 0.5), (98.0, 0.5),
-        (82.4, 0.5), (73.4, 0.5), (82.4, 0.5), (110.0, 0.5),
+        (82.4, 0.5),
+        (98.0, 0.5),
+        (110.0, 0.5),
+        (98.0, 0.5),
+        (82.4, 0.5),
+        (73.4, 0.5),
+        (82.4, 0.5),
+        (110.0, 0.5),
     ]
     parts = [synthesise_bass_note(f, d, sr) for f, d in notes]
     return np.concatenate(parts)
@@ -184,10 +210,10 @@ def _bass_line(sr: int = DEMO_SAMPLE_RATE) -> np.ndarray:
 def _piano_chord_progression(sr: int = DEMO_SAMPLE_RATE) -> np.ndarray:
     """Am - F - C - G progression — ~4 seconds."""
     chords = [
-        ([220.0, 261.6, 329.6], 1.0),   # Am
-        ([174.6, 220.0, 261.6], 1.0),   # F
-        ([261.6, 329.6, 392.0], 1.0),   # C
-        ([196.0, 246.9, 293.7], 1.0),   # G
+        ([220.0, 261.6, 329.6], 1.0),  # Am
+        ([174.6, 220.0, 261.6], 1.0),  # F
+        ([261.6, 329.6, 392.0], 1.0),  # C
+        ([196.0, 246.9, 293.7], 1.0),  # G
     ]
     parts = []
     for freqs, dur in chords:
@@ -197,6 +223,7 @@ def _piano_chord_progression(sr: int = DEMO_SAMPLE_RATE) -> np.ndarray:
 
 
 # ─── WAV I/O ─────────────────────────────────────────────────────────────────
+
 
 def write_wav_mono(filepath: str, audio: np.ndarray, sr: int) -> None:
     """Write 16-bit mono WAV file."""
@@ -225,6 +252,7 @@ def write_wav_stereo(filepath: str, left: np.ndarray, right: np.ndarray, sr: int
 
 # ─── Processing Pipeline ────────────────────────────────────────────────────
 
+
 def process_through_claudio(
     mono_audio: np.ndarray,
     source_position: np.ndarray,
@@ -248,7 +276,7 @@ def process_through_claudio(
     out_l_parts, out_r_parts = [], []
 
     for b in range(n_blocks):
-        chunk = mono_audio[b * block:(b + 1) * block]
+        chunk = mono_audio[b * block : (b + 1) * block]
         frame = engine.render({label: chunk})
         out_l_parts.append(frame.left)
         out_r_parts.append(frame.right)

@@ -4,6 +4,7 @@ quality_config.py — Shared configuration and helpers for audio quality proofs.
 Constants, plot style, signal generators, and processing helpers used by
 all quality measurement modules.
 """
+
 from __future__ import annotations
 
 import os
@@ -42,21 +43,23 @@ COLORS = {
 
 def setup_plot_style() -> None:
     """Apply dark professional plot theme."""
-    plt.rcParams.update({
-        "figure.facecolor": COLORS["bg"],
-        "axes.facecolor": COLORS["card"],
-        "axes.edgecolor": COLORS["grid"],
-        "axes.labelcolor": COLORS["text"],
-        "text.color": COLORS["text"],
-        "xtick.color": COLORS["muted"],
-        "ytick.color": COLORS["muted"],
-        "grid.color": COLORS["grid"],
-        "grid.alpha": 0.5,
-        "font.family": "sans-serif",
-        "font.size": 11,
-        "axes.grid": True,
-        "figure.dpi": 150,
-    })
+    plt.rcParams.update(
+        {
+            "figure.facecolor": COLORS["bg"],
+            "axes.facecolor": COLORS["card"],
+            "axes.edgecolor": COLORS["grid"],
+            "axes.labelcolor": COLORS["text"],
+            "text.color": COLORS["text"],
+            "xtick.color": COLORS["muted"],
+            "ytick.color": COLORS["muted"],
+            "grid.color": COLORS["grid"],
+            "grid.alpha": 0.5,
+            "font.family": "sans-serif",
+            "font.size": 11,
+            "axes.grid": True,
+            "figure.dpi": 150,
+        }
+    )
 
 
 def save_plot(fig, name: str) -> str:
@@ -70,6 +73,7 @@ def save_plot(fig, name: str) -> str:
 
 # ─── Signal Generators ───────────────────────────────────────────────────────
 
+
 def gen_sine(freq: float, duration: float, amp: float = 0.8) -> np.ndarray:
     """Generate a sine wave test signal."""
     t = np.arange(int(SAMPLE_RATE * duration)) / SAMPLE_RATE
@@ -80,8 +84,8 @@ def gen_sweep(f_start: float, f_end: float, duration: float, amp: float = 0.8) -
     """Generate a logarithmic frequency sweep."""
     n = int(SAMPLE_RATE * duration)
     t = np.arange(n) / SAMPLE_RATE
-    phase = 2 * np.pi * f_start * duration / np.log(f_end / f_start) * (
-        np.exp(t / duration * np.log(f_end / f_start)) - 1
+    phase = (
+        2 * np.pi * f_start * duration / np.log(f_end / f_start) * (np.exp(t / duration * np.log(f_end / f_start)) - 1)
     )
     return (np.sin(phase) * amp).astype(np.float32)
 
@@ -101,13 +105,16 @@ def gen_noise(duration: float, amp: float = 0.3) -> np.ndarray:
 
 # ─── Processing Helpers ──────────────────────────────────────────────────────
 
+
 def process_through_engine(audio: np.ndarray, position=None) -> tuple[np.ndarray, np.ndarray]:
     """Process audio through the HRTF engine."""
     if position is None:
         position = np.array([0.0, 0.0, -2.0])
     cfg = SignalFlowConfig(
-        capture_sample_rate=SAMPLE_RATE, render_sample_rate=SAMPLE_RATE,
-        fft_size=BLOCK_SIZE, hrir_length=256,
+        capture_sample_rate=SAMPLE_RATE,
+        render_sample_rate=SAMPLE_RATE,
+        fft_size=BLOCK_SIZE,
+        hrir_length=256,
     )
     engine = HRTFBinauralEngine(config=cfg)
     src = AudioSource(source_id="test", position=position)
@@ -116,7 +123,7 @@ def process_through_engine(audio: np.ndarray, position=None) -> tuple[np.ndarray
     n_blocks = len(audio) // BLOCK_SIZE
     out_l, out_r = [], []
     for b in range(n_blocks):
-        chunk = audio[b * BLOCK_SIZE:(b + 1) * BLOCK_SIZE]
+        chunk = audio[b * BLOCK_SIZE : (b + 1) * BLOCK_SIZE]
         frame = engine.render({"test": chunk})
         out_l.append(frame.left)
         out_r.append(frame.right)
@@ -133,7 +140,7 @@ def process_through_hifi(audio: np.ndarray, mode: str = "CLEAN") -> np.ndarray:
     n_blocks = len(audio) // BLOCK_SIZE
     out = []
     for b in range(n_blocks):
-        chunk = audio[b * BLOCK_SIZE:(b + 1) * BLOCK_SIZE]
+        chunk = audio[b * BLOCK_SIZE : (b + 1) * BLOCK_SIZE]
         stereo = proc.process_block(chunk)
         out.append(stereo[:, 0])
     return np.concatenate(out)

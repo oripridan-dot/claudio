@@ -10,6 +10,7 @@ Reads back every generated WAV file and verifies:
   6. No clipping, no silence, no NaN
   7. Generates a visual HTML report with waveform plots
 """
+
 from __future__ import annotations
 
 import math
@@ -47,14 +48,14 @@ def read_wav(filepath: str) -> tuple[np.ndarray, np.ndarray | None, int]:
 
 def measure_energy(signal: np.ndarray) -> float:
     """RMS energy in dB."""
-    rms = math.sqrt(float(np.mean(signal ** 2)) + 1e-30)
+    rms = math.sqrt(float(np.mean(signal**2)) + 1e-30)
     return 20 * math.log10(rms + 1e-30)
 
 
 def measure_lr_ratio_db(left: np.ndarray, right: np.ndarray) -> float:
     """L/R energy ratio in dB. Positive = louder left."""
-    l_energy = float(np.mean(left ** 2)) + 1e-30
-    r_energy = float(np.mean(right ** 2)) + 1e-30
+    l_energy = float(np.mean(left**2)) + 1e-30
+    r_energy = float(np.mean(right**2)) + 1e-30
     return 10 * math.log10(l_energy / r_energy)
 
 
@@ -74,7 +75,9 @@ def check_nan(signal: np.ndarray) -> bool:
 
 
 def windowed_lr_ratios(
-    left: np.ndarray, right: np.ndarray, n_windows: int = 8,
+    left: np.ndarray,
+    right: np.ndarray,
+    n_windows: int = 8,
 ) -> list[float]:
     """Compute L/R ratio in dB for each time window."""
     block = len(left) // n_windows
@@ -91,13 +94,13 @@ def windowed_lr_ratios(
 # position_name → expected L/R ratio sign
 # Positive ratio = louder in LEFT ear
 EXPECTED_PANNING = {
-    "center":     "balanced",   # should be near 0 dB
-    "left_45":    "left",       # L/R ratio > 0
-    "right_45":   "right",      # L/R ratio < 0
-    "hard_left":  "left",       # L/R ratio >> 0
-    "hard_right": "right",      # L/R ratio << 0
-    "behind":     "balanced",   # behind → similar L/R
-    "above":      "balanced",   # above → similar L/R
+    "center": "balanced",  # should be near 0 dB
+    "left_45": "left",  # L/R ratio > 0
+    "right_45": "right",  # L/R ratio < 0
+    "hard_left": "left",  # L/R ratio >> 0
+    "hard_right": "right",  # L/R ratio << 0
+    "behind": "balanced",  # behind → similar L/R
+    "above": "balanced",  # above → similar L/R
 }
 
 
@@ -190,10 +193,13 @@ def verify_head_rotation(filepath: str) -> dict:
     ratios = windowed_lr_ratios(left, right, n_windows=8)
     lr_range = max(ratios) - min(ratios)
     ok = lr_range > 3.0  # Should vary by at least 3 dB during rotation
-    result["checks"].append((
-        "rotation_varies", ok,
-        f"L/R range={lr_range:.1f}dB across 8 windows {'✓' if ok else '✗ too static'}",
-    ))
+    result["checks"].append(
+        (
+            "rotation_varies",
+            ok,
+            f"L/R range={lr_range:.1f}dB across 8 windows {'✓' if ok else '✗ too static'}",
+        )
+    )
     result["lr_windows"] = ratios
     if not ok:
         result["passed"] = False
@@ -214,10 +220,13 @@ def verify_full_mix(dry_path: str, binaural_path: str) -> dict:
     # Binaural mix should have L/R differences (spatial separation)
     correlation = float(np.corrcoef(bin_left[:1000], bin_right[:1000])[0, 1])
     ok = correlation < 0.99  # Should NOT be identical L/R
-    result["checks"].append((
-        "spatial_separation", ok,
-        f"L/R correlation={correlation:.3f} {'✓ spatially separated' if ok else '✗ identical channels'}",
-    ))
+    result["checks"].append(
+        (
+            "spatial_separation",
+            ok,
+            f"L/R correlation={correlation:.3f} {'✓ spatially separated' if ok else '✗ identical channels'}",
+        )
+    )
     if not ok:
         result["passed"] = False
 

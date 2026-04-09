@@ -16,6 +16,7 @@ Room lifecycle:
   3. Both peers stream intent packets via binary WS frames
   4. On disconnect → peer removed, room cleaned if empty
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -29,32 +30,37 @@ from fastapi import WebSocket
 
 
 class PeerRole(StrEnum):
-    SENDER = "sender"       # Streaming intent outward
-    RECEIVER = "receiver"   # Receiving and regenerating
-    BOTH = "both"           # Bidirectional (default for collab)
+    SENDER = "sender"  # Streaming intent outward
+    RECEIVER = "receiver"  # Receiving and regenerating
+    BOTH = "both"  # Bidirectional (default for collab)
 
 
 @dataclass
 class PeerInfo:
     """Metadata about a connected peer."""
+
     peer_id: str
     display_name: str
     role: PeerRole
     ws: WebSocket
-    instrument: str = "unknown"   # Detected instrument type
+    instrument: str = "unknown"  # Detected instrument type
     joined_at: float = 0.0
     packets_sent: int = 0
     packets_received: int = 0
     last_packet_ts: float = 0.0
-    latency_ms: float = 0.0       # Round-trip latency estimate
+    latency_ms: float = 0.0  # Round-trip latency estimate
     # Rate limiting (token bucket): bytes allowed per second
     _rate_bucket: float = 0.0
     _rate_last_refill: float = 0.0
+    # DDSP state
+    ddsp_enabled: bool = False
+    _ddsp_buffer: list = field(default_factory=list)
 
 
 @dataclass
 class RoomMetrics:
     """Live metrics for a collaboration room."""
+
     peer_count: int = 0
     total_packets: int = 0
     bytes_transmitted: int = 0
@@ -66,6 +72,7 @@ class RoomMetrics:
 @dataclass
 class CollabRoom:
     """A collaboration room where peers exchange intent packets."""
+
     room_id: str
     created_at: float = field(default_factory=time.time)
     peers: dict[str, PeerInfo] = field(default_factory=dict)
@@ -258,8 +265,7 @@ class SessionManager:
         removed = 0
         async with self._lock:
             stale = [
-                rid for rid, room in self._rooms.items()
-                if room.is_empty and (now - room.created_at) > max_age_seconds
+                rid for rid, room in self._rooms.items() if room.is_empty and (now - room.created_at) > max_age_seconds
             ]
             for rid in stale:
                 del self._rooms[rid]

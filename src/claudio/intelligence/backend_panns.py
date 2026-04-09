@@ -7,6 +7,7 @@ Auto-downloads pretrained checkpoint on first use.
 Requirements: pip install panns-inference
 PANNs expects 32kHz mono audio.
 """
+
 from __future__ import annotations
 
 import time
@@ -42,7 +43,10 @@ class PANNsBackend(AudioClassifierBackend):
         print(f"[PANNs] Model loaded ({len(self._labels)} AudioSet classes)")
 
     def classify(
-        self, audio: np.ndarray, sample_rate: int, top_k: int = 5,
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        top_k: int = 5,
     ) -> list[ClassificationResult]:
         if self._model is None:
             self.load_model()
@@ -67,12 +71,14 @@ class PANNsBackend(AudioClassifierBackend):
             label = self._labels[idx]
             confidence = float(probs[idx])
             family = map_label_to_family(label)
-            results.append(ClassificationResult(
-                label=label,
-                confidence=confidence,
-                family=family,
-                latency_ms=latency_ms,
-            ))
+            results.append(
+                ClassificationResult(
+                    label=label,
+                    confidence=confidence,
+                    family=family,
+                    latency_ms=latency_ms,
+                )
+            )
 
         return results
 

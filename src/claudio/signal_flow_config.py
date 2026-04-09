@@ -12,6 +12,7 @@ Design rationale:
   - Partitioned convolution enabled (approved Q2) for long HRIRs
     without sacrificing latency
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -20,30 +21,33 @@ from enum import Enum
 
 class ConvolutionStrategy(Enum):
     """Convolution method used by the HRTF engine."""
-    OLA = "overlap_add"                # classic overlap-add — simple, proven
-    OLS = "overlap_save"               # overlap-save — fewer artefacts at block edges
-    PARTITIONED = "partitioned_ola"    # segmented OLA — long HRIRs at low latency
+
+    OLA = "overlap_add"  # classic overlap-add — simple, proven
+    OLS = "overlap_save"  # overlap-save — fewer artefacts at block edges
+    PARTITIONED = "partitioned_ola"  # segmented OLA — long HRIRs at low latency
 
 
 class HRTFInterpolation(Enum):
     """Method for interpolating between HRTF grid positions."""
-    NEAREST = "nearest"      # snap to closest 5° grid point
-    BILINEAR = "bilinear"    # spherical bilinear interp between 4 neighbours
-    VBAP = "vbap"            # vector-base amplitude panning across 3 neighbours
+
+    NEAREST = "nearest"  # snap to closest 5° grid point
+    BILINEAR = "bilinear"  # spherical bilinear interp between 4 neighbours
+    VBAP = "vbap"  # vector-base amplitude panning across 3 neighbours
 
 
 @dataclass
 class QualityTargets:
     """SOTA quality gate thresholds — every metric must pass simultaneously."""
+
     max_pipeline_latency_ms: float = 15.0
-    min_snr_db: float = 120.0                   # 32-bit float theoretical floor
-    max_thdn_percent: float = 0.01               # THD+N < 0.01%
-    max_freq_response_deviation_db: float = 0.5   # ±0.5 dB flatness 20Hz-20kHz
-    max_itd_error_us: float = 5.0                 # ITD accuracy vs Woodworth
-    max_ild_error_db: float = 1.0                 # ILD accuracy vs head-shadow
-    min_phase_coherence: float = 0.95             # stereo phase correlation floor
+    min_snr_db: float = 120.0  # 32-bit float theoretical floor
+    max_thdn_percent: float = 0.01  # THD+N < 0.01%
+    max_freq_response_deviation_db: float = 0.5  # ±0.5 dB flatness 20Hz-20kHz
+    max_itd_error_us: float = 5.0  # ITD accuracy vs Woodworth
+    max_ild_error_db: float = 1.0  # ILD accuracy vs head-shadow
+    min_phase_coherence: float = 0.95  # stereo phase correlation floor
     max_render_time_per_block_us: float = 1000.0  # CPU budget per render call
-    max_hrtf_crossfade_samples: int = 32          # click-free HRTF update window
+    max_hrtf_crossfade_samples: int = 32  # click-free HRTF update window
 
 
 @dataclass
@@ -55,29 +59,30 @@ class SignalFlowConfig:
     monitoring on Apple Silicon hardware.  The optimisation sweep
     overrides individual fields and re-runs the simulator.
     """
+
     # ── Sample Rates ─────────────────────────────────────────────────
-    capture_sample_rate: int = 48_000       # ADC / DAW observation tap
-    observation_sample_rate: int = 48_000   # intelligence analysis path
-    render_sample_rate: int = 192_000       # HRTF convolution internal rate
+    capture_sample_rate: int = 48_000  # ADC / DAW observation tap
+    observation_sample_rate: int = 48_000  # intelligence analysis path
+    render_sample_rate: int = 192_000  # HRTF convolution internal rate
 
     # ── Buffer Geometry ──────────────────────────────────────────────
-    capture_buffer_size: int = 128          # samples per audio callback
-    output_buffer_size: int = 128           # output DAC buffer
+    capture_buffer_size: int = 128  # samples per audio callback
+    output_buffer_size: int = 128  # output DAC buffer
 
     # ── HRTF Engine ──────────────────────────────────────────────────
-    fft_size: int = 512                     # OLA / OLS FFT block
-    hrir_length: int = 256                  # impulse response samples (was 128)
-    hrtf_grid_resolution_deg: float = 5.0   # azimuth/elevation grid spacing
+    fft_size: int = 512  # OLA / OLS FFT block
+    hrir_length: int = 256  # impulse response samples (was 128)
+    hrtf_grid_resolution_deg: float = 5.0  # azimuth/elevation grid spacing
     convolution_strategy: ConvolutionStrategy = ConvolutionStrategy.PARTITIONED
     hrtf_interpolation: HRTFInterpolation = HRTFInterpolation.BILINEAR
-    partition_count: int = 2                # segments for partitioned conv
-    crossfade_samples: int = 32             # click-free HRTF swap window
+    partition_count: int = 2  # segments for partitioned conv
+    crossfade_samples: int = 32  # click-free HRTF swap window
 
     # ── Spatial Model ────────────────────────────────────────────────
-    head_radius_m: float = 0.0875           # KEMAR standard
-    speed_of_sound_mps: float = 343.0       # at 20°C
-    proximity_gain_cap_db: float = 12.0     # max proximity boost
-    air_absorption_enabled: bool = True     # ISO 9613-1 frequency-dependent
+    head_radius_m: float = 0.0875  # KEMAR standard
+    speed_of_sound_mps: float = 343.0  # at 20°C
+    proximity_gain_cap_db: float = 12.0  # max proximity boost
+    air_absorption_enabled: bool = True  # ISO 9613-1 frequency-dependent
 
     # ── Source Limits ────────────────────────────────────────────────
     max_sources: int = 16
@@ -127,6 +132,7 @@ class SignalFlowConfig:
 
 
 # ── Pre-built Configurations ─────────────────────────────────────────────
+
 
 def low_latency_config() -> SignalFlowConfig:
     """Optimised for minimum latency — 64-sample buffers, shorter HRIR."""

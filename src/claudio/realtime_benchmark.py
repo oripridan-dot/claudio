@@ -16,6 +16,7 @@ Tests:
 Usage:
     cd claudio && .venv/bin/python -m claudio.realtime_benchmark
 """
+
 from __future__ import annotations
 
 import math
@@ -41,6 +42,7 @@ def _pass_fail(ok: bool) -> str:
 
 # ─── Test 1: Single-Source Latency Across Buffer Sizes ───────────────────────
 
+
 def test_single_source_latency() -> list[dict]:
     """Measure render time for a single source at different buffer/FFT sizes."""
     _banner("TEST 1: Single-Source Render Latency")
@@ -54,9 +56,12 @@ def test_single_source_latency() -> list[dict]:
     results = []
     for c in configs:
         cfg = SignalFlowConfig(
-            capture_sample_rate=48000, render_sample_rate=48000,
-            capture_buffer_size=c["buf"], output_buffer_size=c["buf"],
-            fft_size=c["fft"], hrir_length=c["hrir"],
+            capture_sample_rate=48000,
+            render_sample_rate=48000,
+            capture_buffer_size=c["buf"],
+            output_buffer_size=c["buf"],
+            fft_size=c["fft"],
+            hrir_length=c["hrir"],
         )
         engine = HRTFBinauralEngine(config=cfg)
         src = AudioSource(source_id="test", position=np.array([1.0, 0.0, -2.0]))
@@ -73,12 +78,12 @@ def test_single_source_latency() -> list[dict]:
 
         # Warmup
         for i in range(n_warmup):
-            engine.render({"test": audio[i * block:(i + 1) * block]})
+            engine.render({"test": audio[i * block : (i + 1) * block]})
 
         # Measure
         times_us = []
         for i in range(n_warmup, n_warmup + n_measure):
-            chunk = audio[i * block:(i + 1) * block]
+            chunk = audio[i * block : (i + 1) * block]
             t0 = time.perf_counter()
             engine.render({"test": chunk})
             times_us.append((time.perf_counter() - t0) * 1e6)
@@ -102,25 +107,35 @@ def test_single_source_latency() -> list[dict]:
         print(f"    Verdict:             {_pass_fail(passed)}")
         print()
 
-        results.append({
-            "config": c["label"], "buffer_deadline_us": buffer_deadline_us,
-            "mean_us": mean_us, "p99_us": p99_us, "max_us": max_us,
-            "rt_ratio": rt_ratio, "headroom_pct": headroom_pct,
-            "total_latency_ms": total_latency_ms, "passed": passed,
-        })
+        results.append(
+            {
+                "config": c["label"],
+                "buffer_deadline_us": buffer_deadline_us,
+                "mean_us": mean_us,
+                "p99_us": p99_us,
+                "max_us": max_us,
+                "rt_ratio": rt_ratio,
+                "headroom_pct": headroom_pct,
+                "total_latency_ms": total_latency_ms,
+                "passed": passed,
+            }
+        )
 
     return results
 
 
 # ─── Test 2: Multi-Source Stress Test ────────────────────────────────────────
 
+
 def test_multi_source_ceiling() -> list[dict]:
     """Increase source count until real-time budget is exceeded."""
     _banner("TEST 2: Multi-Source Real-Time Ceiling")
 
     cfg = SignalFlowConfig(
-        capture_sample_rate=48000, render_sample_rate=48000,
-        fft_size=512, hrir_length=256,
+        capture_sample_rate=48000,
+        render_sample_rate=48000,
+        fft_size=512,
+        hrir_length=256,
     )
     sr = cfg.capture_sample_rate
     block = cfg.fft_size
@@ -147,13 +162,13 @@ def test_multi_source_ceiling() -> list[dict]:
 
         # Warmup
         for b in range(5):
-            buffers = {sid: data[b * block:(b + 1) * block] for sid, data in audio_map.items()}
+            buffers = {sid: data[b * block : (b + 1) * block] for sid, data in audio_map.items()}
             engine.render(buffers)
 
         # Measure
         times_us = []
         for b in range(5, 45):
-            buffers = {sid: data[b * block:(b + 1) * block] for sid, data in audio_map.items()}
+            buffers = {sid: data[b * block : (b + 1) * block] for sid, data in audio_map.items()}
             t0 = time.perf_counter()
             engine.render(buffers)
             times_us.append((time.perf_counter() - t0) * 1e6)
@@ -163,13 +178,20 @@ def test_multi_source_ceiling() -> list[dict]:
         rt_ratio = mean_us / buffer_deadline_us
         is_rt = max_us < buffer_deadline_us
 
-        print(f"  {n_src:>3} sources:  mean={mean_us:>7.1f}µs  max={max_us:>7.1f}µs  "
-              f"ratio={rt_ratio:.4f}  {_pass_fail(is_rt)}")
+        print(
+            f"  {n_src:>3} sources:  mean={mean_us:>7.1f}µs  max={max_us:>7.1f}µs  "
+            f"ratio={rt_ratio:.4f}  {_pass_fail(is_rt)}"
+        )
 
-        results.append({
-            "sources": n_src, "mean_us": mean_us, "max_us": max_us,
-            "rt_ratio": rt_ratio, "passed": is_rt,
-        })
+        results.append(
+            {
+                "sources": n_src,
+                "mean_us": mean_us,
+                "max_us": max_us,
+                "rt_ratio": rt_ratio,
+                "passed": is_rt,
+            }
+        )
 
         if not is_rt:
             break  # Found the ceiling
@@ -179,13 +201,16 @@ def test_multi_source_ceiling() -> list[dict]:
 
 # ─── Test 3: Head-Tracking Storm ─────────────────────────────────────────────
 
+
 def test_head_tracking_storm() -> dict:
     """Simulate rapid head tracking updates during rendering."""
     _banner("TEST 3: Head-Tracking Storm (120 Hz update rate)")
 
     cfg = SignalFlowConfig(
-        capture_sample_rate=48000, render_sample_rate=48000,
-        fft_size=512, hrir_length=256,
+        capture_sample_rate=48000,
+        render_sample_rate=48000,
+        fft_size=512,
+        hrir_length=256,
     )
     engine = HRTFBinauralEngine(config=cfg)
     sr = cfg.capture_sample_rate
@@ -207,7 +232,7 @@ def test_head_tracking_storm() -> dict:
             quat = (math.cos(angle / 2), 0.0, math.sin(angle / 2), 0.0)
             engine.update_head_pose(quat)
 
-        buffers = {f"s{i}": audio[b * block:(b + 1) * block] for i in range(4)}
+        buffers = {f"s{i}": audio[b * block : (b + 1) * block] for i in range(4)}
         t0 = time.perf_counter()
         engine.render(buffers)
         times_us.append((time.perf_counter() - t0) * 1e6)
@@ -227,8 +252,11 @@ def test_head_tracking_storm() -> dict:
     print(f"    Verdict:             {_pass_fail(passed)}")
 
     return {
-        "mean_us": mean_us, "p99_us": p99_us, "max_us": max_us,
-        "rt_ratio": rt_ratio, "passed": passed,
+        "mean_us": mean_us,
+        "p99_us": p99_us,
+        "max_us": max_us,
+        "rt_ratio": rt_ratio,
+        "passed": passed,
     }
 
 
@@ -238,6 +266,7 @@ def test_head_tracking_storm() -> dict:
 from claudio.benchmark_fidelity import test_audio_fidelity, test_sustained_load  # noqa: E402
 
 # ─── Main ────────────────────────────────────────────────────────────────────
+
 
 def main() -> None:
     from claudio.benchmark_report import print_scorecard
@@ -258,4 +287,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

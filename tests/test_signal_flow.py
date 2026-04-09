@@ -9,6 +9,7 @@ Six-tier test suite for Claudio's audio pipeline:
   Tier 5 — Configuration Sweep
   Tier 6 — SOTA Benchmark
 """
+
 from __future__ import annotations
 
 import math
@@ -35,9 +36,11 @@ from claudio.signal_flow_simulator import (
 
 # ─── Fixtures ─────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def default_sim():
     return SignalFlowSimulator(balanced_config())
+
 
 @pytest.fixture
 def low_lat_sim():
@@ -47,6 +50,7 @@ def low_lat_sim():
 # ═══════════════════════════════════════════════════════════════════════════════
 # TIER 1 — Latency Gate Tests
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestLatencyGates:
     def test_pipeline_latency_within_budget(self, default_sim):
@@ -69,6 +73,7 @@ class TestLatencyGates:
 
     def test_head_tracking_update_latency(self):
         import time
+
         engine = HRTFBinauralEngine(config=balanced_config())
         quat = (math.cos(math.pi / 4), 0.0, math.sin(math.pi / 4), 0.0)
         t0 = time.perf_counter()
@@ -93,6 +98,7 @@ class TestLatencyGates:
 # TIER 2 — Fidelity Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestFidelity:
     def test_sine_passthrough_produces_output(self, default_sim):
         result = default_sim.run_sine_test(freq_hz=1000.0, duration_s=0.3)
@@ -107,8 +113,7 @@ class TestFidelity:
         assert result.metrics.thdn_percent >= 0, "THD+N negative"
 
     def test_impulse_response_preserves_energy(self, default_sim):
-        result = default_sim.run_impulse_test(
-            source_position=np.array([0.0, 0.0, -1.0]))
+        result = default_sim.run_impulse_test(source_position=np.array([0.0, 0.0, -1.0]))
         # The impulse through HRTF should produce non-zero output
         assert result.metrics.avg_render_time_us >= 0
 
@@ -121,8 +126,8 @@ class TestFidelity:
         engine.update_head_pose((1.0, 0.0, 0.0, 0.0))
         noise = np.random.randn(cfg.fft_size).astype(np.float32) * 0.5
         frame = engine.render({"center": noise})
-        l_energy = float(np.mean(frame.left ** 2))
-        r_energy = float(np.mean(frame.right ** 2))
+        l_energy = float(np.mean(frame.left**2))
+        r_energy = float(np.mean(frame.right**2))
         # Center source: L and R should have comparable energy
         # Early reflections introduce slight asymmetry; 15x is generous
         ratio = max(l_energy, r_energy) / (min(l_energy, r_energy) + 1e-30)
@@ -130,14 +135,13 @@ class TestFidelity:
 
     def test_snr_positive(self, default_sim):
         result = default_sim.run_sine_test(freq_hz=440.0, duration_s=0.3)
-        assert result.metrics.snr_db > 0.0, (
-            f"SNR {result.metrics.snr_db:.1f}dB should be positive"
-        )
+        assert result.metrics.snr_db > 0.0, f"SNR {result.metrics.snr_db:.1f}dB should be positive"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TIER 3 — Spatial Accuracy Tests
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestSpatialAccuracy:
     def test_itd_present_at_90_degrees(self):
@@ -151,8 +155,8 @@ class TestSpatialAccuracy:
     def test_ild_at_45_degrees(self):
         """Source at 45° should show level difference between ears."""
         hrir_l, hrir_r = _get_hrir(45.0, 0.0, hrir_len=256, sample_rate=192000)
-        energy_l = float(np.sum(hrir_l ** 2))
-        energy_r = float(np.sum(hrir_r ** 2))
+        energy_l = float(np.sum(hrir_l**2))
+        energy_r = float(np.sum(hrir_r**2))
         ild_db = 10 * math.log10((energy_r + 1e-10) / (energy_l + 1e-10))
         assert ild_db > 0.5, f"ILD {ild_db:.1f}dB too small for 45° source"
 
@@ -162,12 +166,12 @@ class TestSpatialAccuracy:
         energies = []
         for az in range(0, 90, 5):  # step by grid resolution
             hrir_l, _ = _get_hrir(float(az), 0.0, hrir_len=256, sample_rate=192000, grid_res=5.0)
-            energies.append(float(np.sum(hrir_l ** 2)))
+            energies.append(float(np.sum(hrir_l**2)))
         # Energy variation across grid should be bounded
         if len(energies) > 1:
             spread = max(energies) - min(energies)
             mean_e = float(np.mean(energies)) + 1e-10
-            assert spread / mean_e < 5.0, f"HRTF energy spread {spread/mean_e:.2f} too wide"
+            assert spread / mean_e < 5.0, f"HRTF energy spread {spread / mean_e:.2f} too wide"
 
     def test_elevation_changes_spectrum(self):
         """Different elevations should produce different HRIRs."""
@@ -197,14 +201,15 @@ class TestSpatialAccuracy:
         for _ in range(4):
             noise = np.random.randn(cfg.fft_size).astype(np.float32) * 0.5
             frame = engine.render({"right_src": noise})
-            total_l += float(np.sum(frame.left ** 2))
-            total_r += float(np.sum(frame.right ** 2))
+            total_l += float(np.sum(frame.left**2))
+            total_r += float(np.sum(frame.right**2))
         assert total_r > total_l, "right source should be louder in right ear"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TIER 4 — Stress Tests
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestStress:
     def test_16_sources_simultaneous(self):
@@ -261,6 +266,7 @@ class TestStress:
 # TIER 5 — Configuration Sweep
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestConfigSweep:
     def test_all_preset_configs_valid(self):
         for cfg in [balanced_config(), low_latency_config(), high_fidelity_config()]:
@@ -294,6 +300,7 @@ class TestConfigSweep:
 # ═══════════════════════════════════════════════════════════════════════════════
 # TIER 6 — SOTA Benchmark
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestSOTABenchmark:
     def test_sota_quality_gate(self):

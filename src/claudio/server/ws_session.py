@@ -5,6 +5,7 @@ Per-connection state and message processing helpers for the Claudio
 intelligence server's /ws/session endpoint.
 Extracted from claudio_server.py for 300-line compliance.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -49,10 +50,12 @@ async def check_coaching_triggers(
                     confidence=0.7,
                 )
                 if tip:
-                    await ws.send_json({
-                        "type": "mentor_tip",
-                        "data": serialize_fn(tip),
-                    })
+                    await ws.send_json(
+                        {
+                            "type": "mentor_tip",
+                            "data": serialize_fn(tip),
+                        }
+                    )
 
 
 def treatment_text_to_trigger(text: str) -> TriggerCategory | None:

@@ -18,6 +18,7 @@ Typical bandwidth:
   Delta frame: ~15 bytes × 250 Hz =  ~4 KB/s
   With silence detection: ~0.5 KB/s average
 """
+
 from __future__ import annotations
 
 import struct
@@ -31,23 +32,25 @@ from claudio.intent.intent_encoder import IntentFrame
 
 class PacketFlags(IntFlag):
     """Bitfield flags for intent packets."""
-    FULL_FRAME = 0x01    # Contains all fields (no delta)
-    DELTA = 0x02         # Contains only changed fields
-    ONSET = 0x04         # Onset event in this frame
-    SILENCE = 0x08       # Below noise floor — no payload
-    KEY_FRAME = 0x10     # Periodic full refresh (every 1s)
+
+    FULL_FRAME = 0x01  # Contains all fields (no delta)
+    DELTA = 0x02  # Contains only changed fields
+    ONSET = 0x04  # Onset event in this frame
+    SILENCE = 0x08  # Below noise floor — no payload
+    KEY_FRAME = 0x10  # Periodic full refresh (every 1s)
 
 
 # Delta compression thresholds — changes below these are suppressed
-DELTA_F0_HZ = 0.5          # ~1 cent at A4
-DELTA_LOUDNESS_DB = 0.5    # Barely perceptible
-DELTA_CENTROID_HZ = 10.0   # Minor timbral shift
-DELTA_MFCC = 0.1           # MFCC coefficient change
+DELTA_F0_HZ = 0.5  # ~1 cent at A4
+DELTA_LOUDNESS_DB = 0.5  # Barely perceptible
+DELTA_CENTROID_HZ = 10.0  # Minor timbral shift
+DELTA_MFCC = 0.1  # MFCC coefficient change
 
 
 @dataclass
 class IntentPacket:
     """Serializable intent packet for network transmission."""
+
     sequence: int
     timestamp_ms: float
     flags: PacketFlags
@@ -113,15 +116,13 @@ class IntentPacket:
         if len(data) < offset + 25:
             return cls(sequence=seq, timestamp_ms=ts, flags=flags, frame=None)
 
-        f0, f0_conf, loud_db, loud_norm, centroid, onset_flag, onset_str = (
-            struct.unpack_from("<fffffBf", data, offset)
-        )
+        f0, f0_conf, loud_db, loud_norm, centroid, onset_flag, onset_str = struct.unpack_from("<fffffBf", data, offset)
         offset += 25  # 5×4 + 1 + 4
 
         # Unpack MFCCs
         mfcc = []
         if len(data) >= offset + 52:
-            mfcc_arr = np.frombuffer(data[offset: offset + 52], dtype=np.float32)
+            mfcc_arr = np.frombuffer(data[offset : offset + 52], dtype=np.float32)
             mfcc = mfcc_arr.tolist()
             offset += 52
 

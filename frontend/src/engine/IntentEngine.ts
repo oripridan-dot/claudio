@@ -55,8 +55,8 @@ function autocorrelationF0(
   sampleRate: number,
 ): { f0: number; confidence: number } {
   const n = buffer.length;
-  const minPeriod = Math.floor(sampleRate / 4186); // C8
-  const maxPeriod = Math.min(Math.floor(sampleRate / 33), n - 1); // C1
+  const minPeriod = Math.floor(sampleRate / 1046); // C6 max (reduces high-freq noise)
+  const maxPeriod = Math.min(Math.floor(sampleRate / 40), n - 1); // E1 min
 
   if (maxPeriod <= minPeriod) return { f0: 0, confidence: 0 };
 
@@ -66,7 +66,8 @@ function autocorrelationF0(
   let energy = 0;
 
   for (let i = 0; i < n; i++) energy += buffer[i] * buffer[i];
-  if (energy < 1e-8) return { f0: 0, confidence: 0 };
+  const rms = Math.sqrt(energy / n);
+  if (rms < 0.005) return { f0: 0, confidence: 0 }; // Silence gate
 
   for (let period = minPeriod; period <= maxPeriod; period++) {
     let corr = 0;
@@ -147,37 +148,41 @@ function encodeIntentPacket(frame: IntentFrame, seq: number): ArrayBuffer {
   return buf;
 }
 
-function decodeIntentPacket(data: ArrayBuffer): IntentFrame | null {
+function decodeIntentPacket(data: ArrayBuffer): { seq: number, frame: IntentFrame } | null {
   if (data.byteLength < 9) return null;
   const view = new DataView(data);
   let offset = 0;
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _seq = view.getUint32(offset, true); offset += 4;
+  const seq = view.getUint32(offset, true); offset += 4;
   const ts = view.getFloat32(offset, true); offset += 4;
   const flags = view.getUint8(offset); offset += 1;
 
-  if (flags & 0x08) {
     // Silence packet
     return {
-      timestamp: ts, f0Hz: 0, confidence: 0,
-      loudnessDb: -80, loudnessNorm: 0,
-      spectralCentroid: 0, isOnset: false, onsetStrength: 0, rmsEnergy: 0,
+      seq,
+      frame: {
+        timestamp: ts, f0Hz: 0, confidence: 0,
+        loudnessDb: -80, loudnessNorm: 0,
+        spectralCentroid: 0, isOnset: false, onsetStrength: 0, rmsEnergy: 0,
+      }
     };
   }
 
   if (data.byteLength < 34) return null;
 
   return {
-    timestamp: ts,
-    f0Hz: view.getFloat32(offset, true),
-    confidence: (offset += 4, view.getFloat32(offset, true)),
-    loudnessDb: (offset += 4, view.getFloat32(offset, true)),
-    loudnessNorm: (offset += 4, view.getFloat32(offset, true)),
-    spectralCentroid: (offset += 4, view.getFloat32(offset, true)),
-    isOnset: (offset += 4, view.getUint8(offset) === 1),
-    onsetStrength: (offset += 1, view.getFloat32(offset, true)),
-    rmsEnergy: 0,
+    seq,
+    frame: {
+      timestamp: ts,
+      f0Hz: view.getFloat32(offset, true),
+      confidence: (offset += 4, view.getFloat32(offset, true)),
+      loudnessDb: (offset += 4, view.getFloat32(offset, true)),
+      loudnessNorm: (offset += 4, view.getFloat32(offset, true)),
+      spectralCentroid: (offset += 4, view.getFloat32(offset, true)),
+      isOnset: (offset += 4, view.getUint8(offset) === 1),
+      onsetStrength: (offset += 1, view.getFloat32(offset, true)),
+      rmsEnergy: 0,
+    }
   };
 }
 
@@ -210,6 +215,8 @@ export class IntentEngine {
   // Remote regeneration
   private remoteOsc: OscillatorNode | null = null;
   private remoteGain: GainNode | null = null;
+  ddspMode = false;
+  private nextAudioTime = 0;
 
   // Onset detection state
   private prevRMS = 0;
@@ -220,10 +227,20 @@ export class IntentEngine {
   private reconnectTimer: number | null = null;
   private serverUrl = '';
   private displayName = '';
+  private jwtToken: string | null = null;
 
-  // Latency tracking
+  // Latency & Network Telemetry logging
   private lastPingTs = 0;
   latencyMs = 0;
+  
+  jitterMs = 0.0;
+  packetLossPercent = 0.0;
+  private remoteSeq: number | null = null;
+  private packetsReceived = 0;
+  private packetsLost = 0;
+  private packetsWindowReceived = 0;
+  private packetsWindowLost = 0;
+  private lastNetworkUpdateTs = 0;
 
   async startCapture(): Promise<void> {
     this.audioCtx = new AudioContext({ sampleRate: 44100 });
@@ -255,6 +272,15 @@ export class IntentEngine {
       const timeDomain = new Float32Array(this.analyser.fftSize);
       this.analyser.getFloatTimeDomainData(timeDomain);
 
+      // --- EXPERIMENTAL: Inject 440Hz tone if totally silent for testing ---
+      let injected = false;
+      if (computeRMS(timeDomain) < 0.0001) {
+         injected = true;
+         for (let i=0; i<timeDomain.length; i++) {
+             timeDomain[i] = Math.sin(2 * Math.PI * 440 * i / this.audioCtx.sampleRate) * 0.1;
+         }
+      }
+
       const freqData = new Float32Array(this.analyser.frequencyBinCount);
       this.analyser.getFloatFrequencyData(freqData);
 
@@ -262,7 +288,7 @@ export class IntentEngine {
       const loudnessDb = 20 * Math.log10(rms + 1e-10);
       const loudnessNorm = Math.min(1, Math.max(0, (loudnessDb + 80) / 80));
 
-      const { f0, confidence } = autocorrelationF0(timeDomain, this.audioCtx!.sampleRate);
+      const { f0, confidence } = autocorrelationF0(timeDomain, this.audioCtx.sampleRate);
       const centroid = computeSpectralCentroid(freqData, this.audioCtx!.sampleRate);
 
       // Simple onset detection via RMS jump
@@ -310,11 +336,29 @@ export class IntentEngine {
     this.serverUrl = serverUrl;
     this.displayName = name;
     this.reconnectAttempts = 0;
+    
+    // Fetch JWT Token for websocket negotiation
+    try {
+        const res = await fetch(`${this.serverUrl}/api/auth/token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: this.displayName }),
+        });
+        if (!res.ok) throw new Error('Authorization failed');
+        const data = await res.json();
+        this.jwtToken = data.token;
+    } catch (e) {
+        console.error("Failed to authenticate:", e);
+        this.onConnectionChange?.(false);
+        return;
+    }
+
     this._connectWebSocket();
   }
 
   private _connectWebSocket(): void {
-    const wsUrl = `${this.serverUrl.replace('http', 'ws')}/ws/collab/${this.roomId}?name=${encodeURIComponent(this.displayName)}`;
+    if (!this.jwtToken) return;
+    const wsUrl = `${this.serverUrl.replace('http', 'ws')}/ws/collab/${this.roomId}?name=${encodeURIComponent(this.displayName)}&token=${this.jwtToken}`;
     this.ws = new WebSocket(wsUrl);
     this.ws.binaryType = 'arraybuffer';
 
@@ -335,11 +379,61 @@ export class IntentEngine {
 
     this.ws.onmessage = (ev) => {
       if (ev.data instanceof ArrayBuffer) {
+        const view = new DataView(ev.data);
+        if (ev.data.byteLength > 4) {
+          const magic = view.getUint32(0, false); // Big endian read of "DDSP"
+          if (magic === 0x44445350) { // b"DDSP"
+            const audioData = new Float32Array(ev.data.slice(12)); // skip 4 magic + 8 peer_id
+            this._scheduleAudioBlock(audioData);
+            return;
+          }
+        }
+
         // Binary: remote intent packet
-        const frame = decodeIntentPacket(ev.data);
-        if (frame) {
+        const decoded = decodeIntentPacket(ev.data);
+        if (decoded) {
+          const { seq, frame } = decoded;
           this.onRemoteIntent?.(frame);
-          this.regenerateFromIntent(frame);
+          
+          // Network Telemetry calculate: Packet Loss
+          if (this.remoteSeq !== null) {
+              const expected = this.remoteSeq + 1;
+              if (seq > expected) {
+                  const lost = seq - expected;
+                  this.packetsLost += lost;
+                  this.packetsWindowLost += lost;
+              }
+          }
+          this.remoteSeq = seq;
+          this.packetsReceived++;
+          this.packetsWindowReceived++;
+
+          // Network Telemetry calculate: Jitter
+          // Simplified RTCP jitter: D = |(Rj - Sj) - (Ri - Si)| = |(Rj - Ri) - (Sj - Si)|
+          // Without synchronized clocks we just look at relative deltas.
+          // Since our tick is 8.3ms, we expect arriving packets approx every 8.33ms.
+          // For now, let's proxy jitter as var of arrivals based on ping.
+          const now = performance.now();
+          if (this.lastNetworkUpdateTs > 0) {
+              const deltaR = now - this.lastNetworkUpdateTs;
+              const deltaS = 8.33; // Nominal at 120Hz
+              const diff = Math.abs(deltaR - deltaS);
+              // Moving average using RTCP formula J = J + (|D| - J) / 16
+              this.jitterMs += (diff - this.jitterMs) / 16;
+          }
+          this.lastNetworkUpdateTs = now;
+          
+          // Periodically update packet loss percent (every 1 second approx 120 pkts)
+          if (this.packetsWindowReceived > 120) {
+              const totalWindow = this.packetsWindowReceived + this.packetsWindowLost;
+              this.packetLossPercent = totalWindow > 0 ? (this.packetsWindowLost / totalWindow) * 100 : 0;
+              this.packetsWindowReceived = 0;
+              this.packetsWindowLost = 0;
+          }
+
+          if (!this.ddspMode) {
+            this.regenerateFromIntent(frame);
+          }
         }
       } else {
         // JSON: signaling
@@ -417,6 +511,40 @@ export class IntentEngine {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'instrument_set', instrument }));
     }
+  }
+
+  setDDSPMode(enabled: boolean): void {
+    this.ddspMode = enabled;
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'ddsp_toggle', enabled }));
+    }
+  }
+
+  private _scheduleAudioBlock(audioData: Float32Array): void {
+    if (!this.audioCtx) return;
+    
+    // Smooth trailing silence to prevent clicking
+    if (audioData.length > 0) {
+       for (let i=0; i<10; i++) {
+           audioData[i] *= (i/10); 
+           audioData[audioData.length-1-i] *= (i/10);
+       }
+    }
+    
+    const buffer = this.audioCtx.createBuffer(1, audioData.length, 44100);
+    buffer.copyToChannel(audioData, 0);
+    
+    const source = this.audioCtx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(this.audioCtx.destination);
+    
+    const now = this.audioCtx.currentTime;
+    if (this.nextAudioTime < now) {
+        this.nextAudioTime = now + 0.05; // pre-buffer
+    }
+    
+    source.start(this.nextAudioTime);
+    this.nextAudioTime += buffer.duration;
   }
 
   private regenerateFromIntent(frame: IntentFrame): void {

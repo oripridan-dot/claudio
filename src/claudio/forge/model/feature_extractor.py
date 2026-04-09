@@ -23,15 +23,15 @@ class FeatureExtractor(nn.Module):
     Loudness:      RMS energy in A-weighting approximation.
     """
 
-    FRAME_RATE_HZ = 250   # 4 ms frames
-    F0_MIN_HZ     = 32.7  # C1
-    F0_MAX_HZ     = 2093  # C7
+    FRAME_RATE_HZ = 250  # 4 ms frames
+    F0_MIN_HZ = 32.7  # C1
+    F0_MAX_HZ = 2093  # C7
 
     def __init__(self, sample_rate: int = 44_100) -> None:
         super().__init__()
         self.sample_rate = sample_rate
         self.hop = sample_rate // self.FRAME_RATE_HZ
-        self.frame_len = self.hop * 4   # 4× hop for YIN window
+        self.frame_len = self.hop * 4  # 4× hop for YIN window
 
     @torch.no_grad()
     def forward(self, audio: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -47,8 +47,8 @@ class FeatureExtractor(nn.Module):
         """
         B, T = audio.shape
         n_frames = (T - self.frame_len) // self.hop + 1
-        f0        = torch.zeros(B, n_frames, device=audio.device)
-        loudness  = torch.zeros(B, n_frames, device=audio.device)
+        f0 = torch.zeros(B, n_frames, device=audio.device)
+        loudness = torch.zeros(B, n_frames, device=audio.device)
 
         for b in range(B):
             frames = audio[b].unfold(0, self.frame_len, self.hop)[:n_frames]
@@ -58,7 +58,7 @@ class FeatureExtractor(nn.Module):
 
             # YIN difference function
             for i, frame in enumerate(frames):
-                f  = frame.cpu().numpy()
+                f = frame.cpu().numpy()
                 f0_hz = self._yin(f)
                 if f0_hz and self.F0_MIN_HZ <= f0_hz <= self.F0_MAX_HZ:
                     # Log-normalise F0 to [0, 1]

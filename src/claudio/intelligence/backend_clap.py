@@ -10,6 +10,7 @@ language text prompts — no fixed label set.
 
 Requirements: pip install transformers laion-clap
 """
+
 from __future__ import annotations
 
 import time
@@ -85,6 +86,7 @@ class CLAPBackend(AudioClassifierBackend):
         """Load via HuggingFace transformers pipeline."""
         try:
             from transformers import pipeline
+
             self._pipeline = pipeline(
                 task="zero-shot-audio-classification",
                 model="laion/clap-htsat-unfused",
@@ -99,14 +101,19 @@ class CLAPBackend(AudioClassifierBackend):
     def _load_laion_clap(self) -> None:
         """Load via laion-clap package directly."""
         import laion_clap
+
         self._clap_model = laion_clap.CLAP_Module(
-            enable_fusion=False, amodel="HTSAT-base",
+            enable_fusion=False,
+            amodel="HTSAT-base",
         )
         self._clap_model.load_ckpt()
         print("[CLAP] Loaded via laion-clap (HTSAT-base)")
 
     def classify(
-        self, audio: np.ndarray, sample_rate: int, top_k: int = 5,
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        top_k: int = 5,
     ) -> list[ClassificationResult]:
         if self._pipeline is None and self._clap_model is None:
             self.load_model()
@@ -122,7 +129,8 @@ class CLAPBackend(AudioClassifierBackend):
         if self._pipeline is not None:
             # transformers pipeline — expects a dict or array
             result = self._pipeline(
-                resampled, candidate_labels=prompts,
+                resampled,
+                candidate_labels=prompts,
             )
             latency_ms = (time.perf_counter() - t0) * 1000
 
@@ -131,12 +139,14 @@ class CLAPBackend(AudioClassifierBackend):
                 prompt_idx = prompts.index(item["label"])
                 audioset_label = audioset_labels[prompt_idx]
                 family = map_label_to_family(audioset_label)
-                results.append(ClassificationResult(
-                    label=item["label"],
-                    confidence=float(item["score"]),
-                    family=family,
-                    latency_ms=latency_ms,
-                ))
+                results.append(
+                    ClassificationResult(
+                        label=item["label"],
+                        confidence=float(item["score"]),
+                        family=family,
+                        latency_ms=latency_ms,
+                    )
+                )
             return results
         else:
             # laion-clap direct usage
@@ -163,12 +173,14 @@ class CLAPBackend(AudioClassifierBackend):
             results = []
             for idx in sorted_indices:
                 family = map_label_to_family(audioset_labels[idx])
-                results.append(ClassificationResult(
-                    label=prompts[idx],
-                    confidence=float(probs[idx]),
-                    family=family,
-                    latency_ms=latency_ms,
-                ))
+                results.append(
+                    ClassificationResult(
+                        label=prompts[idx],
+                        confidence=float(probs[idx]),
+                        family=family,
+                        latency_ms=latency_ms,
+                    )
+                )
             return results
 
     @staticmethod

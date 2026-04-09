@@ -13,6 +13,7 @@ dependencies = [
     "websockets>=12.0",
     "torch>=2.2",
     "torchaudio>=2.2",
+    "pyjwt>=2.8",
 ]
 
 [project.urls]

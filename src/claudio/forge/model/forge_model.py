@@ -29,14 +29,14 @@ class ForgeModel(nn.Module):
     def __init__(
         self,
         sample_rate: int = 44_100,
-        n_partials:  int = 64,
-        latent_dim:  int = 128,
-        gru_hidden:  int = 64,
-        gru_layers:  int = 2,
+        n_partials: int = 64,
+        latent_dim: int = 128,
+        gru_hidden: int = 64,
+        gru_layers: int = 2,
     ) -> None:
         super().__init__()
         self.extractor = FeatureExtractor(sample_rate=sample_rate)
-        self.encoder   = GRUEncoder(
+        self.encoder = GRUEncoder(
             input_dim=2,
             hidden_dim=gru_hidden,
             latent_dim=latent_dim,
@@ -49,9 +49,9 @@ class ForgeModel(nn.Module):
         )
 
     def forward(self, audio: torch.Tensor) -> torch.Tensor:
-        f0, loudness   = self.extractor(audio)          # (B, T_f)
-        z              = self.encoder(f0, loudness)      # (B, T_f, latent)
-        audio_out      = self.decoder(z, f0, loudness)   # (B, T_audio)
+        f0, loudness = self.extractor(audio)  # (B, T_f)
+        z = self.encoder(f0, loudness)  # (B, T_f, latent)
+        audio_out = self.decoder(z, f0, loudness)  # (B, T_audio)
 
         # Trim / pad to match input length
         T_in = audio.shape[-1]

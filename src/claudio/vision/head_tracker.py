@@ -17,6 +17,7 @@ no named gestures are being executed.  This is what makes the holographic
 binaural experience feel alive: you turn your head 2 degrees and the acoustic
 field instantly follows.
 """
+
 from __future__ import annotations
 
 import math
@@ -30,27 +31,31 @@ import numpy as np
 @dataclass
 class HeadPose:
     """6DoF head orientation + position estimate."""
+
     timestamp: float
     # Euler angles in degrees (for human-readable logging)
-    yaw:   float   # left/right rotation
-    pitch: float   # up/down rotation
-    roll:  float   # tilt
+    yaw: float  # left/right rotation
+    pitch: float  # up/down rotation
+    roll: float  # tilt
     # Unit quaternion (w, x, y, z)
-    quat:  tuple[float, float, float, float]
+    quat: tuple[float, float, float, float]
     # Normalised translation (0–1 relative to frame)
     tx: float = 0.0
     ty: float = 0.0
 
 
 # 3D model points of key facial landmarks (in mm, generic head model)
-_MODEL_POINTS = np.array([
-    [0.0,       0.0,       0.0],      # Nose tip        (1)
-    [0.0,      -330.0,    -65.0],     # Chin            (152)
-    [-225.0,    170.0,    -135.0],    # Left eye corner (263)
-    [225.0,     170.0,    -135.0],    # Right eye corner(33)
-    [-150.0,   -150.0,    -125.0],    # Left mouth corner(287)
-    [150.0,    -150.0,    -125.0],    # Right mouth corner(57)
-], dtype=np.float64)
+_MODEL_POINTS = np.array(
+    [
+        [0.0, 0.0, 0.0],  # Nose tip        (1)
+        [0.0, -330.0, -65.0],  # Chin            (152)
+        [-225.0, 170.0, -135.0],  # Left eye corner (263)
+        [225.0, 170.0, -135.0],  # Right eye corner(33)
+        [-150.0, -150.0, -125.0],  # Left mouth corner(287)
+        [150.0, -150.0, -125.0],  # Right mouth corner(57)
+    ],
+    dtype=np.float64,
+)
 
 # Matching landmark indices in MediaPipe Face Mesh (468 points)
 _FACE_INDICES = [1, 152, 263, 33, 287, 57]
@@ -59,15 +64,15 @@ _FACE_INDICES = [1, 152, 263, 33, 287, 57]
 def _euler_from_rotation_vector(rvec: np.ndarray) -> tuple[float, float, float]:
     """Convert OpenCV rotation vector to (yaw, pitch, roll) in degrees."""
     rot_mat, _ = _rodrigues(rvec)
-    sy = math.sqrt(rot_mat[0, 0]**2 + rot_mat[1, 0]**2)
+    sy = math.sqrt(rot_mat[0, 0] ** 2 + rot_mat[1, 0] ** 2)
     if sy > 1e-6:
         pitch = math.degrees(math.atan2(-rot_mat[2, 0], sy))
-        yaw   = math.degrees(math.atan2( rot_mat[1, 0], rot_mat[0, 0]))
-        roll  = math.degrees(math.atan2( rot_mat[2, 1], rot_mat[2, 2]))
+        yaw = math.degrees(math.atan2(rot_mat[1, 0], rot_mat[0, 0]))
+        roll = math.degrees(math.atan2(rot_mat[2, 1], rot_mat[2, 2]))
     else:
         pitch = math.degrees(math.atan2(-rot_mat[2, 0], sy))
-        yaw   = 0.0
-        roll  = math.degrees(math.atan2(-rot_mat[1, 2], rot_mat[1, 1]))
+        yaw = 0.0
+        roll = math.degrees(math.atan2(-rot_mat[1, 2], rot_mat[1, 1]))
     return yaw, pitch, roll
 
 
@@ -77,11 +82,13 @@ def _rodrigues(rvec: np.ndarray) -> tuple[np.ndarray, None]:
     if theta < 1e-8:
         return np.eye(3), None
     axis = rvec.flatten() / theta
-    K = np.array([
-        [0,       -axis[2],  axis[1]],
-        [axis[2],  0,       -axis[0]],
-        [-axis[1], axis[0],  0      ],
-    ])
+    K = np.array(
+        [
+            [0, -axis[2], axis[1]],
+            [axis[2], 0, -axis[0]],
+            [-axis[1], axis[0], 0],
+        ]
+    )
     R = np.eye(3) + math.sin(theta) * K + (1 - math.cos(theta)) * K @ K
     return R, None
 
@@ -133,18 +140,19 @@ class SpatialHeadTracker:
         self._fw = frame_width
         self._fh = frame_height
         # Approximate camera intrinsics (no calibration required for this use case)
-        focal   = frame_width
-        cx, cy  = frame_width / 2.0, frame_height / 2.0
-        self._camera_matrix = np.array([
-            [focal, 0,     cx],
-            [0,     focal, cy],
-            [0,     0,     1 ],
-        ], dtype=np.float64)
+        focal = frame_width
+        cx, cy = frame_width / 2.0, frame_height / 2.0
+        self._camera_matrix = np.array(
+            [
+                [focal, 0, cx],
+                [0, focal, cy],
+                [0, 0, 1],
+            ],
+            dtype=np.float64,
+        )
         self._dist_coeffs = np.zeros((4, 1), dtype=np.float64)
         # Lock-free quaternion ring (written by camera thread, read by audio thread)
-        self.quaternion_ring: deque[tuple[float, float, float, float]] = deque(
-            maxlen=self.RING_SIZE
-        )
+        self.quaternion_ring: deque[tuple[float, float, float, float]] = deque(maxlen=self.RING_SIZE)
         self._latest: HeadPose | None = None
 
     def update(self, face_landmarks: np.ndarray) -> HeadPose | None:
@@ -158,11 +166,10 @@ class SpatialHeadTracker:
             return None
 
         # Extract the 6 key landmarks and denormalise to pixel coords
-        image_points = np.array([
-            [face_landmarks[idx, 0] * self._fw,
-             face_landmarks[idx, 1] * self._fh]
-            for idx in _FACE_INDICES
-        ], dtype=np.float64)
+        image_points = np.array(
+            [[face_landmarks[idx, 0] * self._fw, face_landmarks[idx, 1] * self._fh] for idx in _FACE_INDICES],
+            dtype=np.float64,
+        )
 
         # solvePnP — pure-numpy iterative solver (no OpenCV dependency)
         rvec, tvec = self._solve_pnp(image_points)
@@ -171,11 +178,13 @@ class SpatialHeadTracker:
 
         yaw, pitch, roll = _euler_from_rotation_vector(rvec)
         R, _ = _rodrigues(rvec)
-        quat  = _rotation_matrix_to_quaternion(R)
+        quat = _rotation_matrix_to_quaternion(R)
 
         pose = HeadPose(
             timestamp=time.perf_counter(),
-            yaw=yaw, pitch=pitch, roll=roll,
+            yaw=yaw,
+            pitch=pitch,
+            roll=roll,
             quat=quat,
             tx=float(tvec[0] / self._fw),
             ty=float(tvec[1] / self._fh),
@@ -192,9 +201,7 @@ class SpatialHeadTracker:
             return self.quaternion_ring[-1]
         return (1.0, 0.0, 0.0, 0.0)  # identity
 
-    def _solve_pnp(
-        self, image_points: np.ndarray
-    ) -> tuple[np.ndarray | None, np.ndarray | None]:
+    def _solve_pnp(self, image_points: np.ndarray) -> tuple[np.ndarray | None, np.ndarray | None]:
         """
         Minimal iterative PnP solver using DLT initialisation.
         Returns (rvec, tvec) or (None, None) on failure.
@@ -204,41 +211,67 @@ class SpatialHeadTracker:
             n = len(_MODEL_POINTS)
             A = []
             for i in range(n):
-                X, Y, Z    = _MODEL_POINTS[i]
-                u, v        = image_points[i]
+                X, Y, Z = _MODEL_POINTS[i]
+                u, v = image_points[i]
                 fx = self._camera_matrix[0, 0]
                 fy = self._camera_matrix[1, 1]
                 cx = self._camera_matrix[0, 2]
                 cy = self._camera_matrix[1, 2]
-                A.append([X, Y, Z, 1, 0, 0, 0, 0,
-                           -((u - cx)/fx)*X, -((u - cx)/fx)*Y,
-                           -((u - cx)/fx)*Z, -((u - cx)/fx)])
-                A.append([0, 0, 0, 0, X, Y, Z, 1,
-                           -((v - cy)/fy)*X, -((v - cy)/fy)*Y,
-                           -((v - cy)/fy)*Z, -((v - cy)/fy)])
-            A_mat     = np.array(A, dtype=np.float64)
-            _, _, Vt  = np.linalg.svd(A_mat)
-            P         = Vt[-1].reshape(3, 4)
-            R_est     = P[:, :3]
+                A.append(
+                    [
+                        X,
+                        Y,
+                        Z,
+                        1,
+                        0,
+                        0,
+                        0,
+                        0,
+                        -((u - cx) / fx) * X,
+                        -((u - cx) / fx) * Y,
+                        -((u - cx) / fx) * Z,
+                        -((u - cx) / fx),
+                    ]
+                )
+                A.append(
+                    [
+                        0,
+                        0,
+                        0,
+                        0,
+                        X,
+                        Y,
+                        Z,
+                        1,
+                        -((v - cy) / fy) * X,
+                        -((v - cy) / fy) * Y,
+                        -((v - cy) / fy) * Z,
+                        -((v - cy) / fy),
+                    ]
+                )
+            A_mat = np.array(A, dtype=np.float64)
+            _, _, Vt = np.linalg.svd(A_mat)
+            P = Vt[-1].reshape(3, 4)
+            R_est = P[:, :3]
             # Orthogonalise via SVD
             U, _, Vt2 = np.linalg.svd(R_est)
-            R_orth    = U @ Vt2
+            R_orth = U @ Vt2
             if np.linalg.det(R_orth) < 0:
                 U[:, 2] *= -1
-                R_orth  = U @ Vt2
+                R_orth = U @ Vt2
             tvec = P[:, 3] / (np.linalg.norm(R_est[:, 0]) + 1e-8)
             # Rotation matrix to axis-angle
-            theta     = math.acos(
-                max(-1.0, min(1.0, (np.trace(R_orth) - 1) / 2))
-            )
+            theta = math.acos(max(-1.0, min(1.0, (np.trace(R_orth) - 1) / 2)))
             if abs(theta) < 1e-8:
                 rvec = np.zeros((3, 1))
             else:
-                axis = np.array([
-                    R_orth[2, 1] - R_orth[1, 2],
-                    R_orth[0, 2] - R_orth[2, 0],
-                    R_orth[1, 0] - R_orth[0, 1],
-                ]) / (2 * math.sin(theta))
+                axis = np.array(
+                    [
+                        R_orth[2, 1] - R_orth[1, 2],
+                        R_orth[0, 2] - R_orth[2, 0],
+                        R_orth[1, 0] - R_orth[0, 1],
+                    ]
+                ) / (2 * math.sin(theta))
                 rvec = (theta * axis).reshape(3, 1)
             return rvec, tvec.reshape(3, 1)
         except (np.linalg.LinAlgError, ValueError):

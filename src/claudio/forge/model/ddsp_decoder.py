@@ -34,55 +34,58 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-N_PARTIALS    = 64
+N_PARTIALS = 64
 N_FILTER_BINS = 256
-SAMPLE_RATE   = 44_100
-FRAME_RATE    = 250    # Hz
-HOP_SIZE      = SAMPLE_RATE // FRAME_RATE
+SAMPLE_RATE = 44_100
+FRAME_RATE = 250  # Hz
+HOP_SIZE = SAMPLE_RATE // FRAME_RATE
 
 
 class DDSPDecoder(nn.Module):
-
     def __init__(
         self,
-        latent_dim:    int = 128,
-        n_partials:    int = N_PARTIALS,
+        latent_dim: int = 128,
+        n_partials: int = N_PARTIALS,
         n_filter_bins: int = N_FILTER_BINS,
-        sample_rate:   int = SAMPLE_RATE,
-        frame_rate:    int = FRAME_RATE,
+        sample_rate: int = SAMPLE_RATE,
+        frame_rate: int = FRAME_RATE,
     ) -> None:
         super().__init__()
-        self.n_partials    = n_partials
+        self.n_partials = n_partials
         self.n_filter_bins = n_filter_bins
-        self.sample_rate   = sample_rate
-        self.hop           = sample_rate // frame_rate
+        self.sample_rate = sample_rate
+        self.hop = sample_rate // frame_rate
 
         # MLP heads
         self.partial_head = nn.Sequential(
-            nn.Linear(latent_dim, 256), nn.ReLU(),
-            nn.Linear(256, n_partials), nn.Sigmoid(),
+            nn.Linear(latent_dim, 256),
+            nn.ReLU(),
+            nn.Linear(256, n_partials),
+            nn.Sigmoid(),
         )
         self.noise_head = nn.Sequential(
-            nn.Linear(latent_dim, 256), nn.ReLU(),
-            nn.Linear(256, n_filter_bins), nn.Sigmoid(),
+            nn.Linear(latent_dim, 256),
+            nn.ReLU(),
+            nn.Linear(256, n_filter_bins),
+            nn.Sigmoid(),
         )
 
     def forward(
         self,
-        z:            torch.Tensor,   # (B, T, latent_dim)
-        f0_norm:      torch.Tensor,   # (B, T) in [0, 1]
-        loudness:     torch.Tensor,   # (B, T) in [0, 1]
+        z: torch.Tensor,  # (B, T, latent_dim)
+        f0_norm: torch.Tensor,  # (B, T) in [0, 1]
+        loudness: torch.Tensor,  # (B, T) in [0, 1]
     ) -> torch.Tensor:
         B, T, _ = z.shape
 
         # Decode amplitudes + filter
-        amp    = self.partial_head(z)          # (B, T, N_partials)
-        n_mags = self.noise_head(z)            # (B, T, N_filter_bins)
+        amp = self.partial_head(z)  # (B, T, N_partials)
+        n_mags = self.noise_head(z)  # (B, T, N_filter_bins)
 
         # Recover F0 in Hz from log-normalised encoding
         lo = math.log2(32.7)
         hi = math.log2(2093.0)
-        f0_hz = 2.0 ** (f0_norm * (hi - lo) + lo)   # (B, T)
+        f0_hz = 2.0 ** (f0_norm * (hi - lo) + lo)  # (B, T)
 
         # Build harmonic audio
         audio_harm = self._harmonic_synth(amp, f0_hz, B, T)
@@ -93,9 +96,11 @@ class DDSPDecoder(nn.Module):
         # Upsample loudness envelope (B, T) → (B, T_audio)
         T_audio = T * self.hop
         env = F.interpolate(
-            loudness.unsqueeze(1),         # (B, 1, T)
-            size=T_audio, mode="linear", align_corners=False,
-        ).squeeze(1)                        # (B, T_audio)
+            loudness.unsqueeze(1),  # (B, 1, T)
+            size=T_audio,
+            mode="linear",
+            align_corners=False,
+        ).squeeze(1)  # (B, T_audio)
 
         # Ensure all components match T_audio (rounding can cause ±1 mismatch)
         audio_harm = audio_harm[..., :T_audio]
@@ -111,13 +116,13 @@ class DDSPDecoder(nn.Module):
 
     def _harmonic_synth(
         self,
-        amp:   torch.Tensor,   # (B, T, N_partials)
-        f0_hz: torch.Tensor,   # (B, T)
+        amp: torch.Tensor,  # (B, T, N_partials)
+        f0_hz: torch.Tensor,  # (B, T)
         B: int,
         T: int,
     ) -> torch.Tensor:
         T_audio = T * self.hop
-        device  = amp.device
+        device = amp.device
 
         # Partial frequencies: each row multiplied by [1, 2, ..., N]
         partials_idx = torch.arange(1, self.n_partials + 1, device=device).float()
@@ -127,32 +132,37 @@ class DDSPDecoder(nn.Module):
 
         # Upsample amplitude envelopes: (B, T, N) → (B, N, T_audio)
         amp_up = F.interpolate(
-            amp.permute(0, 2, 1),       # (B, N, T)
-            size=T_audio, mode="linear", align_corners=False,
+            amp.permute(0, 2, 1),  # (B, N, T)
+            size=T_audio,
+            mode="linear",
+            align_corners=False,
         )  # (B, N, T_audio)
 
         # Upsample & integrate instantaneous frequency → phase
         freq_up = F.interpolate(
-            freq_hz.permute(0, 2, 1),   # (B, N, T)
-            size=T_audio, mode="linear", align_corners=False,
+            freq_hz.permute(0, 2, 1),  # (B, N, T)
+            size=T_audio,
+            mode="linear",
+            align_corners=False,
         )  # (B, N, T_audio)
         phase = torch.cumsum(freq_up / self.sample_rate, dim=-1) * 2 * math.pi
 
         mask_up = F.interpolate(
             mask.permute(0, 2, 1).float(),
-            size=T_audio, mode="nearest",
+            size=T_audio,
+            mode="nearest",
         )
-        sinusoids = torch.sin(phase) * amp_up * mask_up   # (B, N, T_audio)
-        return sinusoids.sum(dim=1)   # (B, T_audio)
+        sinusoids = torch.sin(phase) * amp_up * mask_up  # (B, N, T_audio)
+        return sinusoids.sum(dim=1)  # (B, T_audio)
 
     def _filtered_noise(
         self,
-        n_mags: torch.Tensor,   # (B, T, N_filter_bins)
+        n_mags: torch.Tensor,  # (B, T, N_filter_bins)
         B: int,
         T: int,
     ) -> torch.Tensor:
         T_audio = T * self.hop
-        device  = n_mags.device
+        device = n_mags.device
 
         # White noise
         noise = torch.randn(B, T_audio, device=device)
@@ -160,11 +170,13 @@ class DDSPDecoder(nn.Module):
         # Convert magnitude spectrum → FIR filter via IFFT
         # Use frame-averaged magnitude per batch item
         mags_up = F.interpolate(
-            n_mags.permute(0, 2, 1),    # (B, N_bins, T)
-            size=T_audio, mode="linear", align_corners=False,
+            n_mags.permute(0, 2, 1),  # (B, N_bins, T)
+            size=T_audio,
+            mode="linear",
+            align_corners=False,
         )  # (B, N_bins, T_audio)
 
-        mean_mags = mags_up.mean(-1)   # (B, N_bins)
+        mean_mags = mags_up.mean(-1)  # (B, N_bins)
 
         # FFT-based filtering: multiply in frequency domain
         fft_n = max(T_audio, self.n_filter_bins * 2)
@@ -173,13 +185,14 @@ class DDSPDecoder(nn.Module):
         # Build frequency-domain filter — vectorized across batch
         n_freq_bins = noise_fft.shape[-1]
         filt = F.interpolate(
-            mean_mags.unsqueeze(1),      # (B, 1, N_filter_bins)
-            size=n_freq_bins, mode="linear", align_corners=False,
-        ).squeeze(1)                     # (B, n_freq_bins)
+            mean_mags.unsqueeze(1),  # (B, 1, N_filter_bins)
+            size=n_freq_bins,
+            mode="linear",
+            align_corners=False,
+        ).squeeze(1)  # (B, n_freq_bins)
 
         # Apply filter in frequency domain
         filtered_fft = noise_fft * filt
         noise_filtered = torch.fft.irfft(filtered_fft, n=fft_n)[:, :T_audio]
 
-        return noise_filtered * 0.1   # scale noise contribution
-
+        return noise_filtered * 0.1  # scale noise contribution

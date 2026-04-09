@@ -7,6 +7,7 @@ coefficient, and odd/even partial ratio.
 
 Extracted from instrument_classifier.py for single-responsibility compliance.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -17,11 +18,12 @@ import numpy as np
 @dataclass
 class HarmonicProfile:
     """Partial series analysis — identifies instrument via overtone structure."""
+
     fundamental_hz: float
     n_partials: int
-    partial_amplitudes: np.ndarray         # relative amplitude of each partial
-    inharmonicity_coefficient: float       # 0=perfect harmonic, >0=stiff string (piano/bell)
-    odd_even_ratio: float                  # >1 = odd-dominant (clarinet/square), <1 = even-dominant
+    partial_amplitudes: np.ndarray  # relative amplitude of each partial
+    inharmonicity_coefficient: float  # 0=perfect harmonic, >0=stiff string (piano/bell)
+    odd_even_ratio: float  # >1 = odd-dominant (clarinet/square), <1 = even-dominant
 
 
 class HarmonicProfiler:
@@ -36,20 +38,22 @@ class HarmonicProfiler:
             audio = np.pad(audio, (0, self._n_fft - len(audio)))
 
         window = np.hanning(self._n_fft)
-        spectrum = np.abs(np.fft.rfft(audio[:self._n_fft] * window))
+        spectrum = np.abs(np.fft.rfft(audio[: self._n_fft] * window))
         freqs = np.fft.rfftfreq(self._n_fft, d=1.0 / self._sr)
 
         # Find fundamental via autocorrelation (YIN-lite)
         if fundamental_hint <= 0:
-            f0 = self._estimate_f0(audio[:self._n_fft])
+            f0 = self._estimate_f0(audio[: self._n_fft])
         else:
             f0 = fundamental_hint
 
         if f0 < 20:
             return HarmonicProfile(
-                fundamental_hz=0, n_partials=0,
+                fundamental_hz=0,
+                n_partials=0,
                 partial_amplitudes=np.array([]),
-                inharmonicity_coefficient=0, odd_even_ratio=1.0,
+                inharmonicity_coefficient=0,
+                odd_even_ratio=1.0,
             )
 
         # Extract partial amplitudes
@@ -98,7 +102,7 @@ class HarmonicProfiler:
 
     def _estimate_f0(self, audio: np.ndarray) -> float:
         """YIN-lite pitch estimation."""
-        max_lag = int(self._sr / 60)   # 60 Hz minimum
+        max_lag = int(self._sr / 60)  # 60 Hz minimum
         min_lag = int(self._sr / 4000)  # 4kHz maximum
         if max_lag >= len(audio) // 2:
             max_lag = len(audio) // 2 - 1
@@ -106,9 +110,9 @@ class HarmonicProfiler:
         # Difference function
         d = np.zeros(max_lag)
         for tau in range(min_lag, max_lag):
-            diff = audio[:len(audio) - tau] - audio[tau:2 * (len(audio) - tau) // 2 + tau]
+            diff = audio[: len(audio) - tau] - audio[tau : 2 * (len(audio) - tau) // 2 + tau]
             if len(diff) > 0:
-                d[tau] = np.sum(diff[:len(audio) - max_lag] ** 2)
+                d[tau] = np.sum(diff[: len(audio) - max_lag] ** 2)
 
         # Cumulative mean normalized difference
         d_prime = np.ones(max_lag)

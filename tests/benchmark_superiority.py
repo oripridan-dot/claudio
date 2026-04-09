@@ -18,6 +18,7 @@ Test methodology:
 Audio sources: Algorithmically synthesised reference signals —
 these are the same signal types used by AES/EBU/ISO test suites.
 """
+
 from __future__ import annotations
 
 import json
@@ -43,9 +44,11 @@ from claudio.signal_flow_metrics import measure_phase_coherence, measure_thdn
 # Data Structures
 # ═══════════════════════════════════════════════════════════════════════
 
+
 @dataclass
 class AudioSample:
     """Reference audio sample with metadata."""
+
     name: str
     category: str
     sample_rate: int
@@ -57,17 +60,18 @@ class AudioSample:
 @dataclass
 class SampleResult:
     """Quality metrics from processing one sample."""
+
     name: str
     category: str
     sample_rate: int
     duration_s: float
     # Fidelity
-    processing_snr_db: float    # noise introduced by pipeline
-    thdn_percent: float         # only valid for pure tones
-    phase_coherence: float      # stereo correlation
+    processing_snr_db: float  # noise introduced by pipeline
+    thdn_percent: float  # only valid for pure tones
+    phase_coherence: float  # stereo correlation
     spectral_preservation: float  # correlation of magnitude spectra
     # Spatial
-    ild_db: float               # measured ILD
+    ild_db: float  # measured ILD
     # Performance
     avg_render_us: float
     peak_render_us: float
@@ -79,6 +83,7 @@ class SampleResult:
 @dataclass
 class SpatialPoint:
     """Spatial accuracy at one measurement point."""
+
     azimuth: float
     elevation: float
     itd_measured_us: float
@@ -93,6 +98,7 @@ class SpatialPoint:
 # Reference Signal Generation
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def _sine(freq: float, dur: float, sr: int, amp: float = 0.85) -> np.ndarray:
     t = np.arange(int(sr * dur), dtype=np.float64) / sr
     return (np.sin(2 * np.pi * freq * t) * amp).astype(np.float32)
@@ -101,8 +107,7 @@ def _sine(freq: float, dur: float, sr: int, amp: float = 0.85) -> np.ndarray:
 def _sweep(f1: float, f2: float, dur: float, sr: int) -> np.ndarray:
     n = int(sr * dur)
     t = np.arange(n, dtype=np.float64) / sr
-    phase = 2 * np.pi * f1 * dur / np.log(f2 / f1) * (
-        np.exp(t / dur * np.log(f2 / f1)) - 1)
+    phase = 2 * np.pi * f1 * dur / np.log(f2 / f1) * (np.exp(t / dur * np.log(f2 / f1)) - 1)
     return (np.sin(phase) * 0.9).astype(np.float32)
 
 
@@ -154,7 +159,7 @@ def _pink_noise(dur: float, sr: int) -> np.ndarray:
     # Approximate pink noise via stacking octave-band noise
     pink = np.zeros(n, dtype=np.float64)
     for octave in range(10):
-        step = 2 ** octave
+        step = 2**octave
         band = rng.normal(0, 1, n // step + 1)
         pink += np.repeat(band, step)[:n] / math.sqrt(step)
     mx = np.max(np.abs(pink))
@@ -166,43 +171,49 @@ def generate_samples() -> list[AudioSample]:
     sr = 48_000
     samples = [
         # EBU SQAM sweeps
-        AudioSample("sweep_48k", "sweep", sr, _sweep(20, 20000, 0.5, sr),
-                     "EBU SQAM log sweep 20Hz-20kHz", "EBU SQAM 3253"),
-        AudioSample("sweep_192k", "sweep", 192_000,
-                     _sweep(20, 80000, 0.5, 192_000),
-                     "Log sweep 20Hz-80kHz at 192kHz", "EBU SQAM 3253"),
+        AudioSample(
+            "sweep_48k", "sweep", sr, _sweep(20, 20000, 0.5, sr), "EBU SQAM log sweep 20Hz-20kHz", "EBU SQAM 3253"
+        ),
+        AudioSample(
+            "sweep_192k",
+            "sweep",
+            192_000,
+            _sweep(20, 80000, 0.5, 192_000),
+            "Log sweep 20Hz-80kHz at 192kHz",
+            "EBU SQAM 3253",
+        ),
         # ITU calibration tones (short — for THD+N)
-        AudioSample("tone_440", "tone", sr, _sine(440, 0.5, sr),
-                     "ITU-R BS.1770 A4 calibration", "ITU-R BS.1770"),
-        AudioSample("tone_1k", "tone", sr, _sine(1000, 0.5, sr),
-                     "ITU-R BS.1770 1kHz", "ITU-R BS.1770"),
-        AudioSample("tone_4k", "tone", sr, _sine(4000, 0.5, sr),
-                     "ITU-R BS.1770 4kHz", "ITU-R BS.1770"),
-        AudioSample("tone_10k", "tone", sr, _sine(10000, 0.5, sr),
-                     "ITU-R BS.1770 10kHz", "ITU-R BS.1770"),
+        AudioSample("tone_440", "tone", sr, _sine(440, 0.5, sr), "ITU-R BS.1770 A4 calibration", "ITU-R BS.1770"),
+        AudioSample("tone_1k", "tone", sr, _sine(1000, 0.5, sr), "ITU-R BS.1770 1kHz", "ITU-R BS.1770"),
+        AudioSample("tone_4k", "tone", sr, _sine(4000, 0.5, sr), "ITU-R BS.1770 4kHz", "ITU-R BS.1770"),
+        AudioSample("tone_10k", "tone", sr, _sine(10000, 0.5, sr), "ITU-R BS.1770 10kHz", "ITU-R BS.1770"),
         # Instruments
-        AudioSample("guitar_E2", "instrument", sr, _guitar_ks(82.41, 0.5, sr),
-                     "Karplus-Strong guitar E2", "Karplus-Strong 1983"),
-        AudioSample("guitar_A2", "instrument", sr, _guitar_ks(110.0, 0.5, sr),
-                     "Karplus-Strong guitar A2", "Karplus-Strong 1983"),
-        AudioSample("piano_C4", "instrument", sr, _piano(261.63, 0.5, sr),
-                     "Additive piano C4", "Fletcher-Rossing model"),
-        AudioSample("piano_A4", "instrument", sr, _piano(440.0, 0.5, sr),
-                     "Additive piano A4", "Fletcher-Rossing model"),
-        AudioSample("drums", "instrument", sr, _drums(0.5, sr),
-                     "Kick + snare composite", "Risset-style synthesis"),
+        AudioSample(
+            "guitar_E2", "instrument", sr, _guitar_ks(82.41, 0.5, sr), "Karplus-Strong guitar E2", "Karplus-Strong 1983"
+        ),
+        AudioSample(
+            "guitar_A2", "instrument", sr, _guitar_ks(110.0, 0.5, sr), "Karplus-Strong guitar A2", "Karplus-Strong 1983"
+        ),
+        AudioSample(
+            "piano_C4", "instrument", sr, _piano(261.63, 0.5, sr), "Additive piano C4", "Fletcher-Rossing model"
+        ),
+        AudioSample(
+            "piano_A4", "instrument", sr, _piano(440.0, 0.5, sr), "Additive piano A4", "Fletcher-Rossing model"
+        ),
+        AudioSample("drums", "instrument", sr, _drums(0.5, sr), "Kick + snare composite", "Risset-style synthesis"),
         # ISO impulse
-        AudioSample("impulse", "impulse", sr,
-                     np.concatenate([np.array([1.0], dtype=np.float32),
-                                     np.zeros(sr // 4, dtype=np.float32)]),
-                     "Dirac impulse", "ISO 3382-1:2009"),
+        AudioSample(
+            "impulse",
+            "impulse",
+            sr,
+            np.concatenate([np.array([1.0], dtype=np.float32), np.zeros(sr // 4, dtype=np.float32)]),
+            "Dirac impulse",
+            "ISO 3382-1:2009",
+        ),
         # Pink noise
-        AudioSample("pink_noise", "noise", sr, _pink_noise(0.5, sr),
-                     "IEC 61672 pink noise", "IEC 61672-1:2013"),
+        AudioSample("pink_noise", "noise", sr, _pink_noise(0.5, sr), "IEC 61672 pink noise", "IEC 61672-1:2013"),
         # Multi-instrument mix
-        AudioSample("mix", "composite", sr,
-                     _make_mix(0.5, sr),
-                     "Bass + melody + hi-hat mix", "Claudio benchmark"),
+        AudioSample("mix", "composite", sr, _make_mix(0.5, sr), "Bass + melody + hi-hat mix", "Claudio benchmark"),
     ]
     return samples
 
@@ -222,7 +233,7 @@ def _make_mix(dur: float, sr: int) -> np.ndarray:
         pos = int(beat * n / 4)
         length = min(600, n - pos)
         hat_t = np.arange(length, dtype=np.float64) / sr
-        mix[pos:pos+length] += 0.12 * rng.normal(0, 1, length) * np.exp(-hat_t * 50)
+        mix[pos : pos + length] += 0.12 * rng.normal(0, 1, length) * np.exp(-hat_t * 50)
     mx = np.max(np.abs(mix))
     return (mix / (mx + 1e-10) * 0.85).astype(np.float32)
 
@@ -231,8 +242,11 @@ def _make_mix(dur: float, sr: int) -> np.ndarray:
 # Measurement Functions
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def measure_processing_snr(
-    original: np.ndarray, processed: np.ndarray, sample_rate: int,
+    original: np.ndarray,
+    processed: np.ndarray,
+    sample_rate: int,
 ) -> float:
     """
     Measure SNR of processing noise introduced by the HRTF pipeline.
@@ -252,8 +266,8 @@ def measure_processing_snr(
     # Scale reference to best-fit the signal
     scale = np.dot(sig, ref) / (np.dot(ref, ref) + 1e-30)
     noise = sig - scale * ref
-    sig_power = np.mean(sig ** 2) + 1e-30
-    noise_power = np.mean(noise ** 2) + 1e-30
+    sig_power = np.mean(sig**2) + 1e-30
+    noise_power = np.mean(noise**2) + 1e-30
     return 10 * math.log10(sig_power / noise_power)
 
 
@@ -339,20 +353,25 @@ def brown_duda_ild(az_deg: float) -> float:
 # Benchmark Engine
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def process_through_pipeline(
-    audio: np.ndarray, config: SignalFlowConfig,
-    azimuth: float = 0.0, elevation: float = 0.0,
+    audio: np.ndarray,
+    config: SignalFlowConfig,
+    azimuth: float = 0.0,
+    elevation: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray, list[float]]:
     """Process audio through Claudio HRTF and return (left, right, render_times)."""
     engine = HRTFBinauralEngine(config=config)
     block = config.fft_size
     az_rad = math.radians(azimuth)
     el_rad = math.radians(elevation)
-    pos = np.array([
-        2.0 * math.sin(az_rad) * math.cos(el_rad),
-        2.0 * math.sin(el_rad),
-        -2.0 * math.cos(az_rad) * math.cos(el_rad),
-    ])
+    pos = np.array(
+        [
+            2.0 * math.sin(az_rad) * math.cos(el_rad),
+            2.0 * math.sin(el_rad),
+            -2.0 * math.cos(az_rad) * math.cos(el_rad),
+        ]
+    )
     src = AudioSource(source_id="b", position=pos)
     engine.add_source(src)
 
@@ -368,7 +387,7 @@ def process_through_pipeline(
     out_l, out_r = [], []
 
     for b in range(n_blocks):
-        chunk = data[b * block:(b + 1) * block]
+        chunk = data[b * block : (b + 1) * block]
         if len(chunk) < block:
             chunk = np.pad(chunk, (0, block - len(chunk)))
         frame = engine.render({"b": chunk})
@@ -452,13 +471,18 @@ def spatial_sweep(config: SignalFlowConfig) -> list[SpatialPoint]:
             az_snap = round(az / grid_res) * grid_res
             itd_e_snap = woodworth_itd(az_snap) * abs(math.cos(math.radians(el)))
 
-            results.append(SpatialPoint(
-                azimuth=float(az), elevation=float(el),
-                itd_measured_us=itd_m, itd_expected_us=itd_e,
-                itd_error_us=abs(itd_m - itd_e_snap),
-                ild_measured_db=ild_m, ild_expected_db=ild_e,
-                ild_error_db=abs(ild_m - ild_e),
-            ))
+            results.append(
+                SpatialPoint(
+                    azimuth=float(az),
+                    elevation=float(el),
+                    itd_measured_us=itd_m,
+                    itd_expected_us=itd_e,
+                    itd_error_us=abs(itd_m - itd_e_snap),
+                    ild_measured_db=ild_m,
+                    ild_expected_db=ild_e,
+                    ild_error_db=abs(ild_m - ild_e),
+                )
+            )
     return results
 
 
@@ -518,6 +542,7 @@ COMPETITORS = {
 # Scoring Engine
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def score(
     results: list[SampleResult],
     spatial: list[SpatialPoint],
@@ -546,7 +571,8 @@ def score(
     avg_snr = float(np.mean(snr_vals))
     # Capped scoring: >80dB = 100 (32-bit float achieves ~140dB theoretical)
     s["processing_snr"] = {
-        "value": round(avg_snr, 1), "unit": "dB",
+        "value": round(avg_snr, 1),
+        "unit": "dB",
         "score": round(min(100, max(0, avg_snr / 80 * 100)), 1),
         "weight": 0.10,
     }
@@ -560,7 +586,8 @@ def score(
     # Scale: 100% → 0 score, 0% → 100 score, generous curve
     thdn_score = max(0, min(100, 100 - avg_thdn * 0.8))
     s["spectral_transparency"] = {
-        "value": round(avg_thdn, 1), "unit": "% THD+N",
+        "value": round(avg_thdn, 1),
+        "unit": "% THD+N",
         "score": round(thdn_score, 1),
         "weight": 0.06,
     }
@@ -568,7 +595,8 @@ def score(
     # ── 3. Phase Coherence ────────────────────────────────────────
     avg_coh = float(np.mean([r.phase_coherence for r in results]))
     s["phase_coherence"] = {
-        "value": round(avg_coh, 4), "unit": "",
+        "value": round(avg_coh, 4),
+        "unit": "",
         "score": round(min(100, max(0, (avg_coh - 0.3) / 0.7 * 100)), 1),
         "weight": 0.06,
     }
@@ -576,7 +604,8 @@ def score(
     # ── 4. Spectral Preservation (log-magnitude correlation) ──────
     avg_spec = float(np.mean([r.spectral_preservation for r in results]))
     s["spectral_preservation"] = {
-        "value": round(avg_spec, 4), "unit": "",
+        "value": round(avg_spec, 4),
+        "unit": "",
         "score": round(min(100, max(0, avg_spec * 100)), 1),
         "weight": 0.08,
     }
@@ -593,7 +622,8 @@ def score(
             correct_direction += 1
     dir_accuracy = correct_direction / max(1, len(lateral_points)) * 100
     s["direction_accuracy"] = {
-        "value": round(dir_accuracy, 1), "unit": "%",
+        "value": round(dir_accuracy, 1),
+        "unit": "%",
         "score": round(dir_accuracy, 1),
         "weight": 0.10,
     }
@@ -602,7 +632,8 @@ def score(
     avg_ild_err = float(np.mean([p.ild_error_db for p in spatial]))
     # Scale: 0dB error = 100, 8dB error = 0
     s["ild_accuracy"] = {
-        "value": round(avg_ild_err, 2), "unit": "dB error",
+        "value": round(avg_ild_err, 2),
+        "unit": "dB error",
         "score": round(min(100, max(0, (8 - avg_ild_err) / 8 * 100)), 1),
         "weight": 0.10,
     }
@@ -611,7 +642,8 @@ def score(
     avg_lat = float(np.mean([r.pipeline_latency_ms for r in results]))
     # Scale: 0ms = 100, 50ms = 0. Claudio's 3.5ms is exceptional.
     s["latency"] = {
-        "value": round(avg_lat, 2), "unit": "ms",
+        "value": round(avg_lat, 2),
+        "unit": "ms",
         "score": round(min(100, max(0, (50 - avg_lat) / 50 * 100)), 1),
         "weight": 0.15,
     }
@@ -621,7 +653,8 @@ def score(
     # Scale: 1× = 50, 20× = 100
     rtf_score = min(100, max(0, 50 + (avg_rtf - 1) / 19 * 50))
     s["realtime_factor"] = {
-        "value": round(avg_rtf, 1), "unit": "×",
+        "value": round(avg_rtf, 1),
+        "unit": "×",
         "score": round(rtf_score, 1),
         "weight": 0.12,
     }
@@ -631,7 +664,8 @@ def score(
     rate_ratio = config.render_sample_rate / 48_000
     rate_score = min(100, rate_ratio * 25)  # 4× = 100
     s["render_rate"] = {
-        "value": config.render_sample_rate, "unit": "Hz",
+        "value": config.render_sample_rate,
+        "unit": "Hz",
         "score": round(rate_score, 1),
         "weight": 0.10,
     }
@@ -657,7 +691,8 @@ def score(
     total_comp = total_advantages + total_disadvantages
     comp_ratio = total_advantages / max(1, total_comp) * 100
     s["competitor_ratio"] = {
-        "value": f"{total_advantages}/{total_comp}", "unit": "wins",
+        "value": f"{total_advantages}/{total_comp}",
+        "unit": "wins",
         "score": round(comp_ratio, 1),
         "weight": 0.13,
     }
@@ -671,6 +706,7 @@ def score(
 # Main Runner
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def run() -> dict:
     """Execute full benchmark and return report dict."""
     BAR = "═" * 72
@@ -680,10 +716,12 @@ def run() -> dict:
     print(BAR)
 
     config = balanced_config()
-    print(f"\n⚙  Config: render@{config.render_sample_rate/1000:.0f}kHz | "
-          f"FFT={config.fft_size} | HRIR={config.hrir_length} | "
-          f"{config.hrtf_interpolation.value} interp | "
-          f"{config.convolution_strategy.value}")
+    print(
+        f"\n⚙  Config: render@{config.render_sample_rate / 1000:.0f}kHz | "
+        f"FFT={config.fft_size} | HRIR={config.hrir_length} | "
+        f"{config.hrtf_interpolation.value} interp | "
+        f"{config.convolution_strategy.value}"
+    )
 
     # ── 1. Generate samples ──────────────────────────────────────────
     print("\n▶ STEP 1: Generating reference audio...")
@@ -694,8 +732,7 @@ def run() -> dict:
     print(f"  {len(samples)} samples ({total_dur:.1f}s audio) generated in {gen_time:.1f}s")
     for s in samples:
         dur = len(s.data) / s.sample_rate
-        print(f"    • {s.name:18s} {s.category:12s} {s.sample_rate/1000:.0f}kHz "
-              f"{dur:.1f}s  [{s.source}]")
+        print(f"    • {s.name:18s} {s.category:12s} {s.sample_rate / 1000:.0f}kHz {dur:.1f}s  [{s.source}]")
 
     # ── 2. Process through pipeline ──────────────────────────────────
     print("\n▶ STEP 2: Processing through Claudio HRTF pipeline...")
@@ -707,12 +744,14 @@ def run() -> dict:
         r = benchmark_sample(sample, config, float(az), float(el))
         results.append(r)
         thdn_str = f"{r.thdn_percent:5.2f}%" if r.thdn_percent >= 0 else "  N/A"
-        print(f"  ✅ {r.name:18s}  SNR={r.processing_snr_db:5.1f}dB  "
-              f"THD+N={thdn_str}  "
-              f"Spec={r.spectral_preservation:.3f}  "
-              f"Coh={r.phase_coherence:.3f}  "
-              f"Render={r.avg_render_us:5.0f}µs  "
-              f"RTF={r.real_time_factor:.0f}×")
+        print(
+            f"  ✅ {r.name:18s}  SNR={r.processing_snr_db:5.1f}dB  "
+            f"THD+N={thdn_str}  "
+            f"Spec={r.spectral_preservation:.3f}  "
+            f"Coh={r.phase_coherence:.3f}  "
+            f"Render={r.avg_render_us:5.0f}µs  "
+            f"RTF={r.real_time_factor:.0f}×"
+        )
     proc_time = time.perf_counter() - t0
     print(f"  Processed in {proc_time:.1f}s")
 
@@ -742,23 +781,19 @@ def run() -> dict:
             factor = config.render_sample_rate / spec["render_rate_hz"]
             advantages.append(
                 f"{factor:.0f}× higher render rate "
-                f"({config.render_sample_rate//1000}kHz vs "
-                f"{spec['render_rate_hz']//1000}kHz)"
+                f"({config.render_sample_rate // 1000}kHz vs "
+                f"{spec['render_rate_hz'] // 1000}kHz)"
             )
 
         # Latency
         if avg_lat < spec["pipeline_latency_ms"]:
             delta = spec["pipeline_latency_ms"] - avg_lat
-            advantages.append(
-                f"{delta:.1f}ms lower latency "
-                f"({avg_lat:.1f}ms vs {spec['pipeline_latency_ms']}ms)"
-            )
+            advantages.append(f"{delta:.1f}ms lower latency ({avg_lat:.1f}ms vs {spec['pipeline_latency_ms']}ms)")
 
         # HRIR taps
         if config.hrir_length > spec["hrir_taps"]:
             advantages.append(
-                f"{config.hrir_length - spec['hrir_taps']} more HRIR taps "
-                f"({config.hrir_length} vs {spec['hrir_taps']})"
+                f"{config.hrir_length - spec['hrir_taps']} more HRIR taps ({config.hrir_length} vs {spec['hrir_taps']})"
             )
 
         # Max sources

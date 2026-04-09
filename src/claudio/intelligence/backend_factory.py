@@ -16,6 +16,7 @@ Benchmark Summary (physics-based audio, 9 instruments):
   Winner: CLAP for production (best instrument identification)
   Runner-up: PANNs for real-time fallback (10x faster)
 """
+
 from __future__ import annotations
 
 from enum import Enum
@@ -25,10 +26,11 @@ from .classifier_backend import AudioClassifierBackend
 
 class BackendStrategy(Enum):
     """Backend selection strategy."""
-    QUALITY = "quality"      # CLAP — best instrument discrimination
-    SPEED = "speed"          # PANNs — fastest inference
-    AUTO = "auto"            # Try CLAP, fallback to PANNs
-    NONE = "none"            # No neural backend (heuristic only)
+
+    QUALITY = "quality"  # CLAP — best instrument discrimination
+    SPEED = "speed"  # PANNs — fastest inference
+    AUTO = "auto"  # Try CLAP, fallback to PANNs
+    NONE = "none"  # No neural backend (heuristic only)
 
 
 def create_backend(

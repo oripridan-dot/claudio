@@ -14,6 +14,7 @@ Two operating modes:
 The decoder maintains phase continuity across frames for glitch-free
 real-time streaming.
 """
+
 from __future__ import annotations
 
 import math
@@ -107,10 +108,14 @@ class IntentDecoder:
         latent_dim = checkpoint.get("latent_dim", 128)
 
         self._ddsp_encoder = GRUEncoder(
-            input_dim=2, hidden_dim=64, latent_dim=latent_dim, num_layers=2,
+            input_dim=2,
+            hidden_dim=64,
+            latent_dim=latent_dim,
+            num_layers=2,
         )
         self._ddsp_decoder = DDSPDecoder(
-            latent_dim=latent_dim, n_partials=64,
+            latent_dim=latent_dim,
+            n_partials=64,
             sample_rate=self.sample_rate,
         )
 
@@ -156,7 +161,7 @@ class IntentDecoder:
         loud_t = torch.from_numpy(loud_arr).unsqueeze(0).to(self._ddsp_device)
 
         with torch.no_grad():
-            z = self._ddsp_encoder(f0_t, loud_t)         # (1, T, 128)
+            z = self._ddsp_encoder(f0_t, loud_t)  # (1, T, 128)
             audio = self._ddsp_decoder(z, f0_t, loud_t)  # (1, T_audio)
 
         result = audio.squeeze(0).cpu().numpy().astype(np.float32)
@@ -179,9 +184,7 @@ class IntentDecoder:
         if frame.f0_hz > 0 and frame.f0_confidence > 0.3:
             # Reset phases on silence→voiced transition to prevent clicks
             prev_was_silent = (
-                self._prev_frame is None
-                or self._prev_frame.f0_hz <= 0
-                or self._prev_frame.f0_confidence <= 0.3
+                self._prev_frame is None or self._prev_frame.f0_hz <= 0 or self._prev_frame.f0_confidence <= 0.3
             )
             if prev_was_silent:
                 self._phases[:] = 0.0
@@ -238,7 +241,7 @@ class IntentDecoder:
         output = mix * envelope
 
         # RMS-match output to target loudness from intent
-        rms_out = float(np.sqrt(np.mean(output ** 2) + 1e-10))
+        rms_out = float(np.sqrt(np.mean(output**2) + 1e-10))
         if rms_out > 1e-8 and frame.loudness_db > -70:
             target_rms = 10.0 ** (frame.loudness_db / 20.0)
             new_gain = min(target_rms / rms_out, 3.0)
@@ -265,7 +268,7 @@ class IntentDecoder:
         if not mfcc or len(mfcc) < 2:
             # Fallback: natural harmonic rolloff (1/h)
             h_range = np.arange(1, self.n_harmonics + 1, dtype=np.float64)
-            amps = 1.0 / h_range ** 0.7
+            amps = 1.0 / h_range**0.7
             return amps / (np.max(amps) + 1e-10)
 
         n_mfcc = min(len(mfcc), 13)
@@ -275,9 +278,7 @@ class IntentDecoder:
         n_bands = 26
         j_range = np.arange(n_bands)
         i_range = np.arange(n_mfcc)
-        dct_matrix = np.cos(
-            np.pi * i_range[:, None] * (j_range[None, :] + 0.5) / n_bands
-        )
+        dct_matrix = np.cos(np.pi * i_range[:, None] * (j_range[None, :] + 0.5) / n_bands)
         mel_log = mfcc_arr @ dct_matrix  # (n_mfcc,) @ (n_mfcc, n_bands) → (n_bands,)
 
         mel_env = np.exp(mel_log)
@@ -299,7 +300,7 @@ class IntentDecoder:
             amps[valid] = mel_env[band_lo] * (1 - frac) + mel_env[band_hi] * frac
 
         # Apply natural rolloff
-        amps *= 1.0 / h_range ** 0.3
+        amps *= 1.0 / h_range**0.3
 
         return amps / (np.max(amps) + 1e-10) * 0.3
 

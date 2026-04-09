@@ -4,6 +4,7 @@ benchmark_fidelity.py — Audio Fidelity & Sustained Load Benchmarks
 Tests 4 and 5 from the real-time benchmark suite.
 Extracted from realtime_benchmark.py for 300-line compliance.
 """
+
 from __future__ import annotations
 
 import math
@@ -30,13 +31,16 @@ def _pass_fail(ok: bool) -> str:
 
 # ─── Test 4: Audio Fidelity Suite ────────────────────────────────────────────
 
+
 def test_audio_fidelity() -> dict:
     """Measure SNR, THD+N, phase coherence, and frequency response."""
     _banner("TEST 4: Audio Fidelity Measurements")
 
     cfg = SignalFlowConfig(
-        capture_sample_rate=48000, render_sample_rate=48000,
-        fft_size=512, hrir_length=256,
+        capture_sample_rate=48000,
+        render_sample_rate=48000,
+        fft_size=512,
+        hrir_length=256,
     )
     engine = HRTFBinauralEngine(config=cfg)
     sr = cfg.capture_sample_rate
@@ -53,7 +57,7 @@ def test_audio_fidelity() -> dict:
 
     out_l_parts, out_r_parts = [], []
     for b in range(n_samples // block):
-        chunk = reference[b * block:(b + 1) * block]
+        chunk = reference[b * block : (b + 1) * block]
         frame = engine.render({"fidelity": chunk})
         out_l_parts.append(frame.left)
         out_r_parts.append(frame.right)
@@ -62,7 +66,7 @@ def test_audio_fidelity() -> dict:
     out_r = np.concatenate(out_r_parts)
 
     # Scale reference to match output level for fair SNR
-    ref_trimmed = reference[:len(out_l)]
+    ref_trimmed = reference[: len(out_l)]
     scale = float(np.dot(out_l, ref_trimmed)) / (float(np.dot(ref_trimmed, ref_trimmed)) + 1e-30)
     ref_scaled = ref_trimmed * scale
 
@@ -81,9 +85,9 @@ def test_audio_fidelity() -> dict:
         test = np.sin(2 * np.pi * f * np.arange(block * 20) / sr).astype(np.float32) * 0.5
         levels = []
         for b in range(20):
-            chunk = test[b * block:(b + 1) * block]
+            chunk = test[b * block : (b + 1) * block]
             frame = engine2.render({"sweep": chunk})
-            levels.append(float(np.sqrt(np.mean(frame.left ** 2))))
+            levels.append(float(np.sqrt(np.mean(frame.left**2))))
         freq_levels.append(statistics.mean(levels[-10:]))  # skip transient
 
     # Flatness: max deviation from mean level
@@ -115,21 +119,27 @@ def test_audio_fidelity() -> dict:
         print(f"    {f:>6} Hz: {d:>+6.1f} dB  {bar}")
 
     return {
-        "snr_db": snr, "thdn_pct": thdn, "coherence": coherence,
-        "peak": peak, "flatness_db": flatness_db,
+        "snr_db": snr,
+        "thdn_pct": thdn,
+        "coherence": coherence,
+        "peak": peak,
+        "flatness_db": flatness_db,
         "passed": snr_pass and thdn_pass and coherence_pass and peak_pass,
     }
 
 
 # ─── Test 5: Sustained Load (10 seconds) ────────────────────────────────────
 
+
 def test_sustained_load() -> dict:
     """10 seconds of continuous rendering — check for drift or degradation."""
     _banner("TEST 5: Sustained Load (10s continuous rendering)")
 
     cfg = SignalFlowConfig(
-        capture_sample_rate=48000, render_sample_rate=48000,
-        fft_size=512, hrir_length=256,
+        capture_sample_rate=48000,
+        render_sample_rate=48000,
+        fft_size=512,
+        hrir_length=256,
     )
     engine = HRTFBinauralEngine(config=cfg)
     sr = cfg.capture_sample_rate
@@ -189,9 +199,16 @@ def test_sustained_load() -> dict:
     print(f"  Verdict:               {_pass_fail(passed)}")
 
     return {
-        "audio_time_s": audio_time, "wall_time_s": wall_time,
-        "rt_factor": audio_time / wall_time, "total_blocks": total_blocks,
-        "mean_us": mean_us, "p99_us": p99_us, "max_us": max_us,
-        "jitter_ratio": jitter_ratio, "drift_pct": drift_pct,
-        "overruns": n_overruns, "overrun_pct": overrun_pct, "passed": passed,
+        "audio_time_s": audio_time,
+        "wall_time_s": wall_time,
+        "rt_factor": audio_time / wall_time,
+        "total_blocks": total_blocks,
+        "mean_us": mean_us,
+        "p99_us": p99_us,
+        "max_us": max_us,
+        "jitter_ratio": jitter_ratio,
+        "drift_pct": drift_pct,
+        "overruns": n_overruns,
+        "overrun_pct": overrun_pct,
+        "passed": passed,
     }

@@ -4,6 +4,7 @@ signal_flow_metrics.py — Audio Quality Measurement Utilities
 Provides signal-level quality measurements: SNR, THD+N, phase coherence.
 Used by the signal flow simulator to evaluate pipeline output quality.
 """
+
 from __future__ import annotations
 
 import math
@@ -20,8 +21,8 @@ def measure_snr(signal: np.ndarray, reference: np.ndarray) -> float:
     ref = reference[:min_len].astype(np.float64)
     scale = np.dot(sig, ref) / (np.dot(ref, ref) + 1e-30)
     noise = sig - scale * ref
-    sig_power = np.mean(sig ** 2) + 1e-30
-    noise_power = np.mean(noise ** 2) + 1e-30
+    sig_power = np.mean(sig**2) + 1e-30
+    noise_power = np.mean(noise**2) + 1e-30
     return 10 * math.log10(sig_power / noise_power)
 
 
@@ -34,7 +35,7 @@ def measure_thdn(signal: np.ndarray) -> float:
         return 0.0
     fund_idx = int(np.argmax(spectrum[1:])) + 1
     fund_power = spectrum[fund_idx] ** 2
-    total_power = np.sum(spectrum ** 2)
+    total_power = np.sum(spectrum**2)
     noise_power = total_power - fund_power
     return math.sqrt(max(0, noise_power) / (fund_power + 1e-30)) * 100.0
 
@@ -47,5 +48,5 @@ def measure_phase_coherence(left: np.ndarray, right: np.ndarray) -> float:
     left_c = left[:min_len].astype(np.float64) - np.mean(left[:min_len])
     right_c = right[:min_len].astype(np.float64) - np.mean(right[:min_len])
     num = np.sum(left_c * right_c)
-    den = math.sqrt(np.sum(left_c ** 2) * np.sum(right_c ** 2)) + 1e-30
+    den = math.sqrt(np.sum(left_c**2) * np.sum(right_c**2)) + 1e-30
     return abs(num / den)

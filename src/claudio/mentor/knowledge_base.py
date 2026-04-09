@@ -15,6 +15,7 @@ with the engineer's photo, their quote, and an interactive action guide.
 
 The actual tip data lives in mentor_tips.py (separated for 300-line compliance).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -53,36 +54,40 @@ class TriggerCategory(Enum):
 @dataclass
 class MentorProfile:
     """A real-world audio engineer / producer."""
+
     name: str
-    title: str                    # e.g. "Grammy-winning Recording Engineer"
-    photo_asset: str              # path to portrait image asset
-    notable_works: list[str]      # e.g. ["Michael Jackson - Thriller", "Quincy Jones"]
-    era: str                      # e.g. "1980s-present"
-    specialty: str                # e.g. "Vocal recording & orchestral mixing"
+    title: str  # e.g. "Grammy-winning Recording Engineer"
+    photo_asset: str  # path to portrait image asset
+    notable_works: list[str]  # e.g. ["Michael Jackson - Thriller", "Quincy Jones"]
+    era: str  # e.g. "1980s-present"
+    specialty: str  # e.g. "Vocal recording & orchestral mixing"
 
 
 @dataclass
 class MentorTip:
     """A single mentorship moment — triggered by detection, grounded in expertise."""
+
     tip_id: str
     trigger: TriggerCategory
     phase: ProductionPhase
     mentor: MentorProfile
-    quote: str                    # the actual wisdom (their words)
-    context_location: str         # where the wisdom was shared
-    context_date: str             # when
-    physical_action: str          # concrete physical correction for the user
-    ui_action: str                # what the UI should do ("HIGHLIGHT_PHASE_BUTTON", "SHOW_MIC_ARROW")
-    severity: str                 # "info", "tip", "warning", "critical"
-    confidence_threshold: float   # minimum detection confidence to trigger this tip
-    related_detection: str = ""   # e.g. "DRUM_SNARE_PHASE_180", "VOCAL_PROXIMITY_03_INCH"
+    quote: str  # the actual wisdom (their words)
+    context_location: str  # where the wisdom was shared
+    context_date: str  # when
+    physical_action: str  # concrete physical correction for the user
+    ui_action: str  # what the UI should do ("HIGHLIGHT_PHASE_BUTTON", "SHOW_MIC_ARROW")
+    severity: str  # "info", "tip", "warning", "critical"
+    confidence_threshold: float  # minimum detection confidence to trigger this tip
+    related_detection: str = ""  # e.g. "DRUM_SNARE_PHASE_180", "VOCAL_PROXIMITY_03_INCH"
 
 
 # ─── Tip Retrieval Engine ────────────────────────────────────────────────────
 
+
 def _load_tips() -> list[MentorTip]:
     """Lazy import to break circular dependency with mentor_tips.py."""
     from .mentor_tips import MENTOR_TIPS
+
     return MENTOR_TIPS
 
 

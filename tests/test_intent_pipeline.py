@@ -13,6 +13,7 @@ Proof targets:
   - Round-trip serialization: Zero data loss through protocol
   - Reliability: ALL tests pass 100% of the time
 """
+
 from __future__ import annotations
 
 import math
@@ -68,8 +69,8 @@ def _load_wav(path: Path) -> np.ndarray:
             # 24-bit
             samples = np.zeros(len(raw) // 3, dtype=np.float32)
             for i in range(len(samples)):
-                val = struct.unpack_from("<i", raw[i * 3:i * 3 + 3] + b"\x00")[0]
-                samples[i] = val / (2 ** 23)
+                val = struct.unpack_from("<i", raw[i * 3 : i * 3 + 3] + b"\x00")[0]
+                samples[i] = val / (2**23)
         else:
             samples = np.frombuffer(raw, dtype=np.float32)
 
@@ -82,6 +83,7 @@ def _load_wav(path: Path) -> np.ndarray:
 # ═══════════════════════════════════════════════════════════════════════
 # Test: Intent Encoder — Pitch Accuracy
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class TestIntentEncoderPitch:
     """Verify F0 extraction accuracy on pure tones."""
@@ -107,10 +109,7 @@ class TestIntentEncoderPitch:
 
         # Error in cents: 1200 × log2(estimated / true)
         cents_error = abs(1200.0 * math.log2(median_f0 / freq))
-        assert cents_error < 10.0, (
-            f"Pitch error {cents_error:.1f} cents at {freq}Hz "
-            f"(estimated {median_f0:.1f}Hz)"
-        )
+        assert cents_error < 10.0, f"Pitch error {cents_error:.1f} cents at {freq}Hz (estimated {median_f0:.1f}Hz)"
 
     def test_silence_detection(self) -> None:
         """Encoder should report unvoiced for silence."""
@@ -125,6 +124,7 @@ class TestIntentEncoderPitch:
 # ═══════════════════════════════════════════════════════════════════════
 # Test: Intent Encoder — Loudness
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class TestIntentEncoderLoudness:
     """Verify loudness estimation accuracy."""
@@ -143,9 +143,7 @@ class TestIntentEncoderLoudness:
 
         # Must be monotonically increasing
         for i in range(1, len(loudness_values)):
-            assert loudness_values[i] > loudness_values[i - 1], (
-                f"Loudness not monotonic: {loudness_values}"
-            )
+            assert loudness_values[i] > loudness_values[i - 1], f"Loudness not monotonic: {loudness_values}"
 
     def test_silence_loudness_near_zero(self) -> None:
         """Silence should have near-zero normalised loudness."""
@@ -159,6 +157,7 @@ class TestIntentEncoderLoudness:
 # ═══════════════════════════════════════════════════════════════════════
 # Test: Intent Encoder — Onset Detection
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class TestIntentEncoderOnset:
     """Verify onset detection on transient signals."""
@@ -194,6 +193,7 @@ class TestIntentEncoderOnset:
 # ═══════════════════════════════════════════════════════════════════════
 # Test: Intent Protocol — Wire Format
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class TestIntentProtocol:
     """Verify binary serialization round-trips perfectly."""
@@ -236,8 +236,10 @@ class TestIntentProtocol:
     def test_silence_packet_minimal_size(self) -> None:
         """Silence packets must be ≤ 9 bytes (header only)."""
         packet = IntentPacket(
-            sequence=1, timestamp_ms=0.0,
-            flags=PacketFlags.SILENCE, frame=None,
+            sequence=1,
+            timestamp_ms=0.0,
+            flags=PacketFlags.SILENCE,
+            frame=None,
         )
         data = packet.to_bytes()
         assert len(data) == 9, f"Silence packet {len(data)} bytes, expected 9"
@@ -246,8 +248,11 @@ class TestIntentProtocol:
         """IntentStream should emit SILENCE packets for quiet frames."""
         stream = IntentStream()
         quiet_frame = IntentFrame(
-            timestamp_ms=0.0, f0_hz=0.0, f0_confidence=0.0,
-            loudness_db=-80.0, loudness_norm=0.005,
+            timestamp_ms=0.0,
+            f0_hz=0.0,
+            f0_confidence=0.0,
+            loudness_db=-80.0,
+            loudness_norm=0.005,
             spectral_centroid_hz=0.0,
         )
         packet = stream.pack(quiet_frame)
@@ -260,28 +265,33 @@ class TestIntentProtocol:
 
         # 250 full intent packets per second
         frame = IntentFrame(
-            timestamp_ms=0.0, f0_hz=440.0, f0_confidence=0.9,
-            loudness_db=-12.0, loudness_norm=0.85,
+            timestamp_ms=0.0,
+            f0_hz=440.0,
+            f0_confidence=0.9,
+            loudness_db=-12.0,
+            loudness_norm=0.85,
             spectral_centroid_hz=2500.0,
             mfcc=[1.0] * 13,
         )
         packet = IntentPacket(
-            sequence=1, timestamp_ms=0.0,
-            flags=PacketFlags.FULL_FRAME, frame=frame,
+            sequence=1,
+            timestamp_ms=0.0,
+            flags=PacketFlags.FULL_FRAME,
+            frame=frame,
         )
         packet_size = len(packet.to_bytes())
         intent_bytes_per_sec = packet_size * 250
 
         ratio = 1.0 - (intent_bytes_per_sec / raw_pcm_bytes)
         assert ratio > 0.70, (
-            f"Compression ratio {ratio:.1%} — need >70%"
-            f" (intent={intent_bytes_per_sec}B/s vs PCM={raw_pcm_bytes}B/s)"
+            f"Compression ratio {ratio:.1%} — need >70% (intent={intent_bytes_per_sec}B/s vs PCM={raw_pcm_bytes}B/s)"
         )
 
 
 # ═══════════════════════════════════════════════════════════════════════
 # Test: End-to-End Pipeline (Encode → Protocol → Decode)
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class TestEndToEndPipeline:
     """Full pipeline proof: audio → intent → wire → intent → audio."""
@@ -306,12 +316,16 @@ class TestEndToEndPipeline:
                 restored_frames.append(restored_packet.frame)
             else:
                 # Silence packet — create a silent frame
-                restored_frames.append(IntentFrame(
-                    timestamp_ms=restored_packet.timestamp_ms,
-                    f0_hz=0.0, f0_confidence=0.0,
-                    loudness_db=-80.0, loudness_norm=0.0,
-                    spectral_centroid_hz=0.0,
-                ))
+                restored_frames.append(
+                    IntentFrame(
+                        timestamp_ms=restored_packet.timestamp_ms,
+                        f0_hz=0.0,
+                        f0_confidence=0.0,
+                        loudness_db=-80.0,
+                        loudness_norm=0.0,
+                        spectral_centroid_hz=0.0,
+                    )
+                )
 
         # Decode
         regenerated = decoder.decode_frames(restored_frames)
@@ -332,8 +346,7 @@ class TestEndToEndPipeline:
             median_f0 = float(np.median([f.f0_hz for f in voiced]))
             cents_error = abs(1200.0 * math.log2(median_f0 / 440.0))
             assert cents_error < 50.0, (
-                f"Regenerated pitch off by {cents_error:.1f} cents "
-                f"(got {median_f0:.1f}Hz, expected 440Hz)"
+                f"Regenerated pitch off by {cents_error:.1f} cents (got {median_f0:.1f}Hz, expected 440Hz)"
             )
 
     def test_loudness_envelope_preserved(self) -> None:
@@ -354,8 +367,8 @@ class TestEndToEndPipeline:
         min_len = min(len(audio), len(regen))
         n_blocks = min_len // block
         for b in range(n_blocks):
-            orig_rms.append(np.sqrt(np.mean(audio[b * block:(b + 1) * block] ** 2)))
-            regen_rms.append(np.sqrt(np.mean(regen[b * block:(b + 1) * block] ** 2)))
+            orig_rms.append(np.sqrt(np.mean(audio[b * block : (b + 1) * block] ** 2)))
+            regen_rms.append(np.sqrt(np.mean(regen[b * block : (b + 1) * block] ** 2)))
 
         orig_rms = np.array(orig_rms)
         regen_rms = np.array(regen_rms)
@@ -368,9 +381,7 @@ class TestEndToEndPipeline:
         min_len = min(len(orig_norm), len(regen_norm))
         if min_len > 5:
             corr = np.corrcoef(orig_norm[:min_len], regen_norm[:min_len])[0, 1]
-            assert corr > 0.3 or np.isnan(corr), (
-                f"Loudness envelope correlation too low: {corr:.3f}"
-            )
+            assert corr > 0.3 or np.isnan(corr), f"Loudness envelope correlation too low: {corr:.3f}"
 
     def test_spectral_similarity(self) -> None:
         """Regenerated audio must have reasonable spectral similarity."""
@@ -396,14 +407,13 @@ class TestEndToEndPipeline:
             corr = np.corrcoef(db_orig[mask], db_regen[mask])[0, 1]
             # Note: additive synthesis won't perfectly match KS —
             # this tests that the general spectral shape is preserved
-            assert corr > 0.0 or np.isnan(corr), (
-                f"Spectral correlation negative: {corr:.3f}"
-            )
+            assert corr > 0.0 or np.isnan(corr), f"Spectral correlation negative: {corr:.3f}"
 
 
 # ═══════════════════════════════════════════════════════════════════════
 # Test: Real Multitrack Data (if available)
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class TestMultitrackCalibration:
     """Test intent pipeline on real multitrack audio files."""
@@ -429,17 +439,11 @@ class TestMultitrackCalibration:
             frames = encoder.encode_block(clip)
             encoder.reset()
 
-            assert len(frames) > 100, (
-                f"Too few frames from {wav_path.name}: {len(frames)}"
-            )
+            assert len(frames) > 100, f"Too few frames from {wav_path.name}: {len(frames)}"
 
             # At least some frames should detect pitch
-            has_activity = any(
-                f.loudness_norm > 0.05 for f in frames
-            )
-            assert has_activity, (
-                f"No activity detected in {wav_path.name}"
-            )
+            has_activity = any(f.loudness_norm > 0.05 for f in frames)
+            assert has_activity, f"No activity detected in {wav_path.name}"
 
     def test_roundtrip_real_audio(self, calibration_files: list[Path]) -> None:
         """Full pipeline should not crash on real audio."""
@@ -456,7 +460,7 @@ class TestMultitrackCalibration:
             guitar_file = calibration_files[0]
 
         audio = _load_wav(guitar_file)
-        clip = audio[SAMPLE_RATE * 30: SAMPLE_RATE * 33]  # 3 seconds from middle
+        clip = audio[SAMPLE_RATE * 30 : SAMPLE_RATE * 33]  # 3 seconds from middle
 
         frames = encoder.encode_block(clip)
         regen = decoder.decode_frames(frames)
@@ -465,7 +469,7 @@ class TestMultitrackCalibration:
         assert not np.all(regen == 0), "Regenerated audio is all zeros"
 
         # Check regenerated audio has reasonable energy
-        rms_regen = float(np.sqrt(np.mean(regen ** 2)))
+        rms_regen = float(np.sqrt(np.mean(regen**2)))
         assert rms_regen > 1e-5, f"Regenerated audio too quiet: RMS={rms_regen}"
 
     def test_bandwidth_savings(self, calibration_files: list[Path]) -> None:
@@ -496,5 +500,3 @@ class TestMultitrackCalibration:
         print(f"  📊 PCM rate: {raw_bytes / 5:.0f} bytes/sec")
 
         assert ratio > 0.50, f"Compression ratio too low: {ratio:.1%}"
-
-

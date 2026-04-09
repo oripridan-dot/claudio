@@ -13,6 +13,7 @@ Modes:
 
 All corrections are lightweight enough to run in real-time at 48kHz.
 """
+
 from __future__ import annotations
 
 import math
@@ -34,8 +35,9 @@ class ListeningMode(Enum):
 @dataclass
 class SpeakerConfig:
     """Physical speaker placement."""
+
     id: str
-    position: np.ndarray        # (x, y, z) in meters, listener-centric coordinates
+    position: np.ndarray  # (x, y, z) in meters, listener-centric coordinates
     is_active: bool = True
     delay_compensation_ms: float = 0.0
     gain_compensation_db: float = 0.0
@@ -44,31 +46,34 @@ class SpeakerConfig:
 @dataclass
 class ListenerPosition:
     """Tracked listener head position."""
-    x: float   # left-right (meters from center)
-    y: float   # up-down
-    z: float   # front-back (distance from speakers)
+
+    x: float  # left-right (meters from center)
+    y: float  # up-down
+    z: float  # front-back (distance from speakers)
     confidence: float = 0.0  # tracking confidence 0-1
 
 
 @dataclass
 class SweetSpotCorrection:
     """Per-speaker correction to maintain phantom center at listener."""
+
     speaker_id: str
-    delay_ms: float        # additional delay to apply
-    gain_db: float         # gain adjustment
-    distance_m: float      # computed distance from speaker to listener
+    delay_ms: float  # additional delay to apply
+    gain_db: float  # gain adjustment
+    distance_m: float  # computed distance from speaker to listener
 
 
 @dataclass
 class SweetSpotFrame:
     """Complete sweet spot state for UI visualization + DSP application."""
+
     mode: ListeningMode
     corrections: list[SweetSpotCorrection]
     listener: ListenerPosition
-    phantom_center_offset_deg: float   # 0 = perfect center, >0 = shifted right
-    is_optimal_zone: bool              # True if listener is in the sweet spot
-    zone_quality: float                # 0-1; 1 = perfect equilateral triangle
-    coaching_message: str              # UI guidance for the user
+    phantom_center_offset_deg: float  # 0 = perfect center, >0 = shifted right
+    is_optimal_zone: bool  # True if listener is in the sweet spot
+    zone_quality: float  # 0-1; 1 = perfect equilateral triangle
+    coaching_message: str  # UI guidance for the user
 
 
 class SweetSpotEngine:
@@ -156,9 +161,13 @@ class SweetSpotEngine:
 
         if not distances:
             return SweetSpotFrame(
-                mode=self._mode, corrections=[], listener=listener,
-                phantom_center_offset_deg=0, is_optimal_zone=False,
-                zone_quality=0, coaching_message="No active speakers.",
+                mode=self._mode,
+                corrections=[],
+                listener=listener,
+                phantom_center_offset_deg=0,
+                is_optimal_zone=False,
+                zone_quality=0,
+                coaching_message="No active speakers.",
             )
 
         # Reference distance = furthest speaker (all others get delay added)
@@ -180,12 +189,14 @@ class SweetSpotEngine:
                 delay_ms *= 0.5
                 gain_db *= 0.5
 
-            corrections.append(SweetSpotCorrection(
-                speaker_id=sid,
-                delay_ms=max(0, delay_ms),
-                gain_db=gain_db,
-                distance_m=dist,
-            ))
+            corrections.append(
+                SweetSpotCorrection(
+                    speaker_id=sid,
+                    delay_ms=max(0, delay_ms),
+                    gain_db=gain_db,
+                    distance_m=dist,
+                )
+            )
 
         # Phantom center offset calculation
         if "L" in distances and "R" in distances:

@@ -7,6 +7,7 @@ actionable coaching notes grounded in real-world acoustics.
 
 Extracted from multimodal_fusion.py for single-responsibility compliance.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -18,11 +19,12 @@ from .pickup_detector import PickupType
 @dataclass
 class InstrumentModelProfile:
     """Known instrument profile for matching against detections."""
-    name: str                         # "Fender Telecaster"
-    brand: str                        # "Fender"
-    model: str                        # "Telecaster"
+
+    name: str  # "Fender Telecaster"
+    brand: str  # "Fender"
+    model: str  # "Telecaster"
     family: InstrumentFamily
-    body_shapes: list[str]            # visual identifiers
+    body_shapes: list[str]  # visual identifiers
     headstock_shapes: list[str]
     pickup_configs: list[PickupType]
     spectral_centroid_range: tuple[float, float]  # Hz
@@ -34,7 +36,8 @@ class InstrumentModelProfile:
 INSTRUMENT_MODEL_DB: list[InstrumentModelProfile] = [
     InstrumentModelProfile(
         name="Fender Stratocaster",
-        brand="Fender", model="Stratocaster",
+        brand="Fender",
+        model="Stratocaster",
         family=InstrumentFamily.GUITAR_ELECTRIC,
         body_shapes=["double_cutaway", "contoured"],
         headstock_shapes=["inline_6"],
@@ -49,7 +52,8 @@ INSTRUMENT_MODEL_DB: list[InstrumentModelProfile] = [
     ),
     InstrumentModelProfile(
         name="Fender Telecaster",
-        brand="Fender", model="Telecaster",
+        brand="Fender",
+        model="Telecaster",
         family=InstrumentFamily.GUITAR_ELECTRIC,
         body_shapes=["single_cutaway", "slab"],
         headstock_shapes=["inline_6"],
@@ -64,7 +68,8 @@ INSTRUMENT_MODEL_DB: list[InstrumentModelProfile] = [
     ),
     InstrumentModelProfile(
         name="Gibson Les Paul",
-        brand="Gibson", model="Les Paul",
+        brand="Gibson",
+        model="Les Paul",
         family=InstrumentFamily.GUITAR_ELECTRIC,
         body_shapes=["single_cutaway", "arched_top"],
         headstock_shapes=["3x3"],
@@ -79,7 +84,8 @@ INSTRUMENT_MODEL_DB: list[InstrumentModelProfile] = [
     ),
     InstrumentModelProfile(
         name="Fender Precision Bass",
-        brand="Fender", model="Precision Bass",
+        brand="Fender",
+        model="Precision Bass",
         family=InstrumentFamily.BASS_ELECTRIC,
         body_shapes=["double_cutaway", "contoured"],
         headstock_shapes=["inline_4"],
@@ -93,7 +99,8 @@ INSTRUMENT_MODEL_DB: list[InstrumentModelProfile] = [
     ),
     InstrumentModelProfile(
         name="Fender Jazz Bass",
-        brand="Fender", model="Jazz Bass",
+        brand="Fender",
+        model="Jazz Bass",
         family=InstrumentFamily.BASS_ELECTRIC,
         body_shapes=["offset", "contoured"],
         headstock_shapes=["inline_4"],
@@ -108,7 +115,8 @@ INSTRUMENT_MODEL_DB: list[InstrumentModelProfile] = [
     ),
     InstrumentModelProfile(
         name="Gibson SG",
-        brand="Gibson", model="SG",
+        brand="Gibson",
+        model="SG",
         family=InstrumentFamily.GUITAR_ELECTRIC,
         body_shapes=["double_cutaway", "thin_body"],
         headstock_shapes=["3x3"],
@@ -123,7 +131,8 @@ INSTRUMENT_MODEL_DB: list[InstrumentModelProfile] = [
     ),
     InstrumentModelProfile(
         name="Rickenbacker 4003",
-        brand="Rickenbacker", model="4003",
+        brand="Rickenbacker",
+        model="4003",
         family=InstrumentFamily.BASS_ELECTRIC,
         body_shapes=["cresting_wave", "bound"],
         headstock_shapes=["inline_4"],
@@ -139,7 +148,8 @@ INSTRUMENT_MODEL_DB: list[InstrumentModelProfile] = [
     ),
     InstrumentModelProfile(
         name="Taylor 814ce",
-        brand="Taylor", model="814ce",
+        brand="Taylor",
+        model="814ce",
         family=InstrumentFamily.GUITAR_ACOUSTIC,
         body_shapes=["grand_auditorium"],
         headstock_shapes=["3x3"],
@@ -155,7 +165,8 @@ INSTRUMENT_MODEL_DB: list[InstrumentModelProfile] = [
     ),
     InstrumentModelProfile(
         name="Martin D-28",
-        brand="Martin", model="D-28",
+        brand="Martin",
+        model="D-28",
         family=InstrumentFamily.GUITAR_ACOUSTIC,
         body_shapes=["dreadnought"],
         headstock_shapes=["3x3"],
@@ -170,7 +181,8 @@ INSTRUMENT_MODEL_DB: list[InstrumentModelProfile] = [
     ),
     InstrumentModelProfile(
         name="Shure SM58",
-        brand="Shure", model="SM58",
+        brand="Shure",
+        model="SM58",
         family=InstrumentFamily.VOCAL_MALE,
         body_shapes=[],
         headstock_shapes=[],
@@ -185,7 +197,8 @@ INSTRUMENT_MODEL_DB: list[InstrumentModelProfile] = [
     ),
     InstrumentModelProfile(
         name="Shure SM57",
-        brand="Shure", model="SM57",
+        brand="Shure",
+        model="SM57",
         family=InstrumentFamily.GUITAR_ELECTRIC,
         body_shapes=[],
         headstock_shapes=[],
@@ -201,7 +214,8 @@ INSTRUMENT_MODEL_DB: list[InstrumentModelProfile] = [
     ),
     InstrumentModelProfile(
         name="Neumann U87",
-        brand="Neumann", model="U87",
+        brand="Neumann",
+        model="U87",
         family=InstrumentFamily.VOCAL_FEMALE,
         body_shapes=[],
         headstock_shapes=[],

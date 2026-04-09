@@ -26,11 +26,11 @@ class GRUEncoder(nn.Module):
 
     def __init__(
         self,
-        input_dim:  int = 2,
+        input_dim: int = 2,
         hidden_dim: int = 64,
         latent_dim: int = 128,
         num_layers: int = 2,
-        dropout:    float = 0.1,
+        dropout: float = 0.1,
     ) -> None:
         super().__init__()
         self.input_proj = nn.Linear(input_dim, hidden_dim)
@@ -56,8 +56,8 @@ class GRUEncoder(nn.Module):
         -------
         z : (B, T, latent_dim)
         """
-        x = torch.stack([f0, loudness], dim=-1)    # (B, T, 2)
-        x = torch.tanh(self.input_proj(x))         # (B, T, hidden)
-        h, _ = self.gru(x)                         # (B, T, hidden)
-        z = self.norm(self.out_proj(h))             # (B, T, latent_dim)
+        x = torch.stack([f0, loudness], dim=-1)  # (B, T, 2)
+        x = torch.tanh(self.input_proj(x))  # (B, T, hidden)
+        h, _ = self.gru(x)  # (B, T, hidden)
+        z = self.norm(self.out_proj(h))  # (B, T, latent_dim)
         return z

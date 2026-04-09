@@ -6,6 +6,7 @@ from spectral characteristics: centroid, flatness, rolloff.
 
 Extracted from instrument_classifier.py for single-responsibility compliance.
 """
+
 from __future__ import annotations
 
 from enum import Enum
@@ -16,7 +17,7 @@ from .spectral_extractor import SpectralFingerprint
 class PickupType(Enum):
     SINGLE_COIL = "single_coil"
     HUMBUCKER = "humbucker"
-    SPLIT_COIL = "split_coil"      # Fender P-Bass style (2 halves, hum-cancelling)
+    SPLIT_COIL = "split_coil"  # Fender P-Bass style (2 halves, hum-cancelling)
     P90 = "p90"
     PIEZO = "piezo"
     ACTIVE = "active"

@@ -1,4 +1,5 @@
 """test_ai_thought_log.py — Tests for the AI Thought Log watcher."""
+
 from __future__ import annotations
 
 import json
@@ -54,9 +55,7 @@ def test_thought_context_failure():
 
 def test_jsonl_persistence():
     """Should flush completed entries to JSONL file."""
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".jsonl", delete=False, dir="."
-    ) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False, dir=".") as f:
         path = f.name
 
     try:

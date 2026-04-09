@@ -15,16 +15,19 @@ and the React frontend. Streams:
 Zero-latency: AI analysis runs asynchronously on the observation path.
 The live audio path is never touched by this server.
 """
+
 from __future__ import annotations
 
+import contextlib
 import json
 import time
 from dataclasses import asdict
 from typing import Any
 
 import numpy as np
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from starlette.websockets import WebSocketState
 
 from claudio.collab.session_manager import PeerRole, SessionManager
@@ -41,6 +44,8 @@ from claudio.intelligence.sweet_spot_engine import (
     ListenerPosition,
     SweetSpotEngine,
 )
+from claudio.intent.intent_decoder import IntentDecoder
+from claudio.intent.intent_protocol import IntentPacket
 from claudio.mentor.knowledge_base import (
     MentorKnowledgeBase,
     TriggerCategory,
@@ -52,6 +57,7 @@ from claudio.metering.semantic_metering import (
     PocketRadar,
     TopographicFreqMap,
 )
+from claudio.server import auth
 from claudio.server.ws_session import (
     SessionState,
     check_coaching_triggers,
@@ -83,6 +89,14 @@ coach = PerformanceCoach()
 advisor = AcousticEnvironmentAdvisor()
 collab_manager = SessionManager()
 
+# Global DDSP Decoder (Loaded if checkpoint exists)
+try:
+    global_ddsp_decoder = IntentDecoder(sample_rate=44100, model_path="checkpoints/forge_model_best.pt")
+    print("[DDSP] Neural Decoder loaded on backend.")
+except Exception as e:
+    global_ddsp_decoder = None
+    print(f"[DDSP] Failed to load Neural Decoder: {e}")
+
 
 def _serialize(obj: Any) -> Any:
     """Convert dataclasses/numpy to JSON-safe dicts."""
@@ -103,6 +117,19 @@ def _serialize(obj: Any) -> Any:
 
 
 # ─── REST Endpoints ──────────────────────────────────────────────────────────
+
+
+class AuthRequest(BaseModel):
+    username: str
+
+
+@app.post("/api/auth/token")
+async def generate_token(req: AuthRequest) -> dict:
+    if not req.username:
+        raise HTTPException(status_code=400, detail="Username required")
+    token = auth.create_token(req.username)
+    return {"token": token}
+
 
 @app.get("/health")
 async def health() -> dict:
@@ -151,19 +178,24 @@ async def complete_item(item_id: str) -> dict:
 # ─── WebSocket ───────────────────────────────────────────────────────────────
 
 
-
-
 @app.websocket("/ws/session")
 async def session_ws(ws: WebSocket) -> None:
+    token = ws.query_params.get("token")
+    if not token or not auth.verify_token(token):
+        await ws.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
     await ws.accept()
     session = SessionState()
 
     # Send initial state
-    await ws.send_json({
-        "type": "init",
-        "roadmap": _serialize(session.roadmap.state),
-        "mentors": [_serialize(m) for m in knowledge_base.all_mentors],
-    })
+    await ws.send_json(
+        {
+            "type": "init",
+            "roadmap": _serialize(session.roadmap.state),
+            "mentors": [_serialize(m) for m in knowledge_base.all_mentors],
+        }
+    )
 
     try:
         while True:
@@ -187,7 +219,8 @@ async def session_ws(ws: WebSocket) -> None:
                 ch1 = np.array(data["ch1"], dtype=np.float32)
                 ch2 = np.array(data["ch2"], dtype=np.float32)
                 frame = session.phase_meter.analyze(
-                    ch1, ch2,
+                    ch1,
+                    ch2,
                     ch1_name=data.get("ch1_id", "CH1"),
                     ch2_name=data.get("ch2_id", "CH2"),
                 )
@@ -201,10 +234,12 @@ async def session_ws(ws: WebSocket) -> None:
                         confidence=abs(frame.correlation),
                     )
                     if tip:
-                        await ws.send_json({
-                            "type": "mentor_tip",
-                            "data": _serialize(tip),
-                        })
+                        await ws.send_json(
+                            {
+                                "type": "mentor_tip",
+                                "data": _serialize(tip),
+                            }
+                        )
 
             elif msg_type == "room_scan_clap":
                 # Expects: { type: "room_scan_clap", audio: [...] }
@@ -215,10 +250,12 @@ async def session_ws(ws: WebSocket) -> None:
 
                 # Process roadmap detection
                 session.roadmap.process_detection("room_scan_complete")
-                await ws.send_json({
-                    "type": "roadmap_update",
-                    "data": _serialize(session.roadmap.state),
-                })
+                await ws.send_json(
+                    {
+                        "type": "roadmap_update",
+                        "data": _serialize(session.roadmap.state),
+                    }
+                )
 
                 # Trigger mentor tips from treatment plan keywords
                 for plan_item in scan.treatment_plan:
@@ -226,29 +263,43 @@ async def session_ws(ws: WebSocket) -> None:
                     if trigger:
                         tip = knowledge_base.find_best_tip(trigger, confidence=0.7)
                         if tip:
-                            await ws.send_json({
-                                "type": "mentor_tip",
-                                "data": _serialize(tip),
-                            })
+                            await ws.send_json(
+                                {
+                                    "type": "mentor_tip",
+                                    "data": _serialize(tip),
+                                }
+                            )
 
             elif msg_type == "vision_detection":
                 # Expects: { type: "vision_detection", detections: [...] }
                 vision_list = []
                 for vd in data.get("detections", []):
-                    vision_list.append(VisionDetection(
-                        category=VisualCategory(vd.get("category", "unknown")),
-                        confidence=vd.get("confidence", 0.0),
-                        bounding_box=BoundingBox(**vd.get("bounding_box", {
-                            "x": 0, "y": 0, "width": 0, "height": 0,
-                        })),
-                        brand_text=vd.get("brand_text", ""),
-                        model_text=vd.get("model_text", ""),
-                        body_shape=vd.get("body_shape", ""),
-                    ))
-                await ws.send_json({
-                    "type": "vision_ack",
-                    "count": len(vision_list),
-                })
+                    vision_list.append(
+                        VisionDetection(
+                            category=VisualCategory(vd.get("category", "unknown")),
+                            confidence=vd.get("confidence", 0.0),
+                            bounding_box=BoundingBox(
+                                **vd.get(
+                                    "bounding_box",
+                                    {
+                                        "x": 0,
+                                        "y": 0,
+                                        "width": 0,
+                                        "height": 0,
+                                    },
+                                )
+                            ),
+                            brand_text=vd.get("brand_text", ""),
+                            model_text=vd.get("model_text", ""),
+                            body_shape=vd.get("body_shape", ""),
+                        )
+                    )
+                await ws.send_json(
+                    {
+                        "type": "vision_ack",
+                        "count": len(vision_list),
+                    }
+                )
 
             elif msg_type == "head_position":
                 # Expects: { type: "head_position", x, y, z }
@@ -258,10 +309,12 @@ async def session_ws(ws: WebSocket) -> None:
                     z=data.get("z", 0.0),
                 )
                 correction = session.sweet_spot.compute(pos)
-                await ws.send_json({
-                    "type": "sweet_spot_correction",
-                    "data": _serialize(correction),
-                })
+                await ws.send_json(
+                    {
+                        "type": "sweet_spot_correction",
+                        "data": _serialize(correction),
+                    }
+                )
 
             elif msg_type == "roadmap_action":
                 action = data.get("action", "")
@@ -269,10 +322,12 @@ async def session_ws(ws: WebSocket) -> None:
                     session.roadmap.advance_phase()
                 elif action == "complete":
                     session.roadmap.complete_item(data.get("item_id", ""))
-                await ws.send_json({
-                    "type": "roadmap_update",
-                    "data": _serialize(session.roadmap.state),
-                })
+                await ws.send_json(
+                    {
+                        "type": "roadmap_update",
+                        "data": _serialize(session.roadmap.state),
+                    }
+                )
 
             elif msg_type == "ping":
                 await ws.send_json({"type": "pong", "ts": time.time()})
@@ -317,11 +372,18 @@ async def collab_ws(ws: WebSocket, room_id: str) -> None:
       - Binary frames: raw intent packets, broadcast to all other peers
       - JSON frames:   signaling (join, leave, ping, instrument_set, metrics)
     """
+    token = ws.query_params.get("token")
+    user_payload = auth.verify_token(token) if token else None
+
+    if not user_payload:
+        await ws.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
     await ws.accept()
 
     # Parse query params
     params = dict(ws.query_params)
-    display_name = params.get("name", "Musician")
+    display_name = user_payload.get("sub", params.get("name", "Musician"))
     role = PeerRole(params.get("role", "both"))
 
     # Join room
@@ -333,20 +395,26 @@ async def collab_ws(ws: WebSocket, room_id: str) -> None:
 
     # Notify room of new peer
     room = collab_manager.get_room(room_id)
-    await collab_manager.broadcast_json(room_id, None, {
-        "type": "peer_joined",
-        "peer_id": peer.peer_id,
-        "display_name": peer.display_name,
-        "peers": room.peer_list() if room else [],
-    })
+    await collab_manager.broadcast_json(
+        room_id,
+        None,
+        {
+            "type": "peer_joined",
+            "peer_id": peer.peer_id,
+            "display_name": peer.display_name,
+            "peers": room.peer_list() if room else [],
+        },
+    )
 
     # Send welcome
-    await ws.send_json({
-        "type": "welcome",
-        "peer_id": peer.peer_id,
-        "room_id": room_id,
-        "peers": room.peer_list() if room else [],
-    })
+    await ws.send_json(
+        {
+            "type": "welcome",
+            "peer_id": peer.peer_id,
+            "room_id": room_id,
+            "peers": room.peer_list() if room else [],
+        }
+    )
 
     try:
         while True:
@@ -356,8 +424,35 @@ async def collab_ws(ws: WebSocket, room_id: str) -> None:
                 if "bytes" in message and message["bytes"]:
                     # Binary frame: intent packet → broadcast
                     await collab_manager.broadcast_intent(
-                        room_id, peer.peer_id, message["bytes"],
+                        room_id,
+                        peer.peer_id,
+                        message["bytes"],
                     )
+
+                    # Store for DDSP batching if enabled
+                    if peer.ddsp_enabled and global_ddsp_decoder:
+                        packet = IntentPacket.from_bytes(message["bytes"])
+                        if packet.frame is not None:
+                            peer._ddsp_buffer.append(packet.frame)
+
+                        # Default batching: 12 frames at 120Hz = 100ms audio chunk
+                        if len(peer._ddsp_buffer) >= 12:
+                            # Run synthesis
+                            audio_chunk = global_ddsp_decoder.decode_frames(peer._ddsp_buffer)
+                            peer._ddsp_buffer.clear()
+
+                            # Encode as binary: header("DDSP") + peer_id(8) + Float32Array
+                            pid_b = peer.peer_id.encode("utf-8").ljust(8, b"\x00")[:8]
+                            audio_bytes = audio_chunk.tobytes()
+                            out_data = b"DDSP" + pid_b + audio_bytes
+
+                            # Broadcast audio
+                            room = collab_manager.get_room(room_id)
+                            if room:
+                                for opid, opeer in list(room.peers.items()):
+                                    if opid != peer.peer_id:
+                                        with contextlib.suppress(Exception):
+                                            await opeer.ws.send_bytes(out_data)
                 elif "text" in message and message["text"]:
                     try:
                         data = json.loads(message["text"])
@@ -366,11 +461,13 @@ async def collab_ws(ws: WebSocket, room_id: str) -> None:
                     msg_type = data.get("type", "")
 
                     if msg_type == "ping":
-                        await ws.send_json({
-                            "type": "pong",
-                            "ts": time.time(),
-                            "server_ts": time.time(),
-                        })
+                        await ws.send_json(
+                            {
+                                "type": "pong",
+                                "ts": time.time(),
+                                "server_ts": time.time(),
+                            }
+                        )
 
                     elif msg_type == "latency_report":
                         peer.latency_ms = data.get("latency_ms", 0.0)
@@ -378,26 +475,52 @@ async def collab_ws(ws: WebSocket, room_id: str) -> None:
                     elif msg_type == "instrument_set":
                         peer.instrument = data.get("instrument", "unknown")
                         room = collab_manager.get_room(room_id)
-                        await collab_manager.broadcast_json(room_id, None, {
-                            "type": "peer_updated",
-                            "peer_id": peer.peer_id,
-                            "instrument": peer.instrument,
-                            "peers": room.peer_list() if room else [],
-                        })
+                        await collab_manager.broadcast_json(
+                            room_id,
+                            None,
+                            {
+                                "type": "peer_updated",
+                                "peer_id": peer.peer_id,
+                                "instrument": peer.instrument,
+                                "peers": room.peer_list() if room else [],
+                            },
+                        )
+
+                    elif msg_type == "ddsp_toggle":
+                        peer.ddsp_enabled = data.get("enabled", False)
+                        peer._ddsp_buffer = []  # reset buffer
+                        if peer.ddsp_enabled and global_ddsp_decoder:
+                            peer.instrument = "Neural DDSP"
+                        else:
+                            peer.instrument = "Additive JS"
+
+                        room = collab_manager.get_room(room_id)
+                        await collab_manager.broadcast_json(
+                            room_id,
+                            None,
+                            {
+                                "type": "peer_updated",
+                                "peer_id": peer.peer_id,
+                                "instrument": peer.instrument,
+                                "peers": room.peer_list() if room else [],
+                            },
+                        )
 
                     elif msg_type == "metrics_request":
                         room = collab_manager.get_room(room_id)
                         if room:
                             m = room.metrics()
-                            await ws.send_json({
-                                "type": "metrics",
-                                "peer_count": m.peer_count,
-                                "total_packets": m.total_packets,
-                                "bytes_transmitted": m.bytes_transmitted,
-                                "avg_latency_ms": round(m.avg_latency_ms, 1),
-                                "uptime_seconds": round(m.uptime_seconds, 1),
-                                "bandwidth_kbps": round(m.bandwidth_kbps, 2),
-                            })
+                            await ws.send_json(
+                                {
+                                    "type": "metrics",
+                                    "peer_count": m.peer_count,
+                                    "total_packets": m.total_packets,
+                                    "bytes_transmitted": m.bytes_transmitted,
+                                    "avg_latency_ms": round(m.avg_latency_ms, 1),
+                                    "uptime_seconds": round(m.uptime_seconds, 1),
+                                    "bandwidth_kbps": round(m.bandwidth_kbps, 2),
+                                }
+                            )
 
             elif message["type"] == "websocket.disconnect":
                 break
@@ -408,10 +531,14 @@ async def collab_ws(ws: WebSocket, room_id: str) -> None:
         await collab_manager.leave_room(room_id, peer.peer_id)
         room = collab_manager.get_room(room_id)
         if room:
-            await collab_manager.broadcast_json(room_id, None, {
-                "type": "peer_left",
-                "peer_id": peer.peer_id,
-                "peers": room.peer_list(),
-            })
+            await collab_manager.broadcast_json(
+                room_id,
+                None,
+                {
+                    "type": "peer_left",
+                    "peer_id": peer.peer_id,
+                    "peers": room.peer_list(),
+                },
+            )
         if ws.client_state == WebSocketState.CONNECTED:
             await ws.close()
