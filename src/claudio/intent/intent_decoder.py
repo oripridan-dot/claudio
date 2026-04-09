@@ -17,6 +17,7 @@ real-time streaming.
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import numpy as np
 
@@ -26,9 +27,11 @@ from claudio.intent.intent_encoder import IntentFrame
 class IntentDecoder:
     """Regenerates audio from semantic intent frames.
 
-    Uses additive synthesis with harmonic + noise components,
-    driven by the intent parameters. Phase-continuous for
-    streaming without clicks or glitches.
+    Two modes:
+      - Fallback (default): Additive synthesis (no model needed)
+      - DDSP neural:        Uses trained ForgeModel for instrument-quality output
+
+    Pass model_path to __init__ to enable DDSP mode.
     """
 
     def __init__(
@@ -36,6 +39,7 @@ class IntentDecoder:
         sample_rate: int = 44_100,
         frame_rate: int = 250,
         n_harmonics: int = 40,
+        model_path: str | None = None,
     ) -> None:
         self.sample_rate = sample_rate
         self.frame_rate = frame_rate
@@ -57,20 +61,29 @@ class IntentDecoder:
         # Previous frame for interpolation
         self._prev_frame: IntentFrame | None = None
 
+        # DDSP neural backend (optional)
+        self._ddsp_encoder = None
+        self._ddsp_decoder = None
+        self._ddsp_device = None
+        self.use_ddsp = False
+
+        if model_path is not None:
+            self._load_ddsp_model(model_path)
+
     def decode_frames(self, frames: list[IntentFrame]) -> np.ndarray:
         """Decode a sequence of IntentFrames into audio.
 
-        Parameters
-        ----------
-        frames : List of IntentFrame (typically from one encode_block)
-
-        Returns
-        -------
-        np.ndarray, shape (N,), float32 mono audio.
+        Uses DDSP neural synthesis if a model is loaded,
+        otherwise falls back to additive synthesis.
         """
         if not frames:
             return np.zeros(0, dtype=np.float32)
 
+        # DDSP path: batch-process all frames through neural model
+        if self.use_ddsp:
+            return self._decode_ddsp(frames)
+
+        # Fallback path: per-frame additive synthesis
         chunks: list[np.ndarray] = []
         for frame in frames:
             chunk = self._decode_single_frame(frame)
@@ -78,6 +91,79 @@ class IntentDecoder:
             self._prev_frame = frame
 
         return np.concatenate(chunks).astype(np.float32)
+
+    def _load_ddsp_model(self, model_path: str) -> None:
+        """Load trained GRUEncoder + DDSPDecoder from checkpoint."""
+        import torch
+
+        from claudio.forge.model.ddsp_decoder import DDSPDecoder
+        from claudio.forge.model.gru_encoder import GRUEncoder
+
+        ckpt_file = Path(model_path)
+        if not ckpt_file.exists():
+            return  # No model file — stay in fallback mode
+
+        checkpoint = torch.load(ckpt_file, map_location="cpu", weights_only=True)
+        latent_dim = checkpoint.get("latent_dim", 128)
+
+        self._ddsp_encoder = GRUEncoder(
+            input_dim=2, hidden_dim=64, latent_dim=latent_dim, num_layers=2,
+        )
+        self._ddsp_decoder = DDSPDecoder(
+            latent_dim=latent_dim, n_partials=64,
+            sample_rate=self.sample_rate,
+        )
+
+        self._ddsp_encoder.load_state_dict(checkpoint["encoder_state_dict"])
+        self._ddsp_decoder.load_state_dict(checkpoint["decoder_state_dict"])
+
+        self._ddsp_encoder.eval()
+        self._ddsp_decoder.eval()
+
+        # Device selection: MPS → CUDA → CPU
+        if torch.backends.mps.is_available():
+            self._ddsp_device = torch.device("mps")
+        elif torch.cuda.is_available():
+            self._ddsp_device = torch.device("cuda")
+        else:
+            self._ddsp_device = torch.device("cpu")
+
+        self._ddsp_encoder.to(self._ddsp_device)
+        self._ddsp_decoder.to(self._ddsp_device)
+        self.use_ddsp = True
+
+    def _decode_ddsp(self, frames: list[IntentFrame]) -> np.ndarray:
+        """Decode frames using trained DDSP neural synthesis."""
+        import torch
+
+        n_frames = len(frames)
+        f0_min = 32.7
+        f0_max = 2093.0
+        lo = np.log2(f0_min)
+        hi = np.log2(f0_max)
+
+        # Convert frames to normalized F0 + loudness tensors
+        f0_arr = np.zeros(n_frames, dtype=np.float32)
+        loud_arr = np.zeros(n_frames, dtype=np.float32)
+
+        for i, f in enumerate(frames):
+            if f.f0_hz > f0_min:
+                f0_arr[i] = (np.log2(f.f0_hz) - lo) / (hi - lo)
+            loud_arr[i] = max(0.0, min(1.0, f.loudness_norm))
+
+        # Shape: (1, T) — single batch
+        f0_t = torch.from_numpy(f0_arr).unsqueeze(0).to(self._ddsp_device)
+        loud_t = torch.from_numpy(loud_arr).unsqueeze(0).to(self._ddsp_device)
+
+        with torch.no_grad():
+            z = self._ddsp_encoder(f0_t, loud_t)         # (1, T, 128)
+            audio = self._ddsp_decoder(z, f0_t, loud_t)  # (1, T_audio)
+
+        result = audio.squeeze(0).cpu().numpy().astype(np.float32)
+
+        # Soft-clip
+        result = np.tanh(result)
+        return result
 
     def _decode_single_frame(self, frame: IntentFrame) -> np.ndarray:
         """Synthesize one hop of audio from a single IntentFrame."""

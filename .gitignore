@@ -15,6 +15,7 @@ node_modules/
 *.swp
 .DS_Store
 checkpoints/
+!checkpoints/forge_model_best.pt
 *.pt
 *.onnx
 *.pth

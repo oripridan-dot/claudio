@@ -158,7 +158,7 @@ class DDSPDecoder(nn.Module):
         noise = torch.randn(B, T_audio, device=device)
 
         # Convert magnitude spectrum → FIR filter via IFFT
-        # For efficiency: use frame-averaged magnitude per batch item
+        # Use frame-averaged magnitude per batch item
         mags_up = F.interpolate(
             n_mags.permute(0, 2, 1),    # (B, N_bins, T)
             size=T_audio, mode="linear", align_corners=False,
@@ -167,25 +167,19 @@ class DDSPDecoder(nn.Module):
         mean_mags = mags_up.mean(-1)   # (B, N_bins)
 
         # FFT-based filtering: multiply in frequency domain
-        # FFT the noise
         fft_n = max(T_audio, self.n_filter_bins * 2)
         noise_fft = torch.fft.rfft(noise, n=fft_n)  # (B, fft_n//2+1)
 
-        # Build frequency-domain filter from magnitudes
+        # Build frequency-domain filter — vectorized across batch
         n_freq_bins = noise_fft.shape[-1]
-        filt = torch.ones(B, n_freq_bins, device=device)
-        # Map n_filter_bins magnitude values into the frequency domain
-        for b in range(B):
-            # Interpolate filter magnitudes to match FFT size
-            mags_b = mean_mags[b]  # (N_filter_bins,)
-            filt_interp = F.interpolate(
-                mags_b.unsqueeze(0).unsqueeze(0),  # (1, 1, N_filter_bins)
-                size=n_freq_bins, mode="linear", align_corners=False,
-            ).squeeze(0).squeeze(0)  # (n_freq_bins,)
-            filt[b] = filt_interp
+        filt = F.interpolate(
+            mean_mags.unsqueeze(1),      # (B, 1, N_filter_bins)
+            size=n_freq_bins, mode="linear", align_corners=False,
+        ).squeeze(1)                     # (B, n_freq_bins)
 
         # Apply filter in frequency domain
         filtered_fft = noise_fft * filt
         noise_filtered = torch.fft.irfft(filtered_fft, n=fft_n)[:, :T_audio]
 
         return noise_filtered * 0.1   # scale noise contribution
+
