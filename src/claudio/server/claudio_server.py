@@ -21,6 +21,12 @@ from __future__ import annotations
 import contextlib
 import json
 import time
+import os
+from dotenv import load_dotenv
+
+if os.getenv("CLOUD_NATIVE_WORKSPACE", "false").lower() != "true":
+    load_dotenv()
+
 from dataclasses import asdict
 from typing import Any
 
@@ -63,6 +69,7 @@ from claudio.server.ws_session import (
     check_coaching_triggers,
     treatment_text_to_trigger,
 )
+from claudio.server.billing import billing_manager
 
 app = FastAPI(title="Claudio Intelligence Server", version="1.1.0")
 
@@ -349,11 +356,31 @@ def _treatment_text_to_trigger(text):
 # ─── Collaboration Endpoints ─────────────────────────────────────────────────
 
 
+class CreateRoomRequest(BaseModel):
+    username: str = "guest"
+
 @app.post("/api/collab/create")
-async def create_collab_room() -> dict:
-    """Create a new collaboration room."""
+async def create_collab_room(req: CreateRoomRequest = None) -> dict:
+    """Create a new collaboration room based on billing tier."""
+    username = req.username if req else "guest"
+    tier = billing_manager.verify_account_tier(username)
+    
+    # We allow standard users to create basic rooms, but flag premium context
     room_id = await collab_manager.create_room()
-    return {"room_id": room_id, "ws_url": f"/ws/collab/{room_id}"}
+    return {
+        "room_id": room_id, 
+        "ws_url": f"/ws/collab/{room_id}",
+        "tier_granted": tier
+    }
+
+class StripeWebhookPayload(BaseModel):
+    type: str
+    data: dict
+
+@app.post("/api/billing/webhook")
+async def stripe_webhook(payload: StripeWebhookPayload) -> dict:
+    success = billing_manager.handle_webhook(payload.dict())
+    return {"status": "processed", "success": success}
 
 
 @app.get("/api/collab/rooms")
