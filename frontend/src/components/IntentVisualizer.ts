@@ -4,7 +4,7 @@
  * Renders real-time pitch contours, loudness waveforms, and spectrum
  * with professional-grade aesthetics (glows, gradients, grid overlays).
  */
-import type { IntentFrame } from '../engine/IntentEngine';
+import type { IntentFrame, PeerInfo } from '../engine/IntentEngine';
 
 export const PITCH_HISTORY_SIZE = 200;
 export const LOUDNESS_HISTORY_SIZE = 200;
@@ -203,6 +203,102 @@ export function drawLoudnessHistory(
   ctx.shadowBlur = 0;
 }
 
+// ─── Spatial Arena ──────────────────────────────────────────────────────────
+
+export function drawSpatialArena(
+  ctx: CanvasRenderingContext2D,
+  peers: PeerInfo[],
+  w: number,
+  h: number
+): void {
+  ctx.clearRect(0, 0, w, h);
+  
+  // Outer space gradient
+  const bg = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, Math.max(w, h));
+  bg.addColorStop(0, '#0f0f1c');
+  bg.addColorStop(1, '#05050a');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, w, h);
+
+  // Draw concentric latency rings (radar style)
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+  const cx = w / 2;
+  const cy = h / 2;
+  for (let r = 50; r < Math.min(w, h); r += 80) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Draw local user in center
+  ctx.shadowBlur = 15;
+  ctx.shadowColor = '#00ff88';
+  ctx.fillStyle = '#00ff88';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#fff';
+  ctx.font = '10px JetBrains Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('YOU (Local)', cx, cy + 25);
+
+  if (!peers || peers.length === 0) {
+    ctx.fillStyle = '#555';
+    ctx.fillText('Waiting for global peers...', cx, cy - 25);
+    return;
+  }
+
+  // Draw peers
+  peers.forEach((peer, i) => {
+    // Map latency to radius (max 500ms -> outer edge)
+    const lat = Math.min(Math.max(peer.latency_ms ?? 0, 10), 500);
+    const radius = 50 + (lat / 500) * (Math.min(w, h) / 2 - 50);
+    
+    // Spread evenly around the circle
+    const angle = (i / peers.length) * Math.PI * 2;
+    const px = cx + Math.cos(angle) * radius;
+    const py = cy + Math.sin(angle) * radius;
+
+    // Glowing peer node
+    let color = '#ff6644'; // default
+    if (peer.instrument === 'Bass') color = '#cc44ff';
+    if (peer.instrument === 'Piano') color = '#44ccff';
+    if (peer.instrument === 'Vocal') color = '#ffee44';
+    if (peer.instrument === 'Neural DDSP') color = '#00ff88';
+
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = color;
+    ctx.fillStyle = color;
+    
+    // Pulse effect based on packet traffic
+    const pulse = 1.0 + Math.sin(Date.now() / 150 + i) * 0.2;
+    
+    ctx.beginPath();
+    ctx.arc(px, py, 8 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Pulse rings
+    ctx.strokeStyle = color + '40';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(px, py, 14 * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Label
+    ctx.fillStyle = '#ccc';
+    ctx.font = 'bold 10px JetBrains Mono, monospace';
+    ctx.fillText(peer.display_name, px, py - 18);
+    
+    ctx.fillStyle = color;
+    ctx.font = '9px JetBrains Mono, monospace';
+    ctx.fillText(`${lat.toFixed(0)}ms · ${peer.instrument}`, px, py + 18);
+  });
+  
+  ctx.textAlign = 'start';
+}
+
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
 export const collabStyles: Record<string, React.CSSProperties> = {
@@ -302,7 +398,13 @@ export const collabStyles: Record<string, React.CSSProperties> = {
     background: 'rgba(255,68,68,0.06)', color: '#ff5555',
     fontWeight: 600, fontSize: '12px', cursor: 'pointer',
   },
-  mainArea: { flex: 1, padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto' as const },
+  arenaBox: {
+    background: 'linear-gradient(145deg, rgba(14,14,24,0.6), rgba(10,10,18,0.4))',
+    border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px',
+    padding: '6px', overflow: 'hidden', flex: 1, 
+    minHeight: '280px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
+  },
+  mainArea: { flex: 1, padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto' as const },
   frameRow: { display: 'flex', gap: '10px' },
   frameBox: {
     flex: 1, background: 'linear-gradient(145deg, rgba(18,18,32,0.6), rgba(12,12,22,0.4))',

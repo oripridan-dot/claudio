@@ -101,7 +101,10 @@ class IntentPacket:
         # Pack rms_energy
         rms_data = struct.pack("<f", self.frame.rms_energy)
 
-        return header + frame_data + mfcc_data + vib_data + rms_data
+        # Pack articulation (5 bytes: f32 + u8)
+        art_data = struct.pack("<fB", self.frame.articulation_score, int(self.frame.articulation_mode))
+
+        return header + frame_data + mfcc_data + vib_data + rms_data + art_data
 
     @classmethod
     def from_bytes(cls, data: bytes) -> IntentPacket:
@@ -150,6 +153,8 @@ class IntentPacket:
             vibrato_rate_hz=vib_rate,
             vibrato_depth_cents=vib_depth,
             rms_energy=rms_energy,
+            articulation_score=struct.unpack_from("<f", data, offset)[0] if len(data) >= offset + 4 else 0.5,
+            articulation_mode=struct.unpack_from("<B", data, offset + 4)[0] if len(data) >= offset + 5 else 0,
         )
 
         return cls(sequence=seq, timestamp_ms=ts, flags=flags, frame=frame)

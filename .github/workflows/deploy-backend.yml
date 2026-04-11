@@ -10,6 +10,7 @@ on:
       - 'Dockerfile'
       - 'pyproject.toml'
       - 'uv.lock'
+  workflow_dispatch:
 
 env:
   GCP_PROJECT_ID: "too-loo-zi8g7e"

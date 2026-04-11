@@ -22,6 +22,7 @@ import contextlib
 import json
 import time
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
 if os.getenv("CLOUD_NATIVE_WORKSPACE", "false").lower() != "true":
@@ -29,6 +30,7 @@ if os.getenv("CLOUD_NATIVE_WORKSPACE", "false").lower() != "true":
 
 from dataclasses import asdict
 from typing import Any
+import asyncio
 
 import numpy as np
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
@@ -70,6 +72,7 @@ from claudio.server.ws_session import (
     treatment_text_to_trigger,
 )
 from claudio.server.billing import billing_manager
+from claudio.collab.webrtc_manager import WebRTCManager
 
 app = FastAPI(title="Claudio Intelligence Server", version="1.1.0")
 
@@ -95,14 +98,43 @@ freq_map = TopographicFreqMap(sample_rate=48_000)
 coach = PerformanceCoach()
 advisor = AcousticEnvironmentAdvisor()
 collab_manager = SessionManager()
+webrtc_manager = WebRTCManager(collab_manager)
 
 # Global DDSP Decoder (Loaded if checkpoint exists)
+MODEL_CHECKPOINT_PATH = "checkpoints/forge_model_best.pt"
 try:
-    global_ddsp_decoder = IntentDecoder(sample_rate=44100, model_path="checkpoints/forge_model_best.pt")
+    global_ddsp_decoder = IntentDecoder(sample_rate=44100, model_path=MODEL_CHECKPOINT_PATH)
     print("[DDSP] Neural Decoder loaded on backend.")
 except Exception as e:
     global_ddsp_decoder = None
     print(f"[DDSP] Failed to load Neural Decoder: {e}")
+
+async def _model_watchdog():
+    """Monitors the DDSP model weights and hot-reloads on-the-fly."""
+    global global_ddsp_decoder
+    if global_ddsp_decoder is None:
+        return
+        
+    last_mtime = 0
+    model_path = Path(MODEL_CHECKPOINT_PATH)
+    if model_path.exists():
+        last_mtime = model_path.stat().st_mtime
+        
+    while True:
+        await asyncio.sleep(2.0)
+        try:
+            if model_path.exists():
+                curr_mtime = model_path.stat().st_mtime
+                if curr_mtime > last_mtime:
+                    print("[Watchdog] Detected updated neural weights. Hot-swapping zero downtime...")
+                    global_ddsp_decoder.reload_model(MODEL_CHECKPOINT_PATH)
+                    last_mtime = curr_mtime
+        except Exception as e:
+            print(f"[Watchdog] Error reloading model: {e}")
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(_model_watchdog())
 
 
 def _serialize(obj: Any) -> Any:
@@ -532,6 +564,20 @@ async def collab_ws(ws: WebSocket, room_id: str) -> None:
                                 "peers": room.peer_list() if room else [],
                             },
                         )
+
+                    elif msg_type == "webrtc_offer":
+                        answer = await webrtc_manager.handle_offer(
+                            peer.peer_id,
+                            room_id,
+                            data.get("sdp", ""),
+                            data.get("rtc_type", "offer"),
+                            global_ddsp_decoder
+                        )
+                        await ws.send_json({
+                            "type": "webrtc_answer",
+                            "sdp": answer["sdp"],
+                            "rtc_type": answer["type"]
+                        })
 
                     elif msg_type == "metrics_request":
                         room = collab_manager.get_room(room_id)

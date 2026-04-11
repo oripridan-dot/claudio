@@ -124,16 +124,15 @@ def test_checkpoint_save_load():
 def test_ddsp_decoder_integration():
     """IntentDecoder with model_path loads DDSP and produces audio."""
     # Create a mini model and save it
-    encoder = GRUEncoder(input_dim=2, hidden_dim=64, latent_dim=128, num_layers=2)
-    decoder = DDSPDecoder(latent_dim=128, n_partials=64, sample_rate=44100)
+    from claudio.forge.model.autoencoder import AudioAutoEncoder
+    autoencoder = AudioAutoEncoder(latent_dim=128)
 
     with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as f:
         ckpt_path = f.name
 
     torch.save(
         {
-            "encoder_state_dict": encoder.state_dict(),
-            "decoder_state_dict": decoder.state_dict(),
+            "autoencoder_state_dict": autoencoder.state_dict(),
             "latent_dim": 128,
         },
         ckpt_path,

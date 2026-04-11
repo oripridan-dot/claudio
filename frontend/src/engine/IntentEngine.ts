@@ -157,6 +157,7 @@ function decodeIntentPacket(data: ArrayBuffer): { seq: number, frame: IntentFram
   const ts = view.getFloat32(offset, true); offset += 4;
   const flags = view.getUint8(offset); offset += 1;
 
+  if (flags & 0x08) {
     // Silence packet
     return {
       seq,
@@ -205,6 +206,12 @@ export class IntentEngine {
   onPeersUpdated: PeerCallback | null = null;
   onMetrics: MetricsCallback | null = null;
   onConnectionChange: ((connected: boolean) => void) | null = null;
+
+  // WebRTC state
+  private pc: RTCPeerConnection | null = null;
+  private dataChannel: RTCDataChannel | null = null;
+  private remoteStream: MediaStream | null = null;
+  private remoteStreamSource: MediaStreamAudioSourceNode | null = null;
 
   // State
   peerId = '';
@@ -310,8 +317,12 @@ export class IntentEngine {
 
       this.onLocalIntent?.(frame);
 
-      // Send via WebSocket
-      if (this.ws?.readyState === WebSocket.OPEN) {
+      // Send via WebRTC DataChannel if available, else fallback to WebSocket
+      if (this.dataChannel?.readyState === 'open') {
+        this.seq++;
+        const packet = encodeIntentPacket(frame, this.seq);
+        this.dataChannel.send(packet);
+      } else if (this.ws?.readyState === WebSocket.OPEN) {
         this.seq++;
         const packet = encodeIntentPacket(frame, this.seq);
         this.ws.send(packet);
@@ -326,6 +337,11 @@ export class IntentEngine {
       this.captureInterval = null;
     }
     this.mediaStream?.getTracks().forEach(t => t.stop());
+    this.remoteStream?.getTracks().forEach(t => t.stop());
+    if (this.pc) {
+      this.pc.close();
+      this.pc = null;
+    }
     this.remoteOsc?.stop();
     this.audioCtx?.close();
     this.audioCtx = null;
@@ -369,6 +385,7 @@ export class IntentEngine {
 
       // Start ping interval for latency measurement
       this._startPing();
+      this._initWebRTC();
     };
 
     this.ws.onclose = () => {
@@ -439,6 +456,14 @@ export class IntentEngine {
         // JSON: signaling
         const msg = JSON.parse(ev.data);
         switch (msg.type) {
+          case 'webrtc_answer':
+            if (this.pc) {
+              this.pc.setRemoteDescription(new RTCSessionDescription({
+                type: msg.rtc_type,
+                sdp: msg.sdp
+              }));
+            }
+            break;
           case 'welcome':
             this.peerId = msg.peer_id;
             this.peers = msg.peers || [];
@@ -499,11 +524,40 @@ export class IntentEngine {
     this.ws?.close();
     this.ws = null;
     this.connected = false;
+    if (this.pc) {
+        this.pc.close();
+        this.pc = null;
+    }
   }
 
   requestMetrics(): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'metrics_request' }));
+    }
+    if (this.pc) {
+      this.pc.getStats().then(stats => {
+        let jitter = 0;
+        let packetsLost = 0;
+        let packetsReceived = 0;
+        let currentRtt = 0;
+        
+        stats.forEach(report => {
+          if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+            jitter = report.jitter * 1000 || 0;
+            packetsLost = report.packetsLost || 0;
+            packetsReceived = report.packetsReceived || 0;
+          }
+          if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+            currentRtt = report.currentRoundTripTime * 1000 || 0;
+          }
+        });
+        
+        if (jitter > 0) this.jitterMs = jitter;
+        if (currentRtt > 0) this.latencyMs = currentRtt;
+        if (packetsReceived > 0) {
+           this.packetLossPercent = (packetsLost / (packetsLost + packetsReceived)) * 100;
+        }
+      }).catch(err => console.error("WebRTC Stats Error:", err));
     }
   }
 
@@ -517,6 +571,48 @@ export class IntentEngine {
     this.ddspMode = enabled;
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'ddsp_toggle', enabled }));
+    }
+  }
+
+  private async _initWebRTC(): Promise<void> {
+    this.pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    });
+
+    this.dataChannel = this.pc.createDataChannel('intent');
+    this.dataChannel.binaryType = 'arraybuffer';
+    this.dataChannel.onmessage = (ev) => {
+        // DataChannel receives incoming intent frames! Let's pass it to onmessage logic
+        if (this.ws && ev.data instanceof ArrayBuffer) {
+            this.ws.onmessage!(new MessageEvent('message', { data: ev.data }));
+        }
+    };
+
+    this.pc.addTransceiver('audio', { direction: 'recvonly' });
+
+    this.pc.ontrack = (event) => {
+       if (event.track.kind === 'audio') {
+           this.remoteStream = event.streams[0];
+           if (this.audioCtx && this.remoteGain && this.remoteStream) {
+               // disconnect old stream if any
+               if (this.remoteStreamSource) {
+                   this.remoteStreamSource.disconnect();
+               }
+               this.remoteStreamSource = this.audioCtx.createMediaStreamSource(this.remoteStream);
+               this.remoteStreamSource.connect(this.remoteGain);
+           }
+       }
+    };
+
+    const offer = await this.pc.createOffer();
+    await this.pc.setLocalDescription(offer);
+    
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({
+            type: 'webrtc_offer',
+            sdp: offer.sdp,
+            rtc_type: offer.type
+        }));
     }
   }
 

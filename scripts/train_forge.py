@@ -1,12 +1,8 @@
 """
-train_forge.py — DDSP ForgeModel Training Script
+train_forge.py — Polyphonic AutoEncoder Training Script
 
-Proper DDSP training pattern:
-  1. Pre-extract F0 + loudness from all audio files (CPU, one-time)
-  2. Cache features as tensors
-  3. Train GRUEncoder → DDSPDecoder on cached features (MPS/GPU)
-
-This avoids running the slow CPU-bound YIN pitch tracker on every batch.
+Trains the End-to-End Convolutional Latent Audio Codec on raw audio.
+This bypasses monophonic limitations and allows synthesis of drums & chords.
 
 Usage:
     python scripts/train_forge.py [--epochs 300] [--lr 3e-4] [--batch-size 4]
@@ -29,9 +25,7 @@ from torch.utils.data import DataLoader, TensorDataset
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from claudio.forge.loss.spectral_loss import MultiScaleSpectralLoss  # noqa: E402
-from claudio.forge.model.ddsp_decoder import DDSPDecoder  # noqa: E402
-from claudio.forge.model.feature_extractor import FeatureExtractor  # noqa: E402
-from claudio.forge.model.gru_encoder import GRUEncoder  # noqa: E402
+from claudio.forge.model.autoencoder import AudioAutoEncoder  # noqa: E402
 
 
 def get_device() -> torch.device:
@@ -56,38 +50,28 @@ def load_wav(path: Path, sr: int = 44_100) -> np.ndarray:
     return samples
 
 
-def preextract_features(
+def extract_raw_clips(
     data_dir: str,
     clip_seconds: float = 3.0,
     sample_rate: int = 44_100,
     n_clips_per_file: int = 20,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Pre-extract F0 + loudness features from all WAV files.
-
-    Returns:
-        audio_clips:  (N, T_audio) — target audio
-        f0_clips:     (N, T_frames) — normalized F0
-        loud_clips:   (N, T_frames) — normalized loudness
-    """
-    wav_files = sorted(Path(data_dir).rglob("*.wav"))
+) -> torch.Tensor:
+    """Extract random raw audio clips from all WAV files for self-supervised training."""
+    wav_files = sorted(Path(data_dir).rglob("*.wav")) + sorted(Path(data_dir).rglob("*.WAV"))
+    wav_files = [f for f in wav_files if not f.name.startswith("._")]
     if not wav_files:
         raise FileNotFoundError(f"No WAV files found in {data_dir}")
 
     clip_len = int(clip_seconds * sample_rate)
-    extractor = FeatureExtractor(sample_rate=sample_rate)
-
     audio_list = []
-    f0_list = []
-    loud_list = []
 
-    print(f"Pre-extracting features from {len(wav_files)} files...")
+    print(f"Extracting {clip_seconds}s clips from {len(wav_files)} files...")
     for path in wav_files:
         print(f"  Processing: {path.name}", end="", flush=True)
         t0 = time.time()
 
         audio = load_wav(path, sample_rate)
 
-        # Generate random clips from this file
         rng = np.random.default_rng(42)
         for _ in range(n_clips_per_file):
             if len(audio) <= clip_len:
@@ -97,24 +81,14 @@ def preextract_features(
                 clip = audio[start:start + clip_len]
 
             clip_t = torch.from_numpy(clip).unsqueeze(0)  # (1, T)
-            f0, loudness = extractor(clip_t)  # (1, T_f)
-
             audio_list.append(clip_t)
-            f0_list.append(f0)
-            loud_list.append(loudness)
 
         elapsed = time.time() - t0
         print(f" ({elapsed:.1f}s)")
 
-    # Stack into batched tensors
     audio_all = torch.cat(audio_list, dim=0)   # (N, T)
-    f0_all = torch.cat(f0_list, dim=0)         # (N, T_f)
-    loud_all = torch.cat(loud_list, dim=0)     # (N, T_f)
-
-    print(f"  Total clips: {audio_all.shape[0]}")
-    print(f"  Audio shape: {audio_all.shape}")
-    print(f"  Features:    {f0_all.shape}")
-    return audio_all, f0_all, loud_all
+    print(f"  Total clips: {audio_all.shape[0]}, Shape: {audio_all.shape}")
+    return audio_all
 
 
 def train(
@@ -133,32 +107,25 @@ def train(
     print(f"Config: epochs={epochs}, lr={lr}, batch_size={batch_size}")
     print()
 
-    # ── Phase 1: Pre-extract features (CPU, one-time) ─────────────────
-    audio_all, f0_all, loud_all = preextract_features(
+    # ── Phase 1: Extract Audio Clips ──────────────────────────────────
+    audio_all = extract_raw_clips(
         data_dir, clip_seconds, n_clips_per_file=n_clips_per_file,
     )
 
-    dataset = TensorDataset(audio_all, f0_all, loud_all)
+    dataset = TensorDataset(audio_all)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
 
-    # ── Phase 2: Build model (GRUEncoder + DDSPDecoder only) ──────────
+    # ── Phase 2: Build model (AudioAutoEncoder) ───────────────────────
     latent_dim = 128
-    encoder = GRUEncoder(
-        input_dim=2, hidden_dim=64, latent_dim=latent_dim, num_layers=2,
-    ).to(device)
-    decoder = DDSPDecoder(
-        latent_dim=latent_dim, n_partials=64, sample_rate=44_100,
-    ).to(device)
+    autoencoder = AudioAutoEncoder(latent_dim=latent_dim).to(device)
 
-    n_params = sum(p.numel() for p in encoder.parameters()) + \
-               sum(p.numel() for p in decoder.parameters())
-    print(f"\nSynthesis model: {n_params:,} parameters")
-    print(f"  GRUEncoder:  {sum(p.numel() for p in encoder.parameters()):,}")
-    print(f"  DDSPDecoder: {sum(p.numel() for p in decoder.parameters()):,}")
+    n_params = sum(p.numel() for p in autoencoder.parameters())
+    print(f"\nSynthesis model (Polyphonic AutoEncoder): {n_params:,} parameters")
 
     # ── Loss + Optimizer ──────────────────────────────────────────────
-    loss_fn = MultiScaleSpectralLoss().to(device)
-    params = list(encoder.parameters()) + list(decoder.parameters())
+    loss_fn_spectral = MultiScaleSpectralLoss().to(device)
+    loss_fn_l1 = torch.nn.L1Loss().to(device)
+    params = list(autoencoder.parameters())
     optimizer = torch.optim.AdamW(params, lr=lr, weight_decay=1e-5)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=epochs, eta_min=1e-6,
@@ -173,31 +140,30 @@ def train(
     # ── Training loop ─────────────────────────────────────────────────
     print()
     print("=" * 60)
-    print("  Training DDSP Synthesis")
+    print("  Training Polyphonic Neural Codec")
     print("=" * 60)
 
     t0 = time.time()
     losses_history: list[float] = []
 
     for epoch in range(1, epochs + 1):
-        encoder.train()
-        decoder.train()
+        autoencoder.train()
         epoch_loss = 0.0
         n_batches = 0
 
-        for audio_batch, f0_batch, loud_batch in loader:
-            audio_batch = audio_batch.to(device)
-            f0_batch = f0_batch.to(device)
-            loud_batch = loud_batch.to(device)
+        for batch in loader:
+            audio_batch = batch[0].to(device)  # (B, T)
 
             optimizer.zero_grad()
 
-            # Forward: features → GRU → DDSP
-            z = encoder(f0_batch, loud_batch)        # (B, T_f, 128)
-            pred = decoder(z, f0_batch, loud_batch)  # (B, T_audio)
+            # Forward: Raw Audio -> AutoEncoder -> Reconstructed Audio
+            pred_audio = autoencoder(audio_batch)  # (B, T)
 
-            # Loss
-            loss = loss_fn(pred, audio_batch)
+            # Combined Loss: Spectral fidelity + Transient Structure (L1)
+            l_spectral = loss_fn_spectral(pred_audio, audio_batch)
+            l_l1 = loss_fn_l1(pred_audio, audio_batch)
+            loss = l_spectral + 10.0 * l_l1
+            
             loss.backward()
             nn.utils.clip_grad_norm_(params, max_norm=1.0)
             optimizer.step()
@@ -214,8 +180,7 @@ def train(
             best_loss = avg_loss
             torch.save({
                 "epoch": epoch,
-                "encoder_state_dict": encoder.state_dict(),
-                "decoder_state_dict": decoder.state_dict(),
+                "autoencoder_state_dict": autoencoder.state_dict(),
                 "loss": best_loss,
                 "n_params": n_params,
                 "latent_dim": latent_dim,

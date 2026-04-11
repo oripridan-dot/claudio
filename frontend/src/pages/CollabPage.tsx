@@ -10,6 +10,7 @@ import {
   freqToNote,
   drawPitchHistory,
   drawLoudnessHistory,
+  drawSpatialArena,
   collabStyles as styles,
 } from '../components/IntentVisualizer';
 
@@ -41,7 +42,12 @@ export default function CollabPage() {
   const remotePitchRef = useRef<HTMLCanvasElement>(null);
   const localLoudRef = useRef<HTMLCanvasElement>(null);
   const remoteLoudRef = useRef<HTMLCanvasElement>(null);
+  const arenaRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
+
+  // Use a ref for peers so the animation loop can access the latest state without closure issues
+  const peersRef = useRef<PeerInfo[]>([]);
+  useEffect(() => { peersRef.current = peers; }, [peers]);
 
   useEffect(() => {
     const draw = () => {
@@ -49,10 +55,12 @@ export default function CollabPage() {
       const rp = remotePitchRef.current;
       const ll = localLoudRef.current;
       const rl = remoteLoudRef.current;
+      const arena = arenaRef.current;
       if (lp) { const c = lp.getContext('2d'); if (c) drawPitchHistory(c, localHistoryRef.current, lp.width, lp.height, '#00ff88', 'LOCAL'); }
       if (rp) { const c = rp.getContext('2d'); if (c) drawPitchHistory(c, remoteHistoryRef.current, rp.width, rp.height, '#ff6644', 'REMOTE'); }
       if (ll) { const c = ll.getContext('2d'); if (c) drawLoudnessHistory(c, localHistoryRef.current, ll.width, ll.height, '#00ff88'); }
       if (rl) { const c = rl.getContext('2d'); if (c) drawLoudnessHistory(c, remoteHistoryRef.current, rl.width, rl.height, '#ff6644'); }
+      if (arena) { const c = arena.getContext('2d'); if (c) drawSpatialArena(c, peersRef.current, arena.width, arena.height); }
       animRef.current = requestAnimationFrame(draw);
     };
     animRef.current = requestAnimationFrame(draw);
@@ -85,7 +93,11 @@ export default function CollabPage() {
   }, [connected, engine]);
 
   const handleCreateRoom = useCallback(async () => {
-    const res = await fetch(`${SERVER_URL}/api/collab/create`, { method: 'POST' });
+    const res = await fetch(`${SERVER_URL}/api/collab/create`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: userName })
+    });
     const data = await res.json();
     setRoomId(data.room_id);
     setInputRoom(data.room_id);
@@ -218,6 +230,9 @@ export default function CollabPage() {
           </aside>
 
           <main style={styles.mainArea}>
+            <div style={styles.arenaBox}>
+              <canvas ref={arenaRef} width={800} height={280} style={styles.canvas} />
+            </div>
             <div style={styles.frameRow}>
               <div style={styles.frameBox}>
                 <div style={styles.frameLabel}>LOCAL PITCH</div>

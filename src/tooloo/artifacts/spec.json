@@ -1,0 +1,68 @@
+{
+  "goal": "Implement a hermetic pre-execution verification module in Python (`system_verification.py`) to check for all required system dependencies (executables, file paths, permissions) before the main application logic, particularly real-time audio components, is initialized. This will prevent runtime crashes due to missing dependencies.",
+  "constraints": [
+    "The solution must be a single, self-contained Python module with no external library dependencies beyond the Python standard library.",
+    "The verification process must be executed synchronously at application startup.",
+    "The implementation must be platform-aware for POSIX-compliant systems (Linux, macOS) using standard library modules like `os` and `shutil`."
+  ],
+  "phases": [
+    {
+      "name": "Design",
+      "deliverable": "A finalized software specification (this JSON document) defining the module's API, behavior, and integration points.",
+      "agent": "Planner"
+    },
+    {
+      "name": "Implementation",
+      "deliverable": "A Python module named `system_verification.py` containing a primary function (e.g., `run_checks()`) that iterates through a configured list of dependencies and verifies their status.",
+      "agent": "Coder"
+    },
+    {
+      "name": "Integration",
+      "deliverable": "Modified application entry point (`main.py` or equivalent) that imports and executes the `run_checks()` function before any other application logic is run.",
+      "agent": "Coder"
+    },
+    {
+      "name": "Testing",
+      "deliverable": "A suite of unit tests for `system_verification.py` that validates both success (all dependencies present) and failure (one or more dependencies missing) scenarios. An integration test that confirms the main application exits gracefully when a required dependency is absent.",
+      "agent": "Tester"
+    }
+  ],
+  "acceptance_criteria": [
+    "A file named `system_verification.py` is created.",
+    "The module contains a function that accepts a configuration defining dependencies to check. Each dependency check must verify either an executable's existence and +x permission, or a file path's existence and read/write permissions.",
+    "When invoked, the verification function must check for the presence of `sox` and the `python` interpreter in the system's PATH.",
+    "If any dependency check fails, the function must raise a custom `DependencyError` exception with a message clearly identifying the missing dependency and the failed check (e.g., 'Executable `sox` not found in PATH').",
+    "If all dependency checks pass, the function must return `True` and log a success message to standard output.",
+    "The main application's startup sequence is modified to call this verification function.",
+    "When a dependency (e.g., `sox`) is manually uninstalled or removed from the PATH, running the application must result in a clean exit with a status code of 1 and the `DependencyError` message printed to standard error, before any audio engine initialization occurs."
+  ],
+  "risk_flags": [
+    {
+      "risk": "The list of dependencies to check may become outdated as new features are added to the application.",
+      "severity": "medium",
+      "mitigation": "The dependency list will be defined in a clear, centralized data structure (e.g., a list of dictionaries) at the top of the `system_verification.py` module. All developers will be instructed to update this list as part of the workflow for adding features with new system dependencies."
+    },
+    {
+      "risk": "Permission checks might behave differently across operating systems or in containerized environments (e.g., Docker).",
+      "severity": "low",
+      "mitigation": "Utilize standard, cross-platform Python functions like `shutil.which()` for executable lookups and `os.access()` for permission checks, which abstract away most OS-level differences. The primary target environment is POSIX."
+    }
+  ],
+  "technology_stack": [
+    "Python 3.9+",
+    "os (standard library)",
+    "shutil (standard library)",
+    "sys (standard library)",
+    "pytest (for testing)"
+  ],
+  "estimated_complexity": "small",
+  "out_of_scope": [
+    "Verifying specific versions of dependencies (e.g., `sox >= 14.4.2`). The check will only confirm presence.",
+    "Checking network-based dependencies like API endpoints or database connections.",
+    "Automatically installing or providing instructions to fix missing dependencies. The system will only fail and report.",
+    "A graphical user interface for displaying verification status.",
+    "Dynamic dependency checking after the initial startup phase.",
+    "Support for non-POSIX operating systems like Windows.",
+    "A plugin architecture for adding new types of checks."
+  ]
+}

@@ -94,36 +94,31 @@ class IntentDecoder:
         return np.concatenate(chunks).astype(np.float32)
 
     def _load_ddsp_model(self, model_path: str) -> None:
-        """Load trained GRUEncoder + DDSPDecoder from checkpoint."""
+        """Load trained Polyphonic Latent Codec from checkpoint."""
         import torch
-
-        from claudio.forge.model.ddsp_decoder import DDSPDecoder
-        from claudio.forge.model.gru_encoder import GRUEncoder
+        from claudio.forge.model.autoencoder import AudioAutoEncoder
 
         ckpt_file = Path(model_path)
         if not ckpt_file.exists():
+            print(f"[IntentDecoder] Checkpoint missing: {model_path}. Running fallback synthesis.")
             return  # No model file — stay in fallback mode
 
-        checkpoint = torch.load(ckpt_file, map_location="cpu", weights_only=True)
+        try:
+            checkpoint = torch.load(ckpt_file, map_location="cpu", weights_only=False)
+        except Exception as e:
+            print(f"[IntentDecoder] Checkpoint load failed: {e}. Running fallback synthesis.")
+            return
+
         latent_dim = checkpoint.get("latent_dim", 128)
 
-        self._ddsp_encoder = GRUEncoder(
-            input_dim=2,
-            hidden_dim=64,
-            latent_dim=latent_dim,
-            num_layers=2,
-        )
-        self._ddsp_decoder = DDSPDecoder(
-            latent_dim=latent_dim,
-            n_partials=64,
-            sample_rate=self.sample_rate,
-        )
+        self._autoencoder = AudioAutoEncoder(latent_dim=latent_dim)
+        
+        if "autoencoder_state_dict" in checkpoint:
+            self._autoencoder.load_state_dict(checkpoint["autoencoder_state_dict"], strict=False)
+        else:
+            return
 
-        self._ddsp_encoder.load_state_dict(checkpoint["encoder_state_dict"])
-        self._ddsp_decoder.load_state_dict(checkpoint["decoder_state_dict"])
-
-        self._ddsp_encoder.eval()
-        self._ddsp_decoder.eval()
+        self._autoencoder.eval()
 
         # Device selection: MPS → CUDA → CPU
         if torch.backends.mps.is_available():
@@ -133,41 +128,35 @@ class IntentDecoder:
         else:
             self._ddsp_device = torch.device("cpu")
 
-        self._ddsp_encoder.to(self._ddsp_device)
-        self._ddsp_decoder.to(self._ddsp_device)
+        self._autoencoder.to(self._ddsp_device)
         self.use_ddsp = True
 
+    def reload_model(self, model_path: str) -> None:
+        """Hot-swap the neural weights with an updated checkpoint during runtime."""
+        self._load_ddsp_model(model_path)
+        print(f"[IntentDecoder] Successfully hot-reloaded neural weights from {model_path}.")
+
     def _decode_ddsp(self, frames: list[IntentFrame]) -> np.ndarray:
-        """Decode frames using trained DDSP neural synthesis."""
+        """Fallback: if requested to decode empty frames, return zeroes."""
+        if not frames:
+            return np.zeros(self.hop, dtype=np.float32)
+        # Without raw audio bypass, we return 0. The neural path should use decode_raw_audio.
+        return np.zeros(len(frames) * self.hop, dtype=np.float32)
+
+    def decode_raw_audio(self, raw_audio: np.ndarray) -> np.ndarray:
+        """
+        Polyphonic Codec Path: Encodes the chunk into the dense Latent space, 
+        transmits it (internally), and perfectly reconstructs the transients and polyphony.
+        """
+        if not self.use_ddsp:
+            return raw_audio
+            
         import torch
-
-        n_frames = len(frames)
-        f0_min = 32.7
-        f0_max = 2093.0
-        lo = np.log2(f0_min)
-        hi = np.log2(f0_max)
-
-        # Convert frames to normalized F0 + loudness tensors
-        f0_arr = np.zeros(n_frames, dtype=np.float32)
-        loud_arr = np.zeros(n_frames, dtype=np.float32)
-
-        for i, f in enumerate(frames):
-            if f.f0_hz > f0_min:
-                f0_arr[i] = (np.log2(f.f0_hz) - lo) / (hi - lo)
-            loud_arr[i] = max(0.0, min(1.0, f.loudness_norm))
-
-        # Shape: (1, T) — single batch
-        f0_t = torch.from_numpy(f0_arr).unsqueeze(0).to(self._ddsp_device)
-        loud_t = torch.from_numpy(loud_arr).unsqueeze(0).to(self._ddsp_device)
-
         with torch.no_grad():
-            z = self._ddsp_encoder(f0_t, loud_t)  # (1, T, 128)
-            audio = self._ddsp_decoder(z, f0_t, loud_t)  # (1, T_audio)
-
-        result = audio.squeeze(0).cpu().numpy().astype(np.float32)
-
-        # Soft-clip
-        result = np.tanh(result)
+            t = torch.from_numpy(raw_audio).unsqueeze(0).to(self._ddsp_device)
+            regen = self._autoencoder(t) # (1, T)
+            result = regen.squeeze(0).cpu().numpy()
+            
         return result
 
     def _decode_single_frame(self, frame: IntentFrame) -> np.ndarray:

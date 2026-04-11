@@ -17,12 +17,16 @@ Bandwidth comparison at 44.1kHz mono 16-bit:
   With delta compression: ~2-5 KB/s typical
 """
 
-from __future__ import annotations
-
 import math
 from dataclasses import dataclass, field
-
+from enum import IntEnum
 import numpy as np
+
+
+class ArticulationMode(IntEnum):
+    NEUTRAL = 0
+    STACCATO = 1
+    LEGATO = 2
 
 
 @dataclass
@@ -41,6 +45,8 @@ class IntentFrame:
     vibrato_rate_hz: float = 0.0
     vibrato_depth_cents: float = 0.0
     rms_energy: float = 0.0
+    articulation_score: float = 0.5  # 0.0 (staccato) to 1.0 (legato)
+    articulation_mode: ArticulationMode = ArticulationMode.NEUTRAL
 
 
 FRAME_RATE_HZ = 250
@@ -80,6 +86,12 @@ class IntentEncoder:
         # F0 history for vibrato detection
         self._f0_history: list[float] = []
         self._f0_history_max = 50  # ~200ms at 250Hz
+
+        # Articulation state
+        self._energy_history: list[float] = []
+        self._frames_since_onset: int = 100
+        self._current_articulation = ArticulationMode.NEUTRAL
+        self._articulation_score = 0.5
 
     def encode_block(
         self,
@@ -153,6 +165,9 @@ class IntentEncoder:
         # 5. Vibrato detection
         vib_rate, vib_depth = self._detect_vibrato(f0_hz)
 
+        # 6. Articulation Nuance (Staccato/Legato)
+        self._analyze_articulation(loudness_db, is_onset)
+
         return IntentFrame(
             timestamp_ms=ts,
             f0_hz=f0_hz,
@@ -166,6 +181,8 @@ class IntentEncoder:
             vibrato_rate_hz=vib_rate,
             vibrato_depth_cents=vib_depth,
             rms_energy=rms,
+            articulation_score=self._articulation_score,
+            articulation_mode=self._current_articulation,
         )
 
     def _yin_f0(self, frame: np.ndarray, threshold: float = 0.2) -> tuple[float, float]:
@@ -306,6 +323,44 @@ class IntentEncoder:
             vib_depth = 0.0
 
         return vib_rate, vib_depth
+
+    def _analyze_articulation(self, loudness_db: float, is_onset: bool) -> None:
+        """Analyze note articulation by measuring energy decay slope after onset."""
+        if is_onset:
+            self._energy_history = [loudness_db]
+            self._frames_since_onset = 0
+            return
+
+        self._frames_since_onset += 1
+        
+        # We analyze the first 12 frames (~48ms) after an onset to determine articulation
+        if self._frames_since_onset <= 12:
+            self._energy_history.append(loudness_db)
+            
+            if self._frames_since_onset == 12:
+                # Calculate decay slope (dB per frame)
+                # Steep negative slope = Staccato
+                # Flat/Sustained = Legato
+                y = np.array(self._energy_history)
+                x = np.arange(len(y))
+                slope, _ = np.polyfit(x, y, 1)
+                
+                # Heuristic: slope < -1.0 dB/frame is typically a sharp staccato decay
+                self._articulation_score = float(np.clip((slope + 1.5) / 1.5, 0.0, 1.0))
+                
+                if slope < -0.8:
+                    self._current_articulation = ArticulationMode.STACCATO
+                elif slope >= -0.2:
+                    self._current_articulation = ArticulationMode.LEGATO
+                else:
+                    self._current_articulation = ArticulationMode.NEUTRAL
+        
+        # Sustain baseline: if we are far from onset, check if energy is still high
+        elif self._frames_since_onset > 40:
+             # If energy has dropped significantly, reset to neutral/silence
+             if loudness_db < -45:
+                 self._current_articulation = ArticulationMode.NEUTRAL
+                 self._articulation_score = 0.5
 
     @staticmethod
     def _hz_to_mel(hz: float) -> float:
