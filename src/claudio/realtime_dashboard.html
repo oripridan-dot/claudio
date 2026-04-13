@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claudio Real-Time Proof Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a2e; /* Dark background */
+            color: #e0e0e0; /* Light text */
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            width: 90%;
+            max-width: 1200px;
+            padding: 20px;
+            background-color: #2a2a4a; /* Slightly lighter dark background */
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+        }
+        .dashboard-header {
+            grid-column: 1 / -1;
+            text-align: center;
+            color: #00bcd4; /* Accent color */
+            margin-bottom: 20px;
+        }
+        .metric-card {
+            background-color: #3a3a5a; /* Card background */
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            border-left: 5px solid #00bcd4; /* Accent border */
+        }
+        .metric-card h3 {
+            color: #ffffff;
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1.3em;
+        }
+        .metric-value {
+            font-size: 2.2em;
+            font-weight: bold;
+            color: #ffeb3b; /* Highlight color */
+        }
+        .metric-label {
+            font-size: 0.9em;
+            color: #a0a0a0;
+            margin-top: 5px;
+        }
+        /* Glassmorphism effect - conceptual, will require JS for dynamic updates */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-header glass-panel">
+        <h1>Claudio Real-Time Multi-Dimensional Proof System</h1>
+        <p>Unrivaled Sonic Dominance: Pristine Clarity & Detail + Spatial Accuracy & Immersion</p>
+    </div>
+
+    <div class="dashboard-container">
+        <!-- Clarity & Detail Metrics -->
+        <div class="metric-card glass-panel">
+            <h3>Signal-to-Noise Ratio (SNR)</h3>
+            <div class="metric-value" id="snr_value">-- dB</div>
+            <div class="metric-label">Measures signal purity</div>
+        </div>
+        <div class="metric-card glass-panel">
+            <h3>Total Harmonic Distortion (THD)</h3>
+            <div class="metric-value" id="thd_value">-- %</div>
+            <div class="metric-label">Indicates fidelity and absence of artifacts</div>
+        </div>
+        <div class="metric-card glass-panel">
+            <h3>Transient Response</h3>
+            <div class="metric-value" id="transient_value">-- ms</div>
+            <div class="metric-label">Speed and accuracy of attack/decay</div>
+        </div>
+
+        <!-- Spatial Accuracy & Immersion Metrics -->
+        <div class="metric-card glass-panel">
+            <h3>Phase Coherence</h3>
+            <div class="metric-value" id="phase_coherence_value">-- °</div>
+            <div class="metric-label">Channel alignment for stable imaging</div>
+        </div>
+        <div class="metric-card glass-panel">
+            <h3>Inter-Channel Correlation</h3>
+            <div class="metric-value" id="icc_value">-- (0-1)</div>
+            <div class="metric-label">Stereo field width and immersion</div>
+        </div>
+
+        <!-- Placeholder for additional visualizations/graphs -->
+        <div class="metric-card glass-panel" style="grid-column: 1 / -1;">
+            <h3>Real-Time Spectrum Analyzer (Coming Soon)</h3>
+            <div class="metric-value">Graphical Representation</div>
+            <div class="metric-label">Visualizing frequency content in real-time</div>
+        </div>
+    </div>
+
+    <script>
+        function fetchAndDisplayMetrics() {
+            // In a real application, this would make an API call to the RealtimeEngine
+            // e.g., fetch('/api/realtime_metrics').then(response => response.json())
+            // For now, we'll simulate data.
+            const metrics = {
+                snr_value: (Math.random() * (100 - 80) + 80).toFixed(2) + ' dB', // High SNR
+                thd_value: (Math.random() * (0.05 - 0.001) + 0.001).toFixed(3) + ' %', // Low THD
+                transient_value: (Math.random() * (5 - 1) + 1).toFixed(1) + ' ms', // Fast transient
+                phase_coherence_value: (Math.random() * (5 - 0) + 0).toFixed(1) + ' °', // Low phase deviation
+                icc_value: (Math.random() * (1 - 0.8) + 0.8).toFixed(2) // High correlation for immersion
+            };
+
+            document.getElementById('snr_value').innerText = metrics.snr_value;
+            document.getElementById('thd_value').innerText = metrics.thd_value;
+            document.getElementById('transient_value').innerText = metrics.transient_value;
+            document.getElementById('phase_coherence_value').innerText = metrics.phase_coherence_value;
+            document.getElementById('icc_value').innerText = metrics.icc_value;
+        }
+
+        // Fetch and display metrics every 1.5 seconds
+        setInterval(fetchAndDisplayMetrics, 1500);
+
+        // Initial call to display metrics immediately on load
+        fetchAndDisplayMetrics();
+    </script>
+</body>
+</html>

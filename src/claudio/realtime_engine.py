@@ -9,6 +9,9 @@ import logging
 import pyaudio
 import numpy as np
 
+from .audio_ingestion import preprocess_audio_data
+from .audio_analysis import calculate_snr, calculate_thd, analyze_transient_response, calculate_phase_coherence, calculate_inter_channel_correlation
+
 logger = logging.getLogger("Claudio.RealtimeEngine")
 
 class AudioProfile:
@@ -27,6 +30,8 @@ class RealtimeEngine:
         self.stream = None
         self.active = False
         self._captured_data = []
+        self._analysis_results = {}
+
 
     def _audio_callback(self, in_data, frame_count, time_info, status):
         """Unified audio pumping callback routing based on profile."""
@@ -39,7 +44,33 @@ class RealtimeEngine:
             out_data = tone.astype(np.float32).tobytes()
             
         elif self.profile == AudioProfile.CAPTURE:
-            self._captured_data.append(in_data)
+            # Pre-process captured data for consistency and quality
+            processed_in_data = preprocess_audio_data(np.frombuffer(in_data, dtype=np.float32))
+            self._captured_data.append(processed_in_data.tobytes())
+
+            if self.profile == AudioProfile.BENCHMARK:
+                # Perform real-time analysis for benchmarking
+                # Ensure processed_in_data is a 2D array for stereo analysis if needed
+                # For now, assuming mono or handling appropriately within analysis functions
+                mono_data = processed_in_data.flatten() # Simple conversion for initial analysis
+
+                # Clarity & Detail Metrics
+                self._analysis_results['snr'] = calculate_snr(mono_data)
+                self._analysis_results['thd'] = calculate_thd(mono_data)
+                self._analysis_results['transient_response'] = analyze_transient_response(mono_data)
+
+                # Spatial Accuracy & Immersion Metrics (requires stereo input)
+                if processed_in_data.ndim == 2 and processed_in_data.shape[1] == 2:
+                    left_channel = processed_in_data[:, 0]
+                    right_channel = processed_in_data[:, 1]
+                    self._analysis_results['phase_coherence'] = calculate_phase_coherence(left_channel, right_channel)
+                    self._analysis_results['inter_channel_correlation'] = calculate_inter_channel_correlation(left_channel, right_channel)
+                else:
+                    self._analysis_results['phase_coherence'] = 'N/A (mono)'
+                    self._analysis_results['inter_channel_correlation'] = 'N/A (mono)'
+
+                logger.debug(f"Benchmark Analysis: {self._analysis_results}")
+
 
         # In a full DSP implementation, hooks for `realtime_intelligence` or `realtime_benchmark`
         # would tap into the in_data array here.

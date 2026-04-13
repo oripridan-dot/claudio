@@ -7,6 +7,8 @@ all quality measurement modules.
 
 from __future__ import annotations
 
+from pydantic import BaseModel
+
 import os
 
 import matplotlib
@@ -101,6 +103,32 @@ def gen_noise(duration: float, amp: float = 0.3) -> np.ndarray:
     """Generate white noise."""
     n = int(SAMPLE_RATE * duration)
     return (np.random.randn(n) * amp).astype(np.float32)
+
+
+
+class AudioProfile:
+    """Placeholder for audio profile settings."""
+    def __init__(self, reference_audio_path=None, name="Default Profile"):
+        self.name = name
+        # Add any necessary default attributes for the demo
+        self.sample_rate = SAMPLE_RATE
+        self.channels = 1
+        self.bit_depth = 16
+
+    BENCHMARK = None # Will be initialized as an AudioProfile instance below
+
+# After class definitions, initialize BENCHMARK if needed
+AudioProfile.BENCHMARK = AudioProfile(name="Benchmark Profile")
+
+class BenchmarkConfig:
+    """Placeholder for benchmark configuration."""
+    def __init__(self, name="Default Benchmark", reference_audio_path: str = None, claudio_output_path: str = None):
+        self.name = name
+        # Add any necessary default attributes for the demo
+        self.duration_seconds = 10
+        self.test_signal = "sine"
+        self.target_snr = 90 # dB
+
 
 
 # ─── Processing Helpers ──────────────────────────────────────────────────────
