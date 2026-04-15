@@ -49,6 +49,7 @@ const N_MFCC = 13;
 const N_MELS = 26;
 const N_PARTIALS = 16;
 const DETECT_SILENCE_THRESHOLD = 0.005;
+const PACKET_BYTES = 86;
 
 
 function autocorrelationF0(
