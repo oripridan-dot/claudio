@@ -195,10 +195,16 @@ export default function CollabPage() {
         setResynthState(s);
         setResynthLatency(resynthEngine.latencyMs);
       };
+      
+      if (capturing) {
+         // Connect IntentEngine directly to speakers before destroying the shared dashboard
+         const ctx = engine.getAudioContext();
+         if (ctx) engine.redirectOutput(ctx.destination);
+      }
+      calibrationEngine?.destroy();
+      
       await resynthEngine.start(SERVER_URL);
       setResynthActive(true);
-      
-      calibrationEngine?.destroy();
 
       const ctx = resynthEngine.getAudioContext();
       if (ctx) {

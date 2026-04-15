@@ -55,6 +55,10 @@ export class ResynthEngine {
         sampleRate: SAMPLE_RATE
       },
     });
+    if (this.audioCtx.state === 'suspended') {
+      await this.audioCtx.resume();
+    }
+    this.inputSource = this.audioCtx.createMediaStreamSource(this.mediaStream);
 
     const wsUrl = serverUrl.replace(/^http/, 'ws') + '/ws/resynth';
     this.ws = new WebSocket(wsUrl);
@@ -95,12 +99,11 @@ export class ResynthEngine {
   }
 
   private _startCapture(): void {
-    if (!this.audioCtx || !this.mediaStream) return;
+    if (!this.audioCtx || !this.mediaStream || !this.inputSource) return;
 
-    const source = this.audioCtx.createMediaStreamSource(this.mediaStream);
-    this.inputSource = source;
     // ScriptProcessorNode: simple, synchronous, no worklet overhead for this use case
     this.processor = this.audioCtx.createScriptProcessor(CHUNK_SAMPLES, 1, 1);
+    this.inputSource.connect(this.processor);
 
     this.processor.onaudioprocess = (ev) => {
       if (this.ws?.readyState !== WebSocket.OPEN) return;

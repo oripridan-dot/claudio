@@ -453,6 +453,10 @@ export class IntentEngine {
         sampleRate: 48000
       },
     });
+    
+    if (this.audioCtx.state === 'suspended') {
+      await this.audioCtx.resume();
+    }
 
     const source = this.audioCtx.createMediaStreamSource(this.mediaStream);
     this.analyser = this.audioCtx.createAnalyser();
