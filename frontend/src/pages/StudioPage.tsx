@@ -2,23 +2,13 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import AudioFilePlayer from '../components/AudioFilePlayer';
 import BTLatencyPanel from '../components/BTLatencyPanel';
 import CodecSelector from '../components/CodecSelector';
-import InstrumentDetector from '../components/InstrumentDetector';
-import Knob from '../components/Knob';
-import LatencyPanel from '../components/LatencyPanel';
-import MentorCard from '../components/MentorCard';
-import MidiPanel from '../components/MidiPanel';
-import PhaseMeter from '../components/PhaseMeter';
-import RoadmapOverlay from '../components/RoadmapOverlay';
-import RoomScannerPanel from '../components/RoomScannerPanel';
-import SpectrumAnalyzer from '../components/SpectrumAnalyzer';
-import SweetSpotHUD from '../components/SweetSpotHUD';
 import WaveformViewer from '../components/WaveformViewer';
 import type { OscillatorType } from '../engine/AudioEngine';
 import { AudioEngine } from '../engine/AudioEngine';
 import '../engine/AudioEngineExtensions'; // side-effect: adds setBTLatencyCompensation
 import type { CodecProfile } from '../engine/codecProfiles';
 import { DEFAULT_CODEC_ID, getCodecById } from '../engine/codecProfiles';
-import { useClaudioSocket } from '../hooks/useClaudioSocket';
+import { HeadTracker } from '../spatial/HeadTracker';
 import { HeadTracker } from '../spatial/HeadTracker';
 import { SpatialEngine } from '../spatial/SpatialEngine';
 
@@ -94,51 +84,7 @@ export default function StudioPage() {
   const [codec,      setCodec]      = useState<CodecProfile>(() => getCodecById(DEFAULT_CODEC_ID));
   const [btLatencyMs, setBtLatencyMs] = useState(0);
 
-  // ── Claudio Intelligence State ──
-  const { send, lastMessage, connected } = useClaudioSocket('ws://localhost:8420/ws/session');
-
-  const [mentorTip, setMentorTip] = useState<{
-    mentor_name: string; mentor_photo: string; specialty: string;
-    quote: string; physical_action: string; location: string; date: string;
-  } | null>(null);
-  const [phaseData, setPhaseData] = useState<{
-    correlation: number; offset_samples: number; polarity_ok: boolean;
-  } | null>(null);
-  const [roomScan, setRoomScan] = useState<{
-    rt60: number; modes: { freq: number; q: number }[];
-    flutter_detected: boolean; bass_buildup_db: number;
-    advice: string[];
-  } | null>(null);
-  const [sweetSpot, setSweetSpot] = useState<{
-    left_delay_ms: number; right_delay_ms: number;
-    left_gain_db: number; right_gain_db: number;
-    listener_x: number; listener_y: number;
-    mode: string;
-  } | null>(null);
-  const [instrumentDetection, setInstrumentDetection] = useState<{
-    family: string; confidence: number; pickup_type: string;
-    model_guess: string; model_confidence: number; coaching_hints: string[];
-  } | null>(null);
-  const [roadmap, setRoadmap] = useState<{
-    current_phase: string; phases: {
-      id: string; name: string; status: string;
-      items: { key: string; label: string; completed: boolean }[];
-    }[];
-  } | null>(null);
-  const [mentorDismissed, setMentorDismissed] = useState(false);
-
-  // ── Process incoming Claudio messages ──
-  useEffect(() => {
-    if (!lastMessage) return;
-    const msg = lastMessage as Record<string, unknown>;
-    const t = msg.type as string | undefined;
-    if (t === 'instrument_detection') setInstrumentDetection(msg.data as typeof instrumentDetection);
-    if (t === 'mentor_tip') { setMentorTip(msg.data as typeof mentorTip); setMentorDismissed(false); }
-    if (t === 'phase_report') setPhaseData(msg.data as typeof phaseData);
-    if (t === 'room_scan_result') setRoomScan(msg.data as typeof roomScan);
-    if (t === 'sweet_spot_update') setSweetSpot(msg.data as typeof sweetSpot);
-    if (t === 'roadmap_update') setRoadmap(msg.data as typeof roadmap);
-  }, [lastMessage]);
+  // ── Engine Initialization ──
 
   // Lazy engine init (requires user gesture for AudioContext)
   const launch = useCallback(async () => {
@@ -805,68 +751,8 @@ export default function StudioPage() {
               )}
             </div>
           </div>
-
-          {/* ── CLAUDIO INTELLIGENCE PANELS ── */}
-          <div style={sectionLabel}>CLAUDIO INTELLIGENCE {connected && <span style={{ color: A }}>● LIVE</span>}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {/* Instrument Detector */}
-            <InstrumentDetector detection={instrumentDetection} />
-
-            {/* Phase Meter */}
-            <PhaseMeter
-              correlation={phaseData?.correlation ?? 0}
-              offsetSamples={phaseData?.offset_samples ?? 0}
-              polarityOk={phaseData?.polarity_ok ?? true}
-              onFlipPolarity={() => send({ type: 'flip_polarity' })}
-            />
-          </div>
-
-          {/* Room Scanner */}
-          <RoomScannerPanel
-            rt60={roomScan?.rt60 ?? null}
-            modes={roomScan?.modes ?? []}
-            flutterDetected={roomScan?.flutter_detected ?? false}
-            bassBuildupDb={roomScan?.bass_buildup_db ?? 0}
-            advice={roomScan?.advice ?? []}
-            onScanClap={() => send({ type: 'room_scan_clap' })}
-          />
-
-          {/* Sweet Spot */}
-          <SweetSpotHUD
-            leftDelayMs={sweetSpot?.left_delay_ms ?? 0}
-            rightDelayMs={sweetSpot?.right_delay_ms ?? 0}
-            leftGainDb={sweetSpot?.left_gain_db ?? 0}
-            rightGainDb={sweetSpot?.right_gain_db ?? 0}
-            listenerX={sweetSpot?.listener_x ?? 0}
-            listenerY={sweetSpot?.listener_y ?? 0}
-            mode={sweetSpot?.mode ?? 'FOCUS_ENGINEER'}
-            onModeChange={(mode) => send({ type: 'set_sweet_spot_mode', mode })}
-          />
         </div>
       </div>
-
-      {/* ── Mentor Card Overlay ── */}
-      {mentorTip && !mentorDismissed && (
-        <MentorCard
-          mentorName={mentorTip.mentor_name}
-          mentorPhoto={mentorTip.mentor_photo}
-          specialty={mentorTip.specialty}
-          quote={mentorTip.quote}
-          physicalAction={mentorTip.physical_action}
-          location={mentorTip.location}
-          date={mentorTip.date}
-          onDismiss={() => setMentorDismissed(true)}
-        />
-      )}
-
-      {/* ── Roadmap Bar ── */}
-      <RoadmapOverlay
-        currentPhase={roadmap?.current_phase ?? 'setup'}
-        phases={roadmap?.phases ?? []}
-        onCompleteItem={(phaseId, itemKey) =>
-          send({ type: 'roadmap_action', action: 'complete_item', phase_id: phaseId, item_key: itemKey })
-        }
-      />
     </div>
   );
 }

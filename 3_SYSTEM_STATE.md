@@ -36,8 +36,8 @@ Last updated: 2026-04-15
 | Intent Hardening | 15 | Edge cases, NaN safety |
 | Collab Session | 9 | Room management |
 | Collab E2E | 19 | Network/wire protocol |
-| HRTF, Metering, Modules | 116 | Various downstream consumers |
-| **Total** | **186 passed** | 0 failures |
+| HRTF, Modules | 57 | Downstream consumers |
+| **Total** | **127 passed** | 0 failures |
 
 ### Infrastructure
 
@@ -74,6 +74,10 @@ Last updated: 2026-04-15
 | **Total WAN** | **~87ms** |
 
 ## Recent Changes (v2.0.0 - Hybrid EnCodec)
+
+### Architectural Purge (feat/simplify-architectural-purge)
+- **Purged**: Removed bloated `intelligence/`, `vision/`, `mentor/`, `metering/` packages to strictly enforce Rule 0.A (Solo Operator Sovereignty).
+- **Simplified Server**: Stripped `ws_session.py` and cleared UI components tracking non-core intent models.
 
 ### Architectural Redesign
 - **Killed**: `SemanticVocoder` (STFT pretend AI), `DDSPDecoder` (returned zeros), `/ws/resynth` endpoint
