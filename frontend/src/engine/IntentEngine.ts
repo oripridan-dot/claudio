@@ -439,13 +439,19 @@ export class IntentEngine {
   private lastNetworkUpdateTs = 0;
 
   async startCapture(): Promise<void> {
-    this.audioCtx = new AudioContext({ sampleRate: 44100 });
+    this.audioCtx = new AudioContext({ sampleRate: 48000, latencyHint: 'interactive' });
     
     this.masterOut = this.audioCtx.createGain();
     this.masterOut.connect(this.audioCtx.destination);
 
     this.mediaStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      audio: { 
+        echoCancellation: false, 
+        noiseSuppression: false, 
+        autoGainControl: false,
+        channelCount: 2,
+        sampleRate: 48000
+      },
     });
 
     const source = this.audioCtx.createMediaStreamSource(this.mediaStream);
@@ -453,8 +459,8 @@ export class IntentEngine {
     this.analyser.fftSize = 2048;
     source.connect(this.analyser);
 
-    // Build mel filterbank once (2048-point FFT, 44100 Hz)
-    this.melFilterbank = buildMelFilterbank(2048, 44100);
+    // Build mel filterbank once (2048-point FFT, 48000 Hz)
+    this.melFilterbank = buildMelFilterbank(2048, 48000);
 
     // Phase 1: multi-oscillator harmonic synth for remote playback
     this.remoteSynth = new HarmonicSynth(this.audioCtx, this.masterOut);
@@ -665,6 +671,13 @@ export class IntentEngine {
                 }
                 await this.pc.setRemoteDescription(new RTCSessionDescription({ type: msg.rtc_type, sdp: msg.sdp }));
                 const answer = await this.pc.createAnswer();
+                if (answer.sdp) {
+                  // Force Opus Stereo and 48kHz High-fidelity
+                  answer.sdp = answer.sdp.replace(
+                    /a=fmtp:101 .*/g, 
+                    'a=fmtp:101 minptime=10; useinbandfec=1; stereo=1; sprop-stereo=1; maxplaybackrate=48000; sprop-maxcapturerate=48000; cbr=1'
+                  );
+                }
                 await this.pc.setLocalDescription(answer);
                 this.ws?.send(JSON.stringify({
                   type: 'webrtc_answer',
@@ -812,9 +825,13 @@ export class IntentEngine {
 
     // Phase 2: add local audio track so peers hear us directly
     if (this.mediaStream) {
-      this.mediaStream.getAudioTracks().forEach(track =>
-        this.pc!.addTrack(track, this.mediaStream!)
-      );
+      this.mediaStream.getAudioTracks().forEach(track => {
+        const sender = this.pc!.addTrack(track, this.mediaStream!);
+        const params = sender.getParameters();
+        if (!params.encodings) params.encodings = [{}];
+        params.encodings[0].maxBitrate = 256000; // Force 256kbps for Studio Fidelity
+        sender.setParameters(params).catch(e => console.warn('Failed to set WebRTC maxBitrate:', e));
+      });
     }
 
     // Data channel for intent packets (low-latency fallback)
@@ -857,6 +874,13 @@ export class IntentEngine {
     };
 
     const offer = await this.pc.createOffer();
+    if (offer.sdp) {
+      // Force Opus Stereo and 48kHz High-fidelity
+      offer.sdp = offer.sdp.replace(
+        /a=fmtp:101 .*/g, 
+        'a=fmtp:101 minptime=10; useinbandfec=1; stereo=1; sprop-stereo=1; maxplaybackrate=48000; sprop-maxcapturerate=48000; cbr=1'
+      );
+    }
     await this.pc.setLocalDescription(offer);
 
     if (this.ws?.readyState === WebSocket.OPEN) {

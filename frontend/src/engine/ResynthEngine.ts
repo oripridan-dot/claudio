@@ -8,8 +8,8 @@
  * Latency: ~80–150ms round-trip (Cloud Run + STFT). Good for capture-playback.
  */
 
-const CHUNK_SAMPLES = 4096;  // ≈93ms at 44100Hz — sweet spot for latency vs quality
-const SAMPLE_RATE   = 44100;
+const CHUNK_SAMPLES = 2048;  // ≈42ms at 48000Hz (halved for lower latency UI responsiveness)
+const SAMPLE_RATE   = 48000; // Native WebRTC rate to prevent aliasing/resampling
 const FADE_SAMPLES  = 64;    // linear fade-in/out to prevent inter-chunk clicks
 
 export type ResynthStateCallback = (state: 'idle' | 'capturing' | 'playing' | 'error') => void;
@@ -43,11 +43,17 @@ export class ResynthEngine {
 
   /** Connect to the SemanticVocoder WebSocket and start streaming. */
   async start(serverUrl: string): Promise<void> {
-    this.audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+    this.audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE, latencyHint: 'interactive' });
     this.masterOut = this.audioCtx.createGain();
     this.masterOut.connect(this.audioCtx.destination);
     this.mediaStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      audio: { 
+        echoCancellation: false, 
+        noiseSuppression: false, 
+        autoGainControl: false,
+        channelCount: 2,
+        sampleRate: SAMPLE_RATE
+      },
     });
 
     const wsUrl = serverUrl.replace(/^http/, 'ws') + '/ws/resynth';
