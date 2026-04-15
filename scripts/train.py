@@ -15,9 +15,9 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 
-from claudio.forge.model.forge_model import ForgeModel
-from claudio.forge.loss.spectral_loss import MultiScaleSpectralLoss
 from claudio.forge.data.audio_dataset import AudioDataset
+from claudio.forge.loss.spectral_loss import MultiScaleSpectralLoss
+from claudio.forge.model.forge_model import ForgeModel
 
 
 def parse_args() -> argparse.Namespace:

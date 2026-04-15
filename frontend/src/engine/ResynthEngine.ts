@@ -1,11 +1,11 @@
 /**
- * ResynthEngine.ts — Phase 3 Neural Vocoder (Near-Lossless Mode)
+ * ResynthEngine.ts — Neural Audio Codec Streaming (EnCodec)
  *
- * Streams raw PCM chunks to the server's /ws/resynth endpoint (SemanticVocoder),
- * receives STFT-reconstructed audio, and schedules it for glitch-free playback.
+ * Streams raw PCM chunks to the server's /ws/audio endpoint (EnCodec neural codec),
+ * receives compressed audio, and schedules it for glitch-free playback.
  *
- * Audio quality: >16-bit equivalent (≈ -80 dBFS reconstruction error).
- * Latency: ~80–150ms round-trip (Cloud Run + STFT). Good for capture-playback.
+ * Audio quality: Near-transparent at 6 kbps (EnCodec, Meta Research).
+ * Latency: ~80–150ms round-trip (Cloud Run + codec). Good for capture-playback.
  */
 
 const CHUNK_SAMPLES = 2048;  // ≈42ms at 48000Hz (halved for lower latency UI responsiveness)
@@ -41,7 +41,7 @@ export class ResynthEngine {
     }
   }
 
-  /** Connect to the SemanticVocoder WebSocket and start streaming. */
+  /** Connect to the NeuralCodec (EnCodec) WebSocket and start streaming. */
   async start(serverUrl: string): Promise<void> {
     this.audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE, latencyHint: 'interactive' });
     this.masterOut = this.audioCtx.createGain();
@@ -60,7 +60,7 @@ export class ResynthEngine {
     }
     this.inputSource = this.audioCtx.createMediaStreamSource(this.mediaStream);
 
-    const wsUrl = serverUrl.replace(/^http/, 'ws') + '/ws/resynth';
+    const wsUrl = serverUrl.replace(/^http/, 'ws') + '/ws/audio';
     this.ws = new WebSocket(wsUrl);
     this.ws.binaryType = 'arraybuffer';
 

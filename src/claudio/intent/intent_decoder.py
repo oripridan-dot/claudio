@@ -1,15 +1,15 @@
 """
-intent_decoder.py — DDSP-Based Audio Regeneration from Intent Packets
+intent_decoder.py — Additive Audio Synthesis from Intent Packets
 
-Regenerates audio from IntentFrame packets using DDSP synthesis:
+Generates a low-fidelity audio preview from IntentFrame packets:
   1. Harmonic additive synthesiser driven by F0 + spectral envelope
   2. Filtered noise component for breath/bow/pick noise
   3. Transient generator for onset attacks
   4. Loudness envelope shaping
 
-Two operating modes:
-  - Inference mode: Uses trained ForgeModel weights for high-fidelity synthesis
-  - Fallback mode:  Uses direct additive synthesis (no model needed, lower fidelity)
+NOTE: This is NOT the production audio path. Real audio goes through
+NeuralCodec (EnCodec) via /ws/audio at 6-24 kbps with near-transparent quality.
+This decoder exists for preview, testing, and sonification of intent metadata.
 
 The decoder maintains phase continuity across frames for glitch-free
 real-time streaming.
@@ -18,7 +18,6 @@ real-time streaming.
 from __future__ import annotations
 
 import math
-from pathlib import Path
 
 import numpy as np
 
@@ -40,7 +39,7 @@ class IntentDecoder:
         sample_rate: int = 44_100,
         frame_rate: int = 250,
         n_harmonics: int = 40,
-        model_path: str | None = None,
+        model_path: str | None = None,  # Kept for API compat, ignored
     ) -> None:
         self.sample_rate = sample_rate
         self.frame_rate = frame_rate
@@ -69,29 +68,18 @@ class IntentDecoder:
         self._unvoiced_frame_count: int = 0
         self._PHASE_RESET_AFTER_N_UNVOICED = 4  # only reset after 16ms of silence
 
-        # DDSP neural backend (optional)
-        self._ddsp_encoder = None
-        self._ddsp_decoder = None
-        self._ddsp_device = None
-        self.use_ddsp = False
-
-        if model_path is not None:
-            self._load_ddsp_model(model_path)
-
     def decode_frames(self, frames: list[IntentFrame]) -> np.ndarray:
-        """Decode a sequence of IntentFrames into audio.
+        """Decode a sequence of IntentFrames into audio via additive synthesis.
 
-        Uses DDSP neural synthesis if a model is loaded,
-        otherwise falls back to additive synthesis.
+        NOTE: This produces a low-fidelity approximation. The real audio path
+        uses NeuralCodec (EnCodec) via /ws/audio. This decoder exists for:
+          - Preview/monitoring when the codec path is unavailable
+          - Testing the intent extraction pipeline
+          - Sonification of metadata for debugging
         """
         if not frames:
             return np.zeros(0, dtype=np.float32)
 
-        # DDSP path: batch-process all frames through neural model
-        if self.use_ddsp:
-            return self._decode_ddsp(frames)
-
-        # Fallback path: per-frame additive synthesis
         chunks: list[np.ndarray] = []
         for frame in frames:
             chunk = self._decode_single_frame(frame)
@@ -99,72 +87,6 @@ class IntentDecoder:
             self._prev_frame = frame
 
         return np.concatenate(chunks).astype(np.float32)
-
-    def _load_ddsp_model(self, model_path: str) -> None:
-        """Load trained Polyphonic Latent Codec from checkpoint."""
-        import torch
-        from claudio.forge.model.autoencoder import AudioAutoEncoder
-
-        ckpt_file = Path(model_path)
-        if not ckpt_file.exists():
-            print(f"[IntentDecoder] Checkpoint missing: {model_path}. Running fallback synthesis.")
-            return  # No model file — stay in fallback mode
-
-        try:
-            checkpoint = torch.load(ckpt_file, map_location="cpu", weights_only=False)
-        except Exception as e:
-            print(f"[IntentDecoder] Checkpoint load failed: {e}. Running fallback synthesis.")
-            return
-
-        latent_dim = checkpoint.get("latent_dim", 128)
-
-        self._autoencoder = AudioAutoEncoder(latent_dim=latent_dim)
-        
-        if "autoencoder_state_dict" in checkpoint:
-            self._autoencoder.load_state_dict(checkpoint["autoencoder_state_dict"], strict=False)
-        else:
-            return
-
-        self._autoencoder.eval()
-
-        # Device selection: MPS → CUDA → CPU
-        if torch.backends.mps.is_available():
-            self._ddsp_device = torch.device("mps")
-        elif torch.cuda.is_available():
-            self._ddsp_device = torch.device("cuda")
-        else:
-            self._ddsp_device = torch.device("cpu")
-
-        self._autoencoder.to(self._ddsp_device)
-        self.use_ddsp = True
-
-    def reload_model(self, model_path: str) -> None:
-        """Hot-swap the neural weights with an updated checkpoint during runtime."""
-        self._load_ddsp_model(model_path)
-        print(f"[IntentDecoder] Successfully hot-reloaded neural weights from {model_path}.")
-
-    def _decode_ddsp(self, frames: list[IntentFrame]) -> np.ndarray:
-        """Fallback: if requested to decode empty frames, return zeroes."""
-        if not frames:
-            return np.zeros(self.hop, dtype=np.float32)
-        # Without raw audio bypass, we return 0. The neural path should use decode_raw_audio.
-        return np.zeros(len(frames) * self.hop, dtype=np.float32)
-
-    def decode_raw_audio(self, raw_audio: np.ndarray) -> np.ndarray:
-        """
-        Polyphonic Codec Path: Encodes the chunk into the dense Latent space, 
-        transmits it (internally), and perfectly reconstructs the transients and polyphony.
-        """
-        if not self.use_ddsp:
-            return raw_audio
-            
-        import torch
-        with torch.no_grad():
-            t = torch.from_numpy(raw_audio).unsqueeze(0).to(self._ddsp_device)
-            regen = self._autoencoder(t) # (1, T)
-            result = regen.squeeze(0).cpu().numpy()
-            
-        return result
 
     def _decode_single_frame(self, frame: IntentFrame) -> np.ndarray:
         """Synthesize one hop of audio from a single IntentFrame."""

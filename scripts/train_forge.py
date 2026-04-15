@@ -163,7 +163,7 @@ def train(
             l_spectral = loss_fn_spectral(pred_audio, audio_batch)
             l_l1 = loss_fn_l1(pred_audio, audio_batch)
             loss = l_spectral + 10.0 * l_l1
-            
+
             loss.backward()
             nn.utils.clip_grad_norm_(params, max_norm=1.0)
             optimizer.step()

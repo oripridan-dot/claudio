@@ -5,32 +5,34 @@ A command-line script that calculates objective mathematical fidelity metrics
 between a reference high-fidelity audio stem and the AI-regenerated version.
 Provides JSON output for the AI to dynamically adjust architecture or training.
 """
-import json
 import argparse
+import json
+
+import librosa
 import numpy as np
 import scipy.signal
-import librosa
+
 
 def load_and_align(ref_path, test_path, sr=44100):
     """Loads and time-aligns two audio arrays to compensate for latency."""
     ref_wav, _ = librosa.load(ref_path, sr=sr, mono=True)
     test_wav, _ = librosa.load(test_path, sr=sr, mono=True)
-    
+
     # Pad to same length
     max_len = max(len(ref_wav), len(test_wav))
     ref_wav = np.pad(ref_wav, (0, max_len - len(ref_wav)))
     test_wav = np.pad(test_wav, (0, max_len - len(test_wav)))
-    
+
     # Align signals using cross-correlation
     corr = scipy.signal.correlate(ref_wav, test_wav, mode='full')
     delay = np.argmax(corr) - (len(test_wav) - 1)
-    
+
     if delay > 0:
         test_wav = np.pad(test_wav, (delay, 0))[:-delay]
     elif delay < 0:
         test_wav = test_wav[-delay:]
         test_wav = np.pad(test_wav, (0, -delay))
-        
+
     return ref_wav, test_wav
 
 def calculate_snr(ref, test):
@@ -67,7 +69,7 @@ def calculate_phase_coherence(ref, test):
 
 def measure_fidelity(ref_path, test_path, sr=44100):
     ref_wav, test_wav = load_and_align(ref_path, test_path, sr=sr)
-    
+
     results = {
         "snr_db": round(float(calculate_snr(ref_wav, test_wav)), 2),
         "thd_n_pct": round(float(calculate_thd_n(ref_wav, test_wav)), 2),
@@ -81,6 +83,6 @@ if __name__ == "__main__":
     parser.add_argument("--ref", required=True, help="Original pristine source audio")
     parser.add_argument("--test", required=True, help="Claudio regenerated audio")
     args = parser.parse_args()
-    
+
     metrics = measure_fidelity(args.ref, args.test)
     print(json.dumps(metrics, indent=2))
