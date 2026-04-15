@@ -6,12 +6,13 @@ signaling for WebRTC, and session management.
 extracted from claudio_server.py to satisfy 500-line limit.
 """
 
-import json
-import time
 import contextlib
+import json
 import logging
+import time
 from typing import Any
-from fastapi import WebSocket, WebSocketDisconnect, status
+
+from fastapi import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from claudio.collab.session_manager import PeerRole, SessionManager
@@ -20,9 +21,9 @@ from claudio.intent.intent_protocol import IntentPacket
 logger = logging.getLogger(__name__)
 
 async def handle_collab_ws(
-    ws: WebSocket, 
-    room_id: str, 
-    collab_manager: SessionManager, 
+    ws: WebSocket,
+    room_id: str,
+    collab_manager: SessionManager,
     webrtc_manager: Any,
     global_ddsp_decoder: Any,
     auth_payload: dict
@@ -220,7 +221,7 @@ async def handle_collab_ws(
             await webrtc_manager.close_peer(peer.peer_id, room_id)
         else:
             await collab_manager.leave_room(room_id, peer.peer_id)
-            
+
         room = collab_manager.get_room(room_id)
         if room:
             await collab_manager.broadcast_json(

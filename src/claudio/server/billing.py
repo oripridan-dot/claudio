@@ -6,13 +6,14 @@ It determines if a user has access to premium collaboration rooms (e.g., HRTF).
 """
 import os
 import uuid
-from typing import Dict, Any
+from typing import Any
+
 
 class StripeBillingMock:
     def __init__(self):
         self.is_cloud = os.getenv("CLOUD_NATIVE_WORKSPACE", "false").lower() == "true"
-        self.active_subscriptions: Dict[str, str] = {}
-        
+        self.active_subscriptions: dict[str, str] = {}
+
     def _get_api_key(self) -> str:
         """Simulate fetching secret API keys differently based on the environment."""
         if self.is_cloud:
@@ -31,13 +32,13 @@ class StripeBillingMock:
         if "pro" in username.lower():
             return "premium"
         return "standard"
-        
+
     def generate_checkout_session(self, username: str) -> str:
         """Simulate generating a Stripe Checkout session ID."""
         session_id = f"cs_test_{uuid.uuid4().hex[:16]}"
         return session_id
 
-    def handle_webhook(self, payload: Dict[str, Any]) -> bool:
+    def handle_webhook(self, payload: dict[str, Any]) -> bool:
         """Simulate handling a Stripe webhook like checkout.session.completed."""
         event_type = payload.get("type")
         if event_type == "checkout.session.completed":

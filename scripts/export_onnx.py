@@ -7,8 +7,11 @@ Usage:
 """
 
 from __future__ import annotations
+
 import argparse
+
 import torch
+
 from claudio.forge.model.forge_model import ForgeModel
 
 

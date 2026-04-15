@@ -6,17 +6,13 @@ and DDSP audio streaming (via RTCAudioTrack).
 """
 
 import asyncio
-import copy
 import logging
-import time
-from typing import Any, Dict
 
-from aiortc import RTCPeerConnection, RTCSessionDescription, RTCDataChannel
+from aiortc import RTCDataChannel, RTCPeerConnection, RTCSessionDescription
 from aiortc.mediastreams import AudioStreamTrack
 from av.audio.frame import AudioFrame
 
 from claudio.intent.intent_protocol import IntentPacket
-from claudio.collab.session_manager import PeerInfo, CollabRoom
 
 logger = logging.getLogger(__name__)
 
@@ -43,13 +39,13 @@ class DDSPAudioTrack(AudioStreamTrack):
         # 20ms of audio at 48000Hz (aiortc standard) is 960 samples.
         # But we need to handle resampling or just let aiortc handle it.
         # aiortc prefers 48000Hz, 16-bit PCM for audio frames.
-        
+
         # In a real POC, wait for data in the queue
         try:
-            data = await asyncio.wait_for(self.queue.get(), timeout=0.02)
-        except asyncio.TimeoutError:
-            data = b'\x00' * 960 * 2  # Silence 48kHz 16-bit 1ch
-            
+            await asyncio.wait_for(self.queue.get(), timeout=0.02)
+        except TimeoutError:
+            b'\x00' * 960 * 2  # Silence 48kHz 16-bit 1ch
+
         # For simplicity in this POC, we'll construct an AudioFrame.
         # Normally you would parse the float bytes and convert to s16.
         # Here we assume data is s16 PCM for aiortc, or we return silence if empty.
@@ -65,9 +61,9 @@ class DDSPAudioTrack(AudioStreamTrack):
 class WebRTCManager:
     def __init__(self, session_manager):
         self.session_manager = session_manager
-        self.pcs: Dict[str, RTCPeerConnection] = {}
-        self.tracks: Dict[str, DDSPAudioTrack] = {}
-        self.data_channels: Dict[str, RTCDataChannel] = {}
+        self.pcs: dict[str, RTCPeerConnection] = {}
+        self.tracks: dict[str, DDSPAudioTrack] = {}
+        self.data_channels: dict[str, RTCDataChannel] = {}
 
     async def handle_offer(self, peer_id: str, room_id: str, sdp: str, type: str, global_ddsp_decoder=None):
         pc = RTCPeerConnection()
@@ -78,7 +74,7 @@ class WebRTCManager:
         ddsp_track = DDSPAudioTrack()
         self.tracks[peer_id] = ddsp_track
         pc.addTrack(ddsp_track)
-        
+
         # When peer disconnects via ICE
         @pc.on("iceconnectionstatechange")
         async def on_iceconnectionstatechange():
@@ -89,22 +85,22 @@ class WebRTCManager:
         @pc.on("datachannel")
         def on_datachannel(channel: RTCDataChannel):
             self.data_channels[peer_id] = channel
-            
+
             @channel.on("message")
             async def on_message(message):
                 # Message is binary intent packet
                 if isinstance(message, bytes):
                     # Broadcast to other peers via WebRTC and WebSocket peers
                     await self._broadcast_intent(peer_id, room_id, message, global_ddsp_decoder)
-        
+
         # Handle the offer
         offer = RTCSessionDescription(sdp=sdp, type=type)
         await pc.setRemoteDescription(offer)
-        
+
         # Create answer
         answer = await pc.createAnswer()
         await pc.setLocalDescription(answer)
-        
+
         return {
             "sdp": pc.localDescription.sdp,
             "type": pc.localDescription.type
@@ -119,7 +115,7 @@ class WebRTCManager:
             return
 
         sender_peer = room.peers.get(sender_id)
-        
+
         # 1. Broadcast via WebSocket paths
         await self.session_manager.broadcast_intent(room_id, sender_id, data)
 
@@ -136,7 +132,7 @@ class WebRTCManager:
                 # audio_chunk is float32
                 audio_chunk = global_ddsp_decoder.decode_frames(sender_peer._ddsp_buffer)
                 sender_peer._ddsp_buffer.clear()
-                
+
                 track = self.tracks.get(sender_id)
                 if track:
                     # enqueue audio for transmission
@@ -153,7 +149,7 @@ class WebRTCManager:
         for pid in room.peers:
             if pid == sender_id:
                 continue
-            
+
             channel = self.data_channels.get(pid)
             if channel and channel.readyState == "open":
                 try:

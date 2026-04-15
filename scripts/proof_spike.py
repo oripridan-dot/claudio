@@ -9,12 +9,13 @@ proof_spike.py — Prove the gap and the fix.
 6. Print bandwidth comparison
 """
 
-import sys
-import numpy as np
-import wave
-import struct
 import os
+import struct
+import sys
 import time
+import wave
+
+import numpy as np
 
 # Add project to path
 sys.path.insert(0, "src")
@@ -87,8 +88,8 @@ max_samples = sr * 2
 audio = audio[:max_samples]
 
 print("\n  ── TEST 1: Intent Pipeline (Additive Synth) ──")
-from claudio.intent.intent_encoder import IntentEncoder
 from claudio.intent.intent_decoder import IntentDecoder
+from claudio.intent.intent_encoder import IntentEncoder
 from claudio.intent.intent_protocol import IntentStream
 
 encoder = IntentEncoder(sample_rate=sr)

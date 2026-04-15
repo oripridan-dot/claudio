@@ -19,26 +19,26 @@ The live audio path is never touched by this server.
 from __future__ import annotations
 
 import contextlib
-import json
-import time
 import os
-from pathlib import Path
+import time
+
 from dotenv import load_dotenv
 
 if os.getenv("CLOUD_NATIVE_WORKSPACE", "false").lower() != "true":
     load_dotenv()
 
+import asyncio
 from dataclasses import asdict
 from typing import Any
-import asyncio
 
 import numpy as np
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from starlette.websockets import WebSocketState
 
-from claudio.collab.session_manager import PeerRole, SessionManager
+from claudio.codec.neural_codec import NeuralCodec
+from claudio.collab.session_manager import SessionManager
+from claudio.collab.webrtc_manager import WebRTCManager
 from claudio.intelligence.instrument_classifier import InstrumentClassifier
 from claudio.intelligence.multimodal_fusion import (
     BoundingBox,
@@ -53,7 +53,6 @@ from claudio.intelligence.sweet_spot_engine import (
     SweetSpotEngine,
 )
 from claudio.intent.intent_decoder import IntentDecoder
-from claudio.intent.intent_protocol import IntentPacket
 from claudio.mentor.knowledge_base import (
     MentorKnowledgeBase,
     TriggerCategory,
@@ -66,14 +65,13 @@ from claudio.metering.semantic_metering import (
     TopographicFreqMap,
 )
 from claudio.server import auth
+from claudio.server.billing import billing_manager
+from claudio.server.collab_router import handle_collab_ws
 from claudio.server.ws_session import (
     SessionState,
     check_coaching_triggers,
     treatment_text_to_trigger,
 )
-from claudio.server.billing import billing_manager
-from claudio.collab.webrtc_manager import WebRTCManager
-from claudio.server.collab_router import handle_collab_ws
 
 app = FastAPI(title="Claudio Intelligence Server", version="1.2.0")
 
@@ -102,7 +100,6 @@ collab_manager = SessionManager()
 webrtc_manager = WebRTCManager(collab_manager)
 
 # ─── Audio Codec (Real neural compression — replaces fake SemanticVocoder) ────
-from claudio.codec.neural_codec import NeuralCodec
 
 try:
     audio_codec = NeuralCodec(bandwidth_kbps=6.0)
@@ -197,7 +194,7 @@ async def ws_audio(ws: WebSocket):
 
             audio_np = np.frombuffer(raw, dtype=np.float32).copy()
 
-            def _encode():
+            def _encode(audio_np=audio_np):
                 frame = audio_codec.encode(audio_np, input_sr=48_000)
                 return frame.to_bytes()
 
@@ -235,7 +232,7 @@ async def ws_audio_decode(ws: WebSocket):
 
             from claudio.codec.neural_codec import CodecFrame
 
-            def _decode():
+            def _decode(raw=raw, n_codebooks=n_codebooks):
                 frame = CodecFrame.from_bytes(raw, n_codebooks)
                 return audio_codec.decode(frame, target_sr=48_000)
 
@@ -458,11 +455,11 @@ async def create_collab_room(req: CreateRoomRequest = None) -> dict:
     """Create a new collaboration room based on billing tier."""
     username = req.username if req else "guest"
     tier = billing_manager.verify_account_tier(username)
-    
+
     # We allow standard users to create basic rooms, but flag premium context
     room_id = await collab_manager.create_room()
     return {
-        "room_id": room_id, 
+        "room_id": room_id,
         "ws_url": f"/ws/collab/{room_id}",
         "tier_granted": tier
     }
@@ -496,10 +493,10 @@ async def collab_ws(ws: WebSocket, room_id: str) -> None:
         return
 
     await handle_collab_ws(
-        ws, 
-        room_id, 
-        collab_manager, 
-        webrtc_manager, 
-        global_ddsp_decoder, 
+        ws,
+        room_id,
+        collab_manager,
+        webrtc_manager,
+        global_ddsp_decoder,
         user_payload
     )

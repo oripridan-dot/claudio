@@ -10,34 +10,33 @@ Validates:
   - Broadcast multiplexing efficiency
 """
 
-import asyncio
 import argparse
-import time
-import struct
+import asyncio
 import json
 import logging
-from concurrent.futures import ThreadPoolExecutor
-
+import struct
+import time
 import urllib.request
+
 import websockets
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s")
 
 async def simulate_client(client_id: int, room_id: str, ddsp_enabled: bool, duration: int):
     uri = f"ws://127.0.0.1:8000/ws/collab/{room_id}?name=Simulated_{client_id}"
-    
+
     try:
         async with websockets.connect(uri, ping_interval=None) as ws:
             # Enable DDSP if requested
             if ddsp_enabled:
                 await ws.send(json.dumps({"type": "ddsp_toggle", "enabled": True}))
-                
+
             start = time.time()
             packets_sent = 0
             packets_received = 0
             audio_bytes_received = 0
             seq = 0
-            
+
             async def receive_loop():
                 nonlocal packets_received, audio_bytes_received
                 try:
@@ -49,9 +48,9 @@ async def simulate_client(client_id: int, room_id: str, ddsp_enabled: bool, dura
                                 packets_received += 1
                 except websockets.ConnectionClosed:
                     pass
-            
+
             rx_task = asyncio.create_task(receive_loop())
-            
+
             # Send loop (120Hz = 8.3ms)
             while time.time() - start < duration:
                 seq += 1
@@ -61,18 +60,18 @@ async def simulate_client(client_id: int, room_id: str, ddsp_enabled: bool, dura
                 await ws.send(packet)
                 packets_sent += 1
                 await asyncio.sleep(1/120)
-                
+
             # Finish
             await ws.close()
             rx_task.cancel()
-            
+
             return {
                 "id": client_id,
                 "sent": packets_sent,
                 "rx": packets_received,
                 "audio_bytes": audio_bytes_received
             }
-            
+
     except Exception as e:
         return {"id": client_id, "error": str(e)}
 
@@ -83,9 +82,9 @@ async def main():
     parser.add_argument("--duration", type=int, default=5, help="Test duration in seconds")
     parser.add_argument("--ddsp", action="store_true", help="Enable server-side DDSP inference")
     args = parser.parse_args()
-    
+
     logging.info(f"🚀 Starting Stress Test: {args.clients} clients over {args.rooms} rooms for {args.duration}s. DDSP={'ON' if args.ddsp else 'OFF'}")
-    
+
     # Pre-create rooms
     room_ids = []
     for _ in range(args.rooms):
@@ -97,17 +96,17 @@ async def main():
         except Exception as e:
             logging.error(f"Failed to create room: {e}")
             return
-            
+
     logging.info(f"Created rooms: {room_ids}")
-    
+
     # Launch clients
     tasks = []
     for i in range(args.clients):
         room_id = room_ids[i % args.rooms]
         tasks.append(simulate_client(i, room_id, args.ddsp, args.duration))
-        
+
     results = await asyncio.gather(*tasks)
-    
+
     # Aggregate
     total_sent = 0
     total_rx = 0
@@ -121,9 +120,9 @@ async def main():
             total_sent += res["sent"]
             total_rx += res["rx"]
             total_audio += res["audio_bytes"]
-            
+
     logging.info("-" * 40)
-    logging.info(f"🎯 Stress Test Complete")
+    logging.info("🎯 Stress Test Complete")
     logging.info(f"  Packets Sent:     {total_sent}")
     logging.info(f"  Packets Received: {total_rx}")
     logging.info(f"  DDSP Audio Rx:    {total_audio / 1024:.1f} KB")

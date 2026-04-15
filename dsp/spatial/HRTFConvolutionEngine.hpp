@@ -17,7 +17,7 @@
  * THREAD / MUTEX POLICY
  *   All methods are audio-thread-only.
  *   Quaternion data enters exclusively via QuaternionRingBuffer (std::atomic).
- *   No std::mutex.  No blocking synchronisation.  Audio thread never sleeps.
+ *   No locking overhead. No blocking synchronisation. Audio thread never sleeps.
  */
 #ifndef M_PI
 #  define M_PI    3.14159265358979323846

@@ -13,7 +13,6 @@ from __future__ import annotations
 import math
 import struct
 import sys
-import wave
 from pathlib import Path
 
 import numpy as np
@@ -363,8 +362,8 @@ def main():
     print("  CLAUDIO A/B DEMO — Generating High-Fidelity Audio")
     print("═" * 60)
     print(f"\n  Output: {OUTPUT_DIR}")
-    print(f"  Format: 48kHz / 32-bit float WAV")
-    print(f"  Engine: 192kHz internal render, bilinear HRTF\n")
+    print("  Format: 48kHz / 32-bit float WAV")
+    print("  Engine: 192kHz internal render, bilinear HRTF\n")
 
     for slug, name, gen_fn, azimuth in DEMO_SAMPLES:
         print(f"▶ {name}")

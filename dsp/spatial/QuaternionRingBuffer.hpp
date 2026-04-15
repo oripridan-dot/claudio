@@ -6,8 +6,8 @@
  *
  * ╔══════════════════════════════════════════════════════════════════════╗
  * ║  COMPILER LAW — CompilerDrone Enforcement                           ║
- * ║  This file MUST NOT contain std::mutex, std::lock_guard,            ║
- * ║  std::condition_variable, or any other blocking synchronisation.    ║
+ * ║  This file MUST NOT contain blocking locks (mutexes), condition        ║
+ * ║  variables, or any other blocking synchronisation.                  ║
  * ║  Only std::atomic operations are permitted.                         ║
  * ║  Violations will fail the SpatialLatencyGate adversary validator.   ║
  * ╚══════════════════════════════════════════════════════════════════════╝
