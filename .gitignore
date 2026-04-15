@@ -31,3 +31,6 @@ data/
 demo_output/
 .benchmarks/
 opportunist_report_*.json
+.wrangler/
+*.tsbuildinfo
+.env.production
