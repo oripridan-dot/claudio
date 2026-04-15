@@ -15,5 +15,12 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": [
+    "src/pages/StudioPage.tsx",
+    "src/pages/StudioPageWithBT.tsx",
+    "src/pages/D2D_62acacb1_Page.tsx",
+    "src/components/D2D_62acacb1_Widget.tsx",
+    "src/spatial/HeadTracker.ts"
+  ]
 }

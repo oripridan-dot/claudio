@@ -35,7 +35,7 @@ export class AudioEngine {
   private reverbConvolver: ConvolverNode;
   private reverbDryGain: GainNode;
   private reverbWetGain: GainNode;
-  private masterGainNode: GainNode;
+  masterGainNode: GainNode; // package-internal — do not use outside engine/
 
   // Public analysers
   readonly spectrumAnalyser: AnalyserNode;
@@ -278,11 +278,11 @@ export class AudioEngine {
   // ── Metering ──────────────────────────────────────────────────────────
 
   getSpectrumData(out: Float32Array): void {
-    this.spectrumAnalyser.getFloatFrequencyData(out);
+    this.spectrumAnalyser.getFloatFrequencyData(out as Float32Array<ArrayBuffer>);
   }
 
   getWaveformData(out: Float32Array): void {
-    this.waveformAnalyser.getFloatTimeDomainData(out);
+    this.waveformAnalyser.getFloatTimeDomainData(out as Float32Array<ArrayBuffer>);
   }
 
   get compressorReduction(): number {
