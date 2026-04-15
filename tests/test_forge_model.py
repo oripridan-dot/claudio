@@ -121,55 +121,28 @@ def test_checkpoint_save_load():
     Path(ckpt_path).unlink()
 
 
-def test_ddsp_decoder_integration():
-    """IntentDecoder with model_path loads DDSP and produces audio."""
-    # Create a mini model and save it
-    from claudio.forge.model.autoencoder import AudioAutoEncoder
-    autoencoder = AudioAutoEncoder(latent_dim=128)
-
-    with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as f:
-        ckpt_path = f.name
-
-    torch.save(
-        {
-            "autoencoder_state_dict": autoencoder.state_dict(),
-            "latent_dim": 128,
-        },
-        ckpt_path,
-    )
-
-    # Create IntentDecoder with DDSP model
-    dec = IntentDecoder(sample_rate=44100, model_path=ckpt_path)
-    assert dec.use_ddsp is True
-
-    # Encode some audio and decode with DDSP
-    enc = IntentEncoder(sample_rate=44100)
-    tone = (np.sin(2 * np.pi * 440 * np.arange(22050) / 44100) * 0.3).astype(np.float32)
-    frames = enc.encode_block(tone)
-
-    audio_out = dec.decode_frames(frames[:50])
-    assert len(audio_out) > 0
-    assert audio_out.dtype == np.float32
-
-    Path(ckpt_path).unlink()
-
-
-def test_decoder_fallback_without_model():
-    """IntentDecoder without model_path uses additive synthesis."""
+def test_additive_decoder_produces_audio():
+    """IntentDecoder produces additive synthesis output."""
     dec = IntentDecoder(sample_rate=44100)
-    assert dec.use_ddsp is False
 
-    # Should still work with additive synthesis
     enc = IntentEncoder(sample_rate=44100)
     tone = (np.sin(2 * np.pi * 440 * np.arange(22050) / 44100) * 0.3).astype(np.float32)
     frames = enc.encode_block(tone)
 
     audio_out = dec.decode_frames(frames[:50])
     rms = float(np.sqrt(np.mean(audio_out**2)))
-    assert rms > 0.01, f"Fallback decoder produced near-silence: rms={rms}"
+    assert rms > 0.01, f"Decoder produced near-silence: rms={rms}"
+    assert audio_out.dtype == np.float32
 
 
-def test_decoder_nonexistent_model_path():
-    """IntentDecoder with bad model_path falls back gracefully."""
+def test_decoder_ignores_model_path():
+    """IntentDecoder with model_path kwarg still works (param is ignored)."""
     dec = IntentDecoder(sample_rate=44100, model_path="/nonexistent/model.pt")
-    assert dec.use_ddsp is False  # Should NOT enable DDSP
+
+    enc = IntentEncoder(sample_rate=44100)
+    tone = (np.sin(2 * np.pi * 440 * np.arange(22050) / 44100) * 0.3).astype(np.float32)
+    frames = enc.encode_block(tone)
+
+    audio_out = dec.decode_frames(frames[:50])
+    assert len(audio_out) > 0
+

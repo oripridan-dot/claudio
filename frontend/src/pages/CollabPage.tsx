@@ -319,7 +319,7 @@ export default function CollabPage() {
               }
             </div>
 
-            {/* Phase 3: Neural Resynth — raw audio → SemanticVocoder → playback */}
+            {/* Phase 3: Neural Codec — raw audio → EnCodec → compressed playback */}
             <div style={{
               ...styles.sideSection,
               borderTop: '1px solid #333',
