@@ -22,13 +22,15 @@ dependencies = [
 [project.urls]
 Repository = "https://github.com/oripridan/claudio"
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pytest>=8.0",
     "pytest-benchmark>=5.0",
     "ruff>=0.8",
     "pip-audit>=2.7",
 ]
+
+[project.optional-dependencies]
 vision = [
     "mediapipe>=0.10",
     "python-osc>=1.8",
