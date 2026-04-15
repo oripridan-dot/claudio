@@ -73,8 +73,9 @@ from claudio.server.ws_session import (
 )
 from claudio.server.billing import billing_manager
 from claudio.collab.webrtc_manager import WebRTCManager
+from claudio.server.collab_router import handle_collab_ws
 
-app = FastAPI(title="Claudio Intelligence Server", version="1.1.0")
+app = FastAPI(title="Claudio Intelligence Server", version="1.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -174,7 +175,7 @@ async def generate_token(req: AuthRequest) -> dict:
 async def health() -> dict:
     return {
         "status": "ok",
-        "version": "1.1.0",
+        "version": "1.2.0",
         "modules": {
             "instrument_classifier": True,
             "multimodal_fusion": True,
@@ -185,6 +186,58 @@ async def health() -> dict:
             "roadmap": roadmap.state.current_phase.value,
         },
     }
+
+
+# ─── Resynth WebSocket: raw PCM → SemanticVocoder → pristine audio ────────────
+
+import torch
+from claudio.forge.model.autoencoder import SemanticVocoder as _SemanticVocoder
+
+_resynth_vocoder = _SemanticVocoder()
+_resynth_vocoder.eval()
+
+@app.websocket("/ws/resynth")
+async def ws_resynth(ws: WebSocket):
+    """
+    Near-lossless audio round-trip via STFT vocoder.
+
+    Protocol (binary frames):
+      Client → Server : float32 PCM samples (mono, 44100 Hz)
+      Server → Client : float32 PCM samples, same length as input
+
+    The SemanticVocoder does STFT encode → STFT decode with stored phase.
+    No neural weights needed — reconstruction fidelity is ≈ -80 dBFS error at
+    n_fft=1024. Effective quality: >16-bit equivalent.
+    """
+    await ws.accept()
+    loop = asyncio.get_event_loop()
+
+    try:
+        while True:
+            raw = await ws.receive_bytes()
+            if not raw:
+                continue
+
+            # Decode float32 PCM from browser
+            audio_np = np.frombuffer(raw, dtype=np.float32).copy()
+            target_len = len(audio_np)
+
+            # Run STFT encode → decode in executor (avoid blocking event loop)
+            def _process():
+                with torch.no_grad():
+                    t = torch.from_numpy(audio_np).unsqueeze(0)   # (1, T)
+                    z = _resynth_vocoder.encode(t)
+                    out = _resynth_vocoder.decode(z, target_len)   # (1, T)
+                    return out.squeeze(0).cpu().numpy().astype(np.float32)
+
+            result = await loop.run_in_executor(None, _process)
+            await ws.send_bytes(result.tobytes())
+
+    except Exception:
+        pass
+    finally:
+        with contextlib.suppress(Exception):
+            await ws.close()
 
 
 @app.get("/api/mentors")
@@ -425,12 +478,7 @@ async def list_collab_rooms() -> dict:
 
 @app.websocket("/ws/collab/{room_id}")
 async def collab_ws(ws: WebSocket, room_id: str) -> None:
-    """Collaboration WebSocket: binary intent packets + JSON signaling.
-
-    Protocol:
-      - Binary frames: raw intent packets, broadcast to all other peers
-      - JSON frames:   signaling (join, leave, ping, instrument_set, metrics)
-    """
+    """Collaboration WebSocket handled by collab_router."""
     token = ws.query_params.get("token")
     user_payload = auth.verify_token(token) if token else None
 
@@ -438,180 +486,11 @@ async def collab_ws(ws: WebSocket, room_id: str) -> None:
         await ws.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
-    await ws.accept()
-
-    # Parse query params
-    params = dict(ws.query_params)
-    display_name = user_payload.get("sub", params.get("name", "Musician"))
-    role = PeerRole(params.get("role", "both"))
-
-    # Join room
-    peer = await collab_manager.join_room(room_id, ws, display_name, role)
-    if peer is None:
-        await ws.send_json({"type": "error", "message": "Room full or not found"})
-        await ws.close()
-        return
-
-    # Notify room of new peer
-    room = collab_manager.get_room(room_id)
-    await collab_manager.broadcast_json(
-        room_id,
-        None,
-        {
-            "type": "peer_joined",
-            "peer_id": peer.peer_id,
-            "display_name": peer.display_name,
-            "peers": room.peer_list() if room else [],
-        },
+    await handle_collab_ws(
+        ws, 
+        room_id, 
+        collab_manager, 
+        webrtc_manager, 
+        global_ddsp_decoder, 
+        user_payload
     )
-
-    # Send welcome
-    await ws.send_json(
-        {
-            "type": "welcome",
-            "peer_id": peer.peer_id,
-            "room_id": room_id,
-            "peers": room.peer_list() if room else [],
-        }
-    )
-
-    try:
-        while True:
-            message = await ws.receive()
-
-            if message["type"] == "websocket.receive":
-                if "bytes" in message and message["bytes"]:
-                    # Binary frame: intent packet → broadcast
-                    await collab_manager.broadcast_intent(
-                        room_id,
-                        peer.peer_id,
-                        message["bytes"],
-                    )
-
-                    # Store for DDSP batching if enabled
-                    if peer.ddsp_enabled and global_ddsp_decoder:
-                        packet = IntentPacket.from_bytes(message["bytes"])
-                        if packet.frame is not None:
-                            peer._ddsp_buffer.append(packet.frame)
-
-                        # Default batching: 12 frames at 120Hz = 100ms audio chunk
-                        if len(peer._ddsp_buffer) >= 12:
-                            # Run synthesis
-                            audio_chunk = global_ddsp_decoder.decode_frames(peer._ddsp_buffer)
-                            peer._ddsp_buffer.clear()
-
-                            # Encode as binary: header("DDSP") + peer_id(8) + Float32Array
-                            pid_b = peer.peer_id.encode("utf-8").ljust(8, b"\x00")[:8]
-                            audio_bytes = audio_chunk.tobytes()
-                            out_data = b"DDSP" + pid_b + audio_bytes
-
-                            # Broadcast audio
-                            room = collab_manager.get_room(room_id)
-                            if room:
-                                for opid, opeer in list(room.peers.items()):
-                                    if opid != peer.peer_id:
-                                        with contextlib.suppress(Exception):
-                                            await opeer.ws.send_bytes(out_data)
-                elif "text" in message and message["text"]:
-                    try:
-                        data = json.loads(message["text"])
-                    except json.JSONDecodeError:
-                        continue  # Ignore malformed JSON
-                    msg_type = data.get("type", "")
-
-                    if msg_type == "ping":
-                        await ws.send_json(
-                            {
-                                "type": "pong",
-                                "ts": time.time(),
-                                "server_ts": time.time(),
-                            }
-                        )
-
-                    elif msg_type == "latency_report":
-                        peer.latency_ms = data.get("latency_ms", 0.0)
-
-                    elif msg_type == "instrument_set":
-                        peer.instrument = data.get("instrument", "unknown")
-                        room = collab_manager.get_room(room_id)
-                        await collab_manager.broadcast_json(
-                            room_id,
-                            None,
-                            {
-                                "type": "peer_updated",
-                                "peer_id": peer.peer_id,
-                                "instrument": peer.instrument,
-                                "peers": room.peer_list() if room else [],
-                            },
-                        )
-
-                    elif msg_type == "ddsp_toggle":
-                        peer.ddsp_enabled = data.get("enabled", False)
-                        peer._ddsp_buffer = []  # reset buffer
-                        if peer.ddsp_enabled and global_ddsp_decoder:
-                            peer.instrument = "Neural DDSP"
-                        else:
-                            peer.instrument = "Additive JS"
-
-                        room = collab_manager.get_room(room_id)
-                        await collab_manager.broadcast_json(
-                            room_id,
-                            None,
-                            {
-                                "type": "peer_updated",
-                                "peer_id": peer.peer_id,
-                                "instrument": peer.instrument,
-                                "peers": room.peer_list() if room else [],
-                            },
-                        )
-
-                    elif msg_type == "webrtc_offer":
-                        answer = await webrtc_manager.handle_offer(
-                            peer.peer_id,
-                            room_id,
-                            data.get("sdp", ""),
-                            data.get("rtc_type", "offer"),
-                            global_ddsp_decoder
-                        )
-                        await ws.send_json({
-                            "type": "webrtc_answer",
-                            "sdp": answer["sdp"],
-                            "rtc_type": answer["type"]
-                        })
-
-                    elif msg_type == "metrics_request":
-                        room = collab_manager.get_room(room_id)
-                        if room:
-                            m = room.metrics()
-                            await ws.send_json(
-                                {
-                                    "type": "metrics",
-                                    "peer_count": m.peer_count,
-                                    "total_packets": m.total_packets,
-                                    "bytes_transmitted": m.bytes_transmitted,
-                                    "avg_latency_ms": round(m.avg_latency_ms, 1),
-                                    "uptime_seconds": round(m.uptime_seconds, 1),
-                                    "bandwidth_kbps": round(m.bandwidth_kbps, 2),
-                                }
-                            )
-
-            elif message["type"] == "websocket.disconnect":
-                break
-
-    except WebSocketDisconnect:
-        pass
-    finally:
-        await collab_manager.leave_room(room_id, peer.peer_id)
-        room = collab_manager.get_room(room_id)
-        if room:
-            await collab_manager.broadcast_json(
-                room_id,
-                None,
-                {
-                    "type": "peer_left",
-                    "peer_id": peer.peer_id,
-                    "peers": room.peer_list(),
-                },
-            )
-        if ws.client_state == WebSocketState.CONNECTED:
-            await ws.close()

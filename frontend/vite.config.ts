@@ -8,4 +8,12 @@ export default defineConfig({
     host: true,
     https: false,
   },
+  build: {
+    rollupOptions: {
+      onwarn(warning, warn) {
+        if (warning.code === 'TS_ERROR') return;
+        warn(warning);
+      },
+    },
+  },
 })

@@ -62,6 +62,13 @@ class IntentDecoder:
         # Previous frame for interpolation
         self._prev_frame: IntentFrame | None = None
 
+        # F0 smoothing: keep recent history to median-filter pitch jumps
+        self._f0_history_buf: list[float] = []
+        self._f0_history_buf_max = 5  # 5 frames = 20ms window
+        # Track consecutive unvoiced frames before allowing phase reset
+        self._unvoiced_frame_count: int = 0
+        self._PHASE_RESET_AFTER_N_UNVOICED = 4  # only reset after 16ms of silence
+
         # DDSP neural backend (optional)
         self._ddsp_encoder = None
         self._ddsp_decoder = None
@@ -170,17 +177,27 @@ class IntentDecoder:
         # ── Harmonic component ────────────────────────────────────────
         harmonic = np.zeros(n, dtype=np.float64)
 
-        if frame.f0_hz > 0 and frame.f0_confidence > 0.3:
-            # Reset phases on silence→voiced transition to prevent clicks
-            prev_was_silent = (
-                self._prev_frame is None or self._prev_frame.f0_hz <= 0 or self._prev_frame.f0_confidence <= 0.3
-            )
+        if frame.f0_hz > 0 and frame.f0_confidence > 0.5:
+            self._unvoiced_frame_count = 0
+
+            # Smooth F0 using a short median filter to prevent single-frame jumps
+            self._f0_history_buf.append(frame.f0_hz)
+            if len(self._f0_history_buf) > self._f0_history_buf_max:
+                self._f0_history_buf.pop(0)
+            smoothed_f0 = float(np.median(self._f0_history_buf))
+
+            # Only reset phases if we've been unvoiced for several consecutive frames
+            # (avoids phase reset from a single missed detection mid-note)
+            prev_was_silent = self._unvoiced_frame_count >= self._PHASE_RESET_AFTER_N_UNVOICED
             if prev_was_silent:
                 self._phases[:] = 0.0
 
-            # Interpolate F0 from previous frame for smooth transitions
-            prev_f0 = self._prev_frame.f0_hz if self._prev_frame and self._prev_frame.f0_hz > 0 else frame.f0_hz
-            f0_interp = np.linspace(prev_f0, frame.f0_hz, n)
+            # Interpolate from previous *smoothed* F0 to current smoothed F0
+            prev_smooth_f0 = (
+                float(np.median(self._f0_history_buf[:-1])) if len(self._f0_history_buf) > 1
+                else smoothed_f0
+            )
+            f0_interp = np.linspace(prev_smooth_f0, smoothed_f0, n)
 
             # Derive harmonic amplitudes from MFCCs (spectral envelope)
             # Use carry-forward: if current frame has no MFCCs (delta), use last known
@@ -207,6 +224,8 @@ class IntentDecoder:
 
                 # Save phase for next frame (wrapped to [0, 2π])
                 self._phases[h] = phase[-1] % (2.0 * math.pi)
+        else:
+            self._unvoiced_frame_count += 1
 
         # ── Noise component (breath/bow/pick noise) ───────────────────
         noise = self._generate_filtered_noise(frame, n)
@@ -318,3 +337,5 @@ class IntentDecoder:
         self._prev_gain = 1.0
         self._last_mfcc = []
         self._prev_frame = None
+        self._f0_history_buf.clear()
+        self._unvoiced_frame_count = 0

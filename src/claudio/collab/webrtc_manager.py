@@ -67,6 +67,7 @@ class WebRTCManager:
         self.session_manager = session_manager
         self.pcs: Dict[str, RTCPeerConnection] = {}
         self.tracks: Dict[str, DDSPAudioTrack] = {}
+        self.data_channels: Dict[str, RTCDataChannel] = {}
 
     async def handle_offer(self, peer_id: str, room_id: str, sdp: str, type: str, global_ddsp_decoder=None):
         pc = RTCPeerConnection()
@@ -87,6 +88,8 @@ class WebRTCManager:
         # Handle incoming intents via DataChannel
         @pc.on("datachannel")
         def on_datachannel(channel: RTCDataChannel):
+            self.data_channels[peer_id] = channel
+            
             @channel.on("message")
             async def on_message(message):
                 # Message is binary intent packet
@@ -109,8 +112,7 @@ class WebRTCManager:
 
     async def _broadcast_intent(self, sender_id: str, room_id: str, data: bytes, global_ddsp_decoder):
         """
-        Broadcast intent to WebSocket users (via session_manager) and WebRTC users.
-        Also, feed the DDSP audio if enabled.
+        Broadcast intent received via WebRTC to WebSocket users and other WebRTC users.
         """
         room = self.session_manager.get_room(room_id)
         if not room:
@@ -118,10 +120,13 @@ class WebRTCManager:
 
         sender_peer = room.peers.get(sender_id)
         
-        # Broadcast via original WebSocket paths (backwards compatible)
+        # 1. Broadcast via WebSocket paths
         await self.session_manager.broadcast_intent(room_id, sender_id, data)
 
-        # If DDSP is enabled for the sender, synthesize and push to their WebRTC audio track
+        # 2. Broadcast to other WebRTC data channels
+        await self.broadcast_intent_p2p(room_id, sender_id, data)
+
+        # 3. If DDSP is enabled for the sender, synthesize and push to their WebRTC audio track
         if sender_peer and sender_peer.ddsp_enabled and global_ddsp_decoder:
             packet = IntentPacket.from_bytes(data)
             if packet.frame is not None:
@@ -137,10 +142,30 @@ class WebRTCManager:
                     # enqueue audio for transmission
                     await track.add_audio(audio_chunk.tobytes())
 
+    async def broadcast_intent_p2p(self, room_id: str, sender_id: str, data: bytes):
+        """
+        Broadcast intent to all WebRTC peers in the room except the sender.
+        """
+        room = self.session_manager.get_room(room_id)
+        if not room:
+            return
+
+        for pid in room.peers:
+            if pid == sender_id:
+                continue
+            
+            channel = self.data_channels.get(pid)
+            if channel and channel.readyState == "open":
+                try:
+                    channel.send(data)
+                except Exception as e:
+                    logger.warning(f"Failed to send WebRTC data to peer {pid}: {e}")
+
     async def close_peer(self, peer_id: str, room_id: str):
         pc = self.pcs.pop(peer_id, None)
         if pc:
             await pc.close()
         self.tracks.pop(peer_id, None)
+        self.data_channels.pop(peer_id, None)
         await self.session_manager.leave_room(room_id, peer_id)
 

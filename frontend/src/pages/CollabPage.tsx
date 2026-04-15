@@ -5,6 +5,7 @@ import {
   type PeerInfo,
   type CollabMetrics,
 } from '../engine/IntentEngine';
+import { ResynthEngine } from '../engine/ResynthEngine';
 import {
   PITCH_HISTORY_SIZE,
   freqToNote,
@@ -17,6 +18,7 @@ import {
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 
 // ─── CollabPage Component ───────────────────────────────────────────────────
 
@@ -34,6 +36,12 @@ export default function CollabPage() {
 
   const [localFrame, setLocalFrame] = useState<IntentFrame | null>(null);
   const [remoteFrame, setRemoteFrame] = useState<IntentFrame | null>(null);
+
+  // Phase 3: Neural Resynth
+  const [resynthEngine] = useState(() => new ResynthEngine());
+  const [resynthActive, setResynthActive] = useState(false);
+  const [resynthState, setResynthState] = useState<'idle' | 'capturing' | 'playing' | 'error'>('idle');
+  const [resynthLatency, setResynthLatency] = useState(0);
 
   const localHistoryRef = useRef<IntentFrame[]>([]);
   const remoteHistoryRef = useRef<IntentFrame[]>([]);
@@ -132,6 +140,21 @@ export default function CollabPage() {
     remoteHistoryRef.current = [];
   }, [engine]);
 
+  const handleResynthToggle = useCallback(async () => {
+    if (resynthActive) {
+      resynthEngine.stop();
+      setResynthActive(false);
+      setResynthState('idle');
+    } else {
+      resynthEngine.onStateChange = (s) => {
+        setResynthState(s);
+        setResynthLatency(resynthEngine.latencyMs);
+      };
+      await resynthEngine.start(SERVER_URL);
+      setResynthActive(true);
+    }
+  }, [resynthActive, resynthEngine]);
+
   return (
     <div style={styles.container}>
       <header style={styles.header}>
@@ -227,6 +250,63 @@ export default function CollabPage() {
                 : <button id="btn-stop-capture" style={styles.stopBtn} onClick={handleStopCapture}>Stop Capture</button>
               }
             </div>
+
+            {/* Phase 3: Neural Resynth — raw audio → SemanticVocoder → playback */}
+            <div style={{
+              ...styles.sideSection,
+              borderTop: '1px solid #333',
+              paddingTop: '14px',
+            }}>
+              <h3 style={{ ...styles.sideTitle, color: resynthActive ? '#ff88ff' : '#aaa' }}>
+                🎙 Neural Resynth
+              </h3>
+              <p style={{ fontSize: '0.75rem', color: '#888', margin: '0 0 10px', lineHeight: '1.4' }}>
+                Streams your mic through the server's STFT vocoder. Near-lossless quality, ~100ms latency.
+              </p>
+              <button
+                id="btn-resynth-toggle"
+                onClick={handleResynthToggle}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: '0.9rem',
+                  background: resynthActive
+                    ? 'linear-gradient(135deg, #7700aa, #ff00ff)'
+                    : 'linear-gradient(135deg, #333, #555)',
+                  color: '#fff',
+                  boxShadow: resynthActive ? '0 0 12px #ff00ff66' : 'none',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                {resynthActive ? '⏹ Stop Resynth' : '▶ Start Neural Resynth'}
+              </button>
+              {resynthActive && (
+                <div style={{ marginTop: '8px', fontSize: '0.78rem', color: '#bbb' }}>
+                  <div style={styles.metricRow}>
+                    <span style={styles.metricLabel}>Status</span>
+                    <span style={{
+                      ...styles.metricValue,
+                      color: resynthState === 'playing' ? '#ff88ff'
+                           : resynthState === 'capturing' ? '#ffaa44'
+                           : resynthState === 'error' ? '#ff4444' : '#888'
+                    }}>
+                      {resynthState.toUpperCase()}
+                    </span>
+                  </div>
+                  {resynthLatency > 0 && (
+                    <div style={styles.metricRow}>
+                      <span style={styles.metricLabel}>Round-trip</span>
+                      <span style={styles.metricValue}>{resynthLatency.toFixed(0)} ms</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
           </aside>
 
           <main style={styles.mainArea}>

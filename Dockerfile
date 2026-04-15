@@ -15,8 +15,8 @@ WORKDIR /app
 # Copy dependency manifests
 COPY pyproject.toml uv.lock ./
 
-# Synchronize production dependencies (bypassing dev/test dependencies)
-RUN uv sync --locked --no-dev
+# Synchronize production dependencies (including AI/Coaching/Vision modules)
+RUN uv sync --locked --no-dev --all-extras
 
 # Mount application source and ML models
 COPY src/ ./src/

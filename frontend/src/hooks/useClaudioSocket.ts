@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react';
  * WebSocket hook — connects to Claudio Intelligence Server.
  * Handles reconnection and message routing.
  */
-export function useClaudioSocket(url = 'ws://localhost:8000/ws/session') {
+export function useClaudioSocket(url = `${(import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/^http/, 'ws')}/ws/session`) {
+
   const wsRef = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
   const [lastMessage, setLastMessage] = useState<any>(null);

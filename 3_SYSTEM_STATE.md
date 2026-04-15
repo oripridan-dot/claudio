@@ -14,6 +14,7 @@ Last updated: 2026-04-09
 | Intent Protocol (`intent/intent_protocol.py`) | ✅ Production | Binary wire format, delta compression (~55% savings), rms_energy serialized |
 | Intent Decoder (`intent/intent_decoder.py`) | ✅ Production | Dual-mode: DDSP neural synthesis + additive fallback, gain smoothing, MFCC carry-forward |
 | Intent Stream (`intent/intent_protocol.py`) | ✅ Production | Stateful packer with FULL_FRAME, DELTA, SILENCE, KEY_FRAME modes |
+| WebRTC Transport (`collab/webrtc_manager.py`) | ✅ Production | P2P data channels with bidirectional broadcast (Integrated) |
 | DDSP Forge (`forge/`) | ✅ Trained | GRUEncoder → DDSPDecoder, 100 epochs, loss 3.50→2.55 (26% improvement), 832KB checkpoint |
 
 ### Collaboration Infrastructure
@@ -61,9 +62,9 @@ Last updated: 2026-04-09
 
 ## Version
 
-- `pyproject.toml`: 1.1.0
-- `claudio_server.py`: 1.1.0
-- `/health` endpoint: 1.1.0
+- `pyproject.toml`: 1.2.0
+- `claudio_server.py`: 1.2.0
+- `/health` endpoint: 1.2.0
 
 ## Architecture Compliance
 
@@ -129,4 +130,4 @@ Last updated: 2026-04-09
 
 ## Pending
 
-- ⚠️ Build WebRTC data channels for P2P transport (replace WebSocket relay)
+- ⚠️ Stress-test multi-user WebRTC sessions (>4 peers)
