@@ -34,3 +34,5 @@ opportunist_report_*.json
 .wrangler/
 *.tsbuildinfo
 .env.production
+*.log
+codec_spectrogram_diff.png
