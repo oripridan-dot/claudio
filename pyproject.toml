@@ -1,6 +1,6 @@
 [project]
 name = "claudio"
-version = "1.2.0"
+version = "2.0.0"
 description = "Real-Time AI Musician Collaboration Platform"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -16,6 +16,7 @@ dependencies = [
     "pyjwt>=2.8",
     "aiortc>=0.9.1",
     "python-dotenv>=1.0.1",
+    "encodec>=0.1.1",
 ]
 
 [project.urls]
@@ -66,7 +67,6 @@ ignore = ["E501", "SIM102", "SIM108", "SIM110"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "PLR2004"]
 "src/claudio/metering/semantic_metering.py" = ["F401", "E402"]  # intentional re-exports
-"src/claudio/realtime_benchmark.py" = ["E402"]  # benchmark imports after test definitions
 
 [tool.ruff.lint.isort]
 known-first-party = ["claudio"]

@@ -101,41 +101,18 @@ advisor = AcousticEnvironmentAdvisor()
 collab_manager = SessionManager()
 webrtc_manager = WebRTCManager(collab_manager)
 
-# Global DDSP Decoder (Loaded if checkpoint exists)
-MODEL_CHECKPOINT_PATH = "checkpoints/forge_model_best.pt"
+# ─── Audio Codec (Real neural compression — replaces fake SemanticVocoder) ────
+from claudio.codec.neural_codec import NeuralCodec
+
 try:
-    global_ddsp_decoder = IntentDecoder(sample_rate=44100, model_path=MODEL_CHECKPOINT_PATH)
-    print("[DDSP] Neural Decoder loaded on backend.")
+    audio_codec = NeuralCodec(bandwidth_kbps=6.0)
+    print("[Codec] NeuralCodec (EnCodec) initialized @ 6.0 kbps")
 except Exception as e:
-    global_ddsp_decoder = None
-    print(f"[DDSP] Failed to load Neural Decoder: {e}")
+    audio_codec = None
+    print(f"[Codec] Failed to initialize NeuralCodec: {e}")
 
-async def _model_watchdog():
-    """Monitors the DDSP model weights and hot-reloads on-the-fly."""
-    global global_ddsp_decoder
-    if global_ddsp_decoder is None:
-        return
-        
-    last_mtime = 0
-    model_path = Path(MODEL_CHECKPOINT_PATH)
-    if model_path.exists():
-        last_mtime = model_path.stat().st_mtime
-        
-    while True:
-        await asyncio.sleep(2.0)
-        try:
-            if model_path.exists():
-                curr_mtime = model_path.stat().st_mtime
-                if curr_mtime > last_mtime:
-                    print("[Watchdog] Detected updated neural weights. Hot-swapping zero downtime...")
-                    global_ddsp_decoder.reload_model(MODEL_CHECKPOINT_PATH)
-                    last_mtime = curr_mtime
-        except Exception as e:
-            print(f"[Watchdog] Error reloading model: {e}")
-
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(_model_watchdog())
+# Intent decoder kept for collab metadata path (fallback additive synth)
+global_ddsp_decoder = IntentDecoder(sample_rate=44100)
 
 
 def _serialize(obj: Any) -> Any:
@@ -175,8 +152,11 @@ async def generate_token(req: AuthRequest) -> dict:
 async def health() -> dict:
     return {
         "status": "ok",
-        "version": "1.2.0",
+        "version": "2.0.0",
+        "architecture": "hybrid-encodec",
         "modules": {
+            "neural_codec": audio_codec is not None,
+            "codec_bandwidth_kbps": audio_codec.bandwidth_kbps if audio_codec else 0,
             "instrument_classifier": True,
             "multimodal_fusion": True,
             "phase_detector": True,
@@ -188,27 +168,24 @@ async def health() -> dict:
     }
 
 
-# ─── Resynth WebSocket: raw PCM → SemanticVocoder → pristine audio ────────────
+# ─── Audio WebSocket: real neural codec (EnCodec) ────────────────────────────
 
-import torch
-from claudio.forge.model.autoencoder import SemanticVocoder as _SemanticVocoder
 
-_resynth_vocoder = _SemanticVocoder()
-_resynth_vocoder.eval()
-
-@app.websocket("/ws/resynth")
-async def ws_resynth(ws: WebSocket):
-    """
-    Near-lossless audio round-trip via STFT vocoder.
+@app.websocket("/ws/audio")
+async def ws_audio(ws: WebSocket):
+    """High-fidelity audio round-trip via EnCodec neural codec.
 
     Protocol (binary frames):
-      Client → Server : float32 PCM samples (mono, 44100 Hz)
-      Server → Client : float32 PCM samples, same length as input
+      Client → Server : float32 PCM samples (mono, 48000 Hz)
+      Server → Client : EnCodec compressed codes (int16), much smaller
 
-    The SemanticVocoder does STFT encode → STFT decode with stored phase.
-    No neural weights needed — reconstruction fidelity is ≈ -80 dBFS error at
-    n_fft=1024. Effective quality: >16-bit equivalent.
+    The NeuralCodec compresses audio to 6 kbps (vs 768 kbps raw PCM)
+    with near-transparent perceptual quality.
     """
+    if audio_codec is None:
+        await ws.close(code=1011, reason="NeuralCodec not available")
+        return
+
     await ws.accept()
     loop = asyncio.get_event_loop()
 
@@ -218,20 +195,52 @@ async def ws_resynth(ws: WebSocket):
             if not raw:
                 continue
 
-            # Decode float32 PCM from browser
             audio_np = np.frombuffer(raw, dtype=np.float32).copy()
-            target_len = len(audio_np)
 
-            # Run STFT encode → decode in executor (avoid blocking event loop)
-            def _process():
-                with torch.no_grad():
-                    t = torch.from_numpy(audio_np).unsqueeze(0)   # (1, T)
-                    z = _resynth_vocoder.encode(t)
-                    out = _resynth_vocoder.decode(z, target_len)   # (1, T)
-                    return out.squeeze(0).cpu().numpy().astype(np.float32)
+            def _encode():
+                frame = audio_codec.encode(audio_np, input_sr=48_000)
+                return frame.to_bytes()
 
-            result = await loop.run_in_executor(None, _process)
-            await ws.send_bytes(result.tobytes())
+            compressed = await loop.run_in_executor(None, _encode)
+            await ws.send_bytes(compressed)
+
+    except Exception:
+        pass
+    finally:
+        with contextlib.suppress(Exception):
+            await ws.close()
+
+
+@app.websocket("/ws/audio/decode")
+async def ws_audio_decode(ws: WebSocket):
+    """Decode EnCodec frames back to PCM audio.
+
+    Protocol (binary frames):
+      Client → Server : EnCodec compressed codes (int16)
+      Server → Client : float32 PCM samples (mono, 48000 Hz)
+    """
+    if audio_codec is None:
+        await ws.close(code=1011, reason="NeuralCodec not available")
+        return
+
+    await ws.accept()
+    loop = asyncio.get_event_loop()
+    n_codebooks = audio_codec.n_codebooks
+
+    try:
+        while True:
+            raw = await ws.receive_bytes()
+            if not raw:
+                continue
+
+            from claudio.codec.neural_codec import CodecFrame
+
+            def _decode():
+                frame = CodecFrame.from_bytes(raw, n_codebooks)
+                return audio_codec.decode(frame, target_sr=48_000)
+
+            audio = await loop.run_in_executor(None, _decode)
+            await ws.send_bytes(audio.astype(np.float32).tobytes())
 
     except Exception:
         pass
