@@ -277,7 +277,7 @@ export class IntentEngine {
       if (!this.analyser || !this.audioCtx) return;
 
       const timeDomain = new Float32Array(this.analyser.fftSize);
-      this.analyser.getFloatTimeDomainData(timeDomain);
+      this.analyser.getFloatTimeDomainData(timeDomain as Float32Array<ArrayBuffer>);
 
       // --- EXPERIMENTAL: Inject 440Hz tone if totally silent for testing ---
       let injected = false;
@@ -289,7 +289,7 @@ export class IntentEngine {
       }
 
       const freqData = new Float32Array(this.analyser.frequencyBinCount);
-      this.analyser.getFloatFrequencyData(freqData);
+      this.analyser.getFloatFrequencyData(freqData as Float32Array<ArrayBuffer>);
 
       const rms = computeRMS(timeDomain);
       const loudnessDb = 20 * Math.log10(rms + 1e-10);
@@ -628,7 +628,7 @@ export class IntentEngine {
     }
     
     const buffer = this.audioCtx.createBuffer(1, audioData.length, 44100);
-    buffer.copyToChannel(audioData, 0);
+    buffer.copyToChannel(audioData as Float32Array<ArrayBuffer>, 0);
     
     const source = this.audioCtx.createBufferSource();
     source.buffer = buffer;

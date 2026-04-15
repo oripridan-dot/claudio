@@ -26,7 +26,7 @@ export default function CodecSelector({ selected, onSelect }: Props) {
                 ? 'bg-claudio-card ring-1'
                 : 'hover:bg-claudio-surface opacity-60 hover:opacity-90',
             ].join(' ')}
-            style={active ? { ringColor: c.color } : {}}
+            style={active ? { outlineColor: c.color } : {}}
           >
             {/* Colour dot */}
             <span
