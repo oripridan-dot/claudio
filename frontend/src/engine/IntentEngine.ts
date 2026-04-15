@@ -412,6 +412,19 @@ export class IntentEngine {
   private displayName = '';
   private jwtToken: string | null = null;
 
+  // Audio output routing
+  masterOut: GainNode | null = null;
+
+  getAudioContext(): AudioContext | null { return this.audioCtx; }
+  getInputAnalyser(): AnalyserNode | null { return this.analyser; }
+  
+  redirectOutput(target: AudioNode) {
+    if (this.masterOut && this.audioCtx) {
+      this.masterOut.disconnect();
+      this.masterOut.connect(target);
+    }
+  }
+
   // Latency & Network Telemetry logging
   private lastPingTs = 0;
   latencyMs = 0;
@@ -427,6 +440,10 @@ export class IntentEngine {
 
   async startCapture(): Promise<void> {
     this.audioCtx = new AudioContext({ sampleRate: 44100 });
+    
+    this.masterOut = this.audioCtx.createGain();
+    this.masterOut.connect(this.audioCtx.destination);
+
     this.mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
     });
@@ -440,7 +457,7 @@ export class IntentEngine {
     this.melFilterbank = buildMelFilterbank(2048, 44100);
 
     // Phase 1: multi-oscillator harmonic synth for remote playback
-    this.remoteSynth = new HarmonicSynth(this.audioCtx, this.audioCtx.destination);
+    this.remoteSynth = new HarmonicSynth(this.audioCtx, this.masterOut);
     this.remoteSynth.setMelFilterbank(this.melFilterbank);
 
     this.isCapturing = true;
@@ -815,7 +832,11 @@ export class IntentEngine {
         if (this.remoteStreamSource) this.remoteStreamSource.disconnect();
         this.remoteStreamSource = this.audioCtx.createMediaStreamSource(this.remoteStream);
         // Wire directly to destination; mute the synth when live audio arrives
-        this.remoteStreamSource.connect(this.audioCtx.destination);
+        if (this.masterOut) {
+          this.remoteStreamSource.connect(this.masterOut);
+        } else {
+          this.remoteStreamSource.connect(this.audioCtx.destination);
+        }
         if (this.remoteSynth) {
           // Keep synth as safety fallback but silence it
           // (it will re-activate if WebRTC track drops)

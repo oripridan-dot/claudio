@@ -14,6 +14,8 @@ import {
   drawSpatialArena,
   collabStyles as styles,
 } from '../components/IntentVisualizer';
+import { RTCalibrationEngine } from '../engine/RTCalibrationEngine';
+import { RTCalibrationPanel } from '../components/RTCalibrationPanel';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -42,6 +44,9 @@ export default function CollabPage() {
   const [resynthActive, setResynthActive] = useState(false);
   const [resynthState, setResynthState] = useState<'idle' | 'capturing' | 'playing' | 'error'>('idle');
   const [resynthLatency, setResynthLatency] = useState(0);
+
+  // RT Calibration Component
+  const [calibrationEngine, setCalibrationEngine] = useState<RTCalibrationEngine | null>(null);
 
   const localHistoryRef = useRef<IntentFrame[]>([]);
   const remoteHistoryRef = useRef<IntentFrame[]>([]);
@@ -121,12 +126,32 @@ export default function CollabPage() {
   const handleStartCapture = useCallback(async () => {
     await engine.startCapture();
     setCapturing(true);
-  }, [engine]);
+
+    const ctx = engine.getAudioContext();
+    if (ctx && !resynthActive) {
+      if (calibrationEngine) calibrationEngine.destroy();
+      const calib = new RTCalibrationEngine(ctx);
+      const micSrc = engine.getInputAnalyser();
+      if (micSrc) calib.connectInputSource(micSrc);
+
+      const compNode = calib.getCompensationInputNode();
+      engine.redirectOutput(compNode);
+      
+      calib.connectOutputTap(compNode);
+      calib.getFinalOutputNode().connect(ctx.destination);
+
+      setCalibrationEngine(calib);
+    }
+  }, [engine, resynthActive, calibrationEngine]);
 
   const handleStopCapture = useCallback(() => {
     engine.stopCapture();
     setCapturing(false);
-  }, [engine]);
+    if (!resynthActive) {
+      calibrationEngine?.destroy();
+      setCalibrationEngine(null);
+    }
+  }, [engine, resynthActive, calibrationEngine]);
 
   const handleDisconnect = useCallback(() => {
     engine.disconnect();
@@ -138,13 +163,33 @@ export default function CollabPage() {
     setMetrics(null);
     localHistoryRef.current = [];
     remoteHistoryRef.current = [];
-  }, [engine]);
+    calibrationEngine?.destroy();
+    setCalibrationEngine(null);
+  }, [engine, calibrationEngine]);
 
   const handleResynthToggle = useCallback(async () => {
     if (resynthActive) {
       resynthEngine.stop();
       setResynthActive(false);
       setResynthState('idle');
+      
+      calibrationEngine?.destroy();
+      
+      if (capturing) {
+          const ctx = engine.getAudioContext();
+          if (ctx) {
+             const calib = new RTCalibrationEngine(ctx);
+             const micSrc = engine.getInputAnalyser();
+             if (micSrc) calib.connectInputSource(micSrc);
+             const compNode = calib.getCompensationInputNode();
+             engine.redirectOutput(compNode);
+             calib.connectOutputTap(compNode);
+             calib.getFinalOutputNode().connect(ctx.destination);
+             setCalibrationEngine(calib);
+          }
+      } else {
+          setCalibrationEngine(null);
+      }
     } else {
       resynthEngine.onStateChange = (s) => {
         setResynthState(s);
@@ -152,8 +197,25 @@ export default function CollabPage() {
       };
       await resynthEngine.start(SERVER_URL);
       setResynthActive(true);
+      
+      calibrationEngine?.destroy();
+
+      const ctx = resynthEngine.getAudioContext();
+      if (ctx) {
+         const calib = new RTCalibrationEngine(ctx);
+         const micSrc = resynthEngine.getInputSource();
+         if (micSrc) calib.connectInputSource(micSrc);
+         
+         const compNode = calib.getCompensationInputNode();
+         resynthEngine.redirectOutput(compNode);
+         
+         calib.connectOutputTap(compNode);
+         calib.getFinalOutputNode().connect(ctx.destination);
+
+         setCalibrationEngine(calib);
+      }
     }
-  }, [resynthActive, resynthEngine]);
+  }, [resynthActive, resynthEngine, capturing, engine, calibrationEngine]);
 
   return (
     <div style={styles.container}>
@@ -310,6 +372,7 @@ export default function CollabPage() {
           </aside>
 
           <main style={styles.mainArea}>
+            {calibrationEngine && <RTCalibrationPanel engine={calibrationEngine} />}
             <div style={styles.arenaBox}>
               <canvas ref={arenaRef} width={800} height={280} style={styles.canvas} />
             </div>
