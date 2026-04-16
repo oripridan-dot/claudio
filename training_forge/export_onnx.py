@@ -11,7 +11,11 @@ def export_model(output_path, checkpoint=None):
 
     if checkpoint and os.path.exists(checkpoint):
         print(f"Loading weights from {checkpoint}")
-        model.load_state_dict(torch.load(checkpoint, map_location="cpu"))
+        checkpoint_data = torch.load(checkpoint, map_location="cpu")
+        if 'model_state_dict' in checkpoint_data:
+            model.load_state_dict(checkpoint_data['model_state_dict'])
+        else:
+            model.load_state_dict(checkpoint_data)
     else:
         print("No checkpoint found or specified, exporting with untrained weights.")
 

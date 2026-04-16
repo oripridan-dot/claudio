@@ -24,16 +24,25 @@ def main():
 
     # Standard offline training setup
     model = DDSPDecoder().to(device)
-    if os.path.exists("checkpoints/best.pt"):
-        try:
-            model.load_state_dict(torch.load("checkpoints/best.pt", map_location=device))
-            print("Successfully loaded weights from checkpoints/best.pt! Building momentum...")
-        except BaseException as e:
-            print(f"Could not load checkpoint: {e}. Starting from scratch.")
-            
     synth = DDSPSynth(sample_rate=48000, frame_rate=250).to(device)
     loss_fn = MultiScaleSpectralLoss().to(device)
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)
+
+    if os.path.exists("checkpoints/best.pt"):
+        try:
+            checkpoint = torch.load("checkpoints/best.pt", map_location=device)
+            if 'model_state_dict' in checkpoint:
+                model.load_state_dict(checkpoint['model_state_dict'])
+                optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                print("Successfully loaded weights and optimizer state from checkpoints/best.pt!")
+                # Force micro-step LR in case the loaded optimizer had 1e-3
+                for param_group in optimizer.param_groups:
+                    param_group['lr'] = 1e-4
+            else:
+                model.load_state_dict(checkpoint)
+                print("Successfully loaded legacy weights from checkpoints/best.pt! Building momentum...")
+        except BaseException as e:
+            print(f"Could not load checkpoint: {e}. Starting from scratch.")
 
     try:
         dataloader = get_dataloader(args.data_dir, batch_size=args.batch_size)
@@ -87,7 +96,10 @@ def main():
         if avg_loss < best_loss:
             best_loss = avg_loss
             os.makedirs("checkpoints", exist_ok=True)
-            torch.save(model.state_dict(), "checkpoints/best.pt")
+            torch.save({
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict()
+            }, "checkpoints/best.pt")
 
     print(f"✅ Training complete. Best loss: {best_loss:.4f} saved to checkpoints/best.pt")
 
