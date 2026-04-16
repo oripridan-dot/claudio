@@ -4,7 +4,7 @@ import json
 
 def run_training_cycle(epochs):
     print(f"\n--- Starting Training Cycle ({epochs} epochs) ---")
-    subprocess.run(["python", "train.py", "--epochs", str(epochs)], check=True)
+    subprocess.run(["python", "train.py", "--epochs", str(epochs), "--batch-size", "16"], check=True)
 
 def run_evaluation():
     print("\n--- Running Evaluation Synthesis ---")
