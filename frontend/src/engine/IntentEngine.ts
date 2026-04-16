@@ -148,17 +148,14 @@ export class IntentEngine {
     source.connect(this.analyser);
 
     // Build mel filterbank once (2048-point FFT, 48000 Hz)
-    buildMelFilterbank(2048, 48000);
+    this.melFilterbank = buildMelFilterbank(2048, 48000);
 
     // Ensure WASM core is ready for sub-millisecond intent extraction
     await initWasmDSP();
 
-    // High-fidelity neural DDSP fallback for remote playback
+    // High-fidelity neural DDSP for local loopback and remote regeneration
     this.remoteSynth = new DDSPDecoder(this.audioCtx);
     await this.remoteSynth.loadModel();
-    if (this.masterOut) {
-      this.remoteSynth.getOutputNode().connect(this.masterOut);
-    }
 
     // [Learning Kit] Instantiate Shadow Worker if in teaching environment
     if (import.meta.env.VITE_APP_ENV === 'teaching') {
