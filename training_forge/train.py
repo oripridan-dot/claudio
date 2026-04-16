@@ -27,7 +27,7 @@ def main():
     synth = DDSPSynth(sample_rate=48000, frame_rate=250).to(device)
     loss_fn = MultiScaleSpectralLoss().to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-4) # Start slightly higher
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
 
     if os.path.exists("checkpoints/best.pt"):
         try:
