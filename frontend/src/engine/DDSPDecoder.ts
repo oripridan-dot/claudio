@@ -17,9 +17,9 @@ export class DDSPDecoder {
   private isProcessing = false;
 
   constructor(private audioCtx: AudioContext) {
-    const dummyDest = audioCtx.createGain(); // Create a generic output node
-    this.synth = new HarmonicSynth(audioCtx, dummyDest); 
-    
+    // Connect directly to the audio context destination so audio is heard
+    this.synth = new HarmonicSynth(audioCtx, audioCtx.destination);
+
     // Set execution providers. WebNN is highly experimental but preferred for sub-10ms.
     // Fallback to WASM or WebGL.
     ort.env.wasm.numThreads = 1;
