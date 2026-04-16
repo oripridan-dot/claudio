@@ -24,6 +24,7 @@ export type {
 };
 
 import {
+  initWasmDSP,
   autocorrelationF0,
   computeRMS,
   computeSpectralCentroid,
@@ -32,7 +33,7 @@ import {
 } from './dsp';
 
 import { encodeIntentPacket, decodeIntentPacket } from './protocol';
-import { HarmonicSynth } from './HarmonicSynth';
+import { DDSPDecoder } from './DDSPDecoder';
 
 const FRAME_RATE = 120;
 
@@ -67,10 +68,11 @@ export class IntentEngine {
   peers: PeerInfo[] = [];
   connected = false;
 
-  // Remote regeneration — Phase 1: multi-oscillator harmonic synth
-  private remoteSynth: HarmonicSynth | null = null;
+  // Remote regeneration — DDSP Neural Synth
+  private remoteSynth: DDSPDecoder | null = null;
   private melFilterbank: Float32Array[] | null = null;
   ddspMode = false;
+  localLoopback = false;
   private nextAudioTime = 0;
 
   // Onset detection state
@@ -86,6 +88,9 @@ export class IntentEngine {
 
   // Audio output routing
   masterOut: GainNode | null = null;
+
+  // Shadow validation pipeline (Learning Kit)
+  private shadowWorker: Worker | null = null;
 
   getAudioContext(): AudioContext | null { return this.audioCtx; }
   getInputAnalyser(): AnalyserNode | null { return this.analyser; }
@@ -138,9 +143,30 @@ export class IntentEngine {
     // Build mel filterbank once (2048-point FFT, 48000 Hz)
     this.melFilterbank = buildMelFilterbank(2048, 48000);
 
-    // Phase 1: multi-oscillator harmonic synth for remote playback
-    this.remoteSynth = new HarmonicSynth(this.audioCtx, this.masterOut);
-    this.remoteSynth.setMelFilterbank(this.melFilterbank);
+    // Ensure WASM core is ready for sub-millisecond intent extraction
+    await initWasmDSP();
+
+    // High-fidelity neural DDSP fallback for remote playback
+    this.remoteSynth = new DDSPDecoder(this.audioCtx);
+    await this.remoteSynth.loadModel();
+    if (this.masterOut) {
+      this.remoteSynth.getOutputNode().connect(this.masterOut);
+    }
+
+    // [Learning Kit] Instantiate Shadow Worker if in teaching environment
+    if (import.meta.env.VITE_APP_ENV === 'teaching') {
+      this.shadowWorker = new Worker(new URL('./learning/ValidationWorker.ts', import.meta.url), { type: 'module' });
+      this.shadowWorker.postMessage({ type: 'init' });
+      
+      this.shadowWorker.onmessage = (e) => {
+        if (e.data.type === 'critiques') {
+          e.data.critiques.forEach((c: any) => {
+            // "See-Then-Read" UI Hook Placeholder (Route to local console for now)
+            console.warn(`[BRUTAL HONESTY] ${c.message} (Delta: ${c.delta.toFixed(2)})`);
+          });
+        }
+      };
+    }
 
     this.isCapturing = true;
 
@@ -179,6 +205,15 @@ export class IntentEngine {
       };
 
       this.onLocalIntent?.(frame);
+      
+      if (this.localLoopback) {
+          this.regenerateFromIntent(frame);
+      }
+
+      // [Learning Kit] Post frame off main-thread to be ruthlessly evaluated
+      if (this.shadowWorker) {
+        this.shadowWorker.postMessage({ type: 'frame', frame });
+      }
 
       if (this.dataChannel?.readyState === 'open') {
         this.seq++;
@@ -198,6 +233,10 @@ export class IntentEngine {
     }
     this.remoteSynth?.destroy();
     this.remoteSynth = null;
+    if (this.shadowWorker) {
+      this.shadowWorker.terminate();
+      this.shadowWorker = null;
+    }
     this.mediaStream?.getTracks().forEach(t => t.stop());
     this.remoteStream?.getTracks().forEach(t => t.stop());
     if (this.pc) { this.pc.close(); this.pc = null; }
@@ -325,9 +364,7 @@ export class IntentEngine {
               this.packetsWindowLost = 0;
           }
 
-          if (!this.ddspMode) {
-            this.regenerateFromIntent(frame);
-          }
+          this.regenerateFromIntent(frame);
         }
       } else {
         // JSON: signaling
@@ -485,6 +522,10 @@ export class IntentEngine {
     }
   }
 
+  setLocalLoopback(enabled: boolean): void {
+    this.localLoopback = enabled;
+  }
+
   private async _initWebRTC(): Promise<void> {
     if (this.pc) { this.pc.close(); this.pc = null; }
 
@@ -592,7 +633,7 @@ export class IntentEngine {
   }
 
   private regenerateFromIntent(frame: IntentFrame): void {
-    // Phase 1: drive the multi-oscillator harmonic synth
-    this.remoteSynth?.update(frame);
+    // DDSP Client-side inference
+    this.remoteSynth?.processFrame(frame);
   }
 }

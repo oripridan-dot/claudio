@@ -20,6 +20,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from claudio.hrtf_engine import AudioSource, HRTFBinauralEngine
+from claudio.intent.intent_decoder import IntentDecoder
+from claudio.intent.intent_encoder import IntentEncoder
 from claudio.signal_flow_config import balanced_config
 
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "demo_output" / "ab_demo"
@@ -38,12 +40,12 @@ def guitar_chord(dur: float = 3.0) -> np.ndarray:
     freqs = [110.0, 130.81, 164.81, 196.0, 220.0]
     delays_ms = [0, 12, 24, 36, 48]  # strum delay
 
-    for freq, delay_ms in zip(freqs, delays_ms):
+    for freq, delay_ms in zip(freqs, delays_ms, strict=False):
         period = max(2, int(SR / freq))
         rng = np.random.default_rng(int(freq * 100))
         buf = rng.uniform(-0.5, 0.5, period).astype(np.float64)
         # Low-pass the initial excitation for warmer tone
-        for j in range(3):
+        for _j in range(3):
             buf_new = np.copy(buf)
             for k in range(1, period - 1):
                 buf_new[k] = 0.25 * buf[k - 1] + 0.5 * buf[k] + 0.25 * buf[k + 1]
@@ -74,7 +76,7 @@ def piano_melody(dur: float = 4.0) -> np.ndarray:
     """Realistic piano melody with proper hammer strike and sustain."""
     n = int(SR * dur)
     mix = np.zeros(n, dtype=np.float64)
-    t_full = np.arange(n, dtype=np.float64) / SR
+    np.arange(n, dtype=np.float64) / SR
 
     # C major arpeggio: C4, E4, G4, C5, then resolve to C4
     notes = [
@@ -129,7 +131,7 @@ def piano_melody(dur: float = 4.0) -> np.ndarray:
 def full_band_mix(dur: float = 4.0) -> np.ndarray:
     """Full band mix: bass, keys, lead, drums — simulated mastered track."""
     n = int(SR * dur)
-    t = np.arange(n, dtype=np.float64) / SR
+    np.arange(n, dtype=np.float64) / SR
     mix = np.zeros(n, dtype=np.float64)
     rng = np.random.default_rng(42)
 
@@ -345,6 +347,31 @@ def process_binaural(
     return stereo
 
 
+def process_intent_resynthesis(mono: np.ndarray) -> np.ndarray:
+    """Process mono audio through Intent Encoder -> Decoder for resynthesis preview."""
+    encoder = IntentEncoder(sample_rate=SR)
+    decoder = IntentDecoder(sample_rate=SR, frame_rate=250, n_harmonics=40)
+    hop = encoder.hop
+    n_blocks = len(mono) // hop
+
+    out_audio = np.zeros(len(mono), dtype=np.float32)
+
+    for i in range(n_blocks):
+        start = i * hop
+        block = mono[start : start + encoder.frame_len]
+        if len(block) < encoder.frame_len:
+            block = np.pad(block, (0, encoder.frame_len - len(block)))
+
+        frames = encoder.encode_block(block, start_time_ms=(start/SR)*1000)
+
+        if frames:
+            frame = frames[0]
+            decoded_chunk = decoder._decode_single_frame(frame)
+            out_audio[start : start + hop] = decoded_chunk[:hop]
+
+    return out_audio
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Main
 # ═══════════════════════════════════════════════════════════════════════
@@ -377,6 +404,11 @@ def main():
         stereo = process_binaural(mono, azimuth=azimuth)
         wet_path = OUTPUT_DIR / f"{slug}_claudio.wav"
         write_wav_float32(wet_path, stereo, SR, channels=2)
+
+        # Process through Intent Resynthesis
+        resyn = process_intent_resynthesis(mono)
+        resyn_path = OUTPUT_DIR / f"{slug}_intent.wav"
+        write_wav_float32(resyn_path, resyn, SR, channels=1)
 
         print()
 

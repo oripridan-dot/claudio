@@ -1,10 +1,70 @@
 export const N_MFCC = 13;
 export const N_MELS = 26;
 
+// ─── WASM Integration ───────────────────────────────────────────────────────
+
+interface WasmCore {
+  _malloc(size: number): number;
+  _free(ptr: number): void;
+  HEAPF32: Float32Array;
+  
+  _computeRMS(ptr: number, length: number): number;
+  _autocorrelationF0(ptr: number, length: number, sampleRate: number, outF0Ptr: number, outConfPtr: number): void;
+  _computeSpectralCentroid(fftPtr: number, length: number, sampleRate: number): number;
+  _initFilterbank(fftSize: number, sampleRate: number): void;
+  _computeMFCC(magSpectrumPtr: number, spectrumLength: number, outMfccPtr: number): void;
+}
+
+let wasmCore: WasmCore | null = null;
+let isWasmLoaded = false;
+
+/**
+ * Initialize the C++ WebAssembly intent core for sub-millisecond extraction.
+ * Expects the Emscripten output module (intent_core.js) to be available globally
+ * or injected via Vite.
+ */
+export async function initWasmDSP(createIntentModule?: any): Promise<void> {
+  if (isWasmLoaded) return;
+  if (!createIntentModule) {
+    console.warn("WASM module factory not provided. Falling back to JS DSP.");
+    return;
+  }
+  
+  try {
+    const module = await createIntentModule();
+    wasmCore = module as WasmCore;
+    isWasmLoaded = true;
+    console.log("Sub-10ms WASM Intent Core initialized successfully.");
+  } catch (err) {
+    console.error("Failed to load WASM intent core, falling back to JS", err);
+  }
+}
+
+// ─── Extraction Wrappers (WASM + JS Fallback) ───────────────────────────────
+
 export function autocorrelationF0(
   buffer: Float32Array,
   sampleRate: number,
 ): { f0: number; confidence: number } {
+  if (isWasmLoaded && wasmCore) {
+    const n = buffer.length;
+    const ptr = wasmCore._malloc(n * 4);
+    const outF0Ptr = wasmCore._malloc(4);
+    const outConfPtr = wasmCore._malloc(4);
+    
+    wasmCore.HEAPF32.set(buffer, ptr / 4);
+    wasmCore._autocorrelationF0(ptr, n, sampleRate, outF0Ptr, outConfPtr);
+    
+    const f0 = wasmCore.HEAPF32[outF0Ptr / 4];
+    const confidence = wasmCore.HEAPF32[outConfPtr / 4];
+    
+    wasmCore._free(ptr);
+    wasmCore._free(outF0Ptr);
+    wasmCore._free(outConfPtr);
+    return { f0, confidence };
+  }
+
+  // JS Fallback
   const n = buffer.length;
   const minPeriod = Math.floor(sampleRate / 1046); // C6 max
   const maxPeriod = Math.min(Math.floor(sampleRate / 40), n - 1); // E1 min
@@ -47,12 +107,30 @@ export function autocorrelationF0(
 }
 
 export function computeRMS(buffer: Float32Array): number {
+  if (isWasmLoaded && wasmCore) {
+    const ptr = wasmCore._malloc(buffer.length * 4);
+    wasmCore.HEAPF32.set(buffer, ptr / 4);
+    const rms = wasmCore._computeRMS(ptr, buffer.length);
+    wasmCore._free(ptr);
+    return rms;
+  }
+
+  // JS Fallback
   let sum = 0;
   for (let i = 0; i < buffer.length; i++) sum += buffer[i] * buffer[i];
   return Math.sqrt(sum / buffer.length);
 }
 
 export function computeSpectralCentroid(fft: Float32Array, sampleRate: number): number {
+  if (isWasmLoaded && wasmCore) {
+    const ptr = wasmCore._malloc(fft.length * 4);
+    wasmCore.HEAPF32.set(fft, ptr / 4);
+    const centroid = wasmCore._computeSpectralCentroid(ptr, fft.length, sampleRate);
+    wasmCore._free(ptr);
+    return centroid;
+  }
+
+  // JS Fallback
   let weightedSum = 0;
   let totalMag = 0;
   const binWidth = sampleRate / (fft.length * 2);
@@ -64,7 +142,16 @@ export function computeSpectralCentroid(fft: Float32Array, sampleRate: number): 
   return totalMag > 0 ? weightedSum / totalMag : 0;
 }
 
-export function buildMelFilterbank(fftSize: number, sampleRate: number): Float32Array[] {
+// Global filterbank state for JS Fallback
+let jsFilterbank: Float32Array[] | null = null;
+
+export function buildMelFilterbank(fftSize: number, sampleRate: number): void {
+  if (isWasmLoaded && wasmCore) {
+    wasmCore._initFilterbank(fftSize, sampleRate);
+    return;
+  }
+
+  // JS Fallback
   const numBins = fftSize / 2;
   const maxFreq = sampleRate / 2;
   const maxMel = 2595 * Math.log10(1 + maxFreq / 700);
@@ -91,14 +178,34 @@ export function buildMelFilterbank(fftSize: number, sampleRate: number): Float32
     }
     filterbank.push(filter);
   }
-  return filterbank;
+  jsFilterbank = filterbank;
 }
 
-export function computeMFCC(magSpectrum: Float32Array, filterbank: Float32Array[]): number[] {
+export function computeMFCC(magSpectrum: Float32Array, ignoreFilterbankParam?: any): number[] {
+  if (isWasmLoaded && wasmCore) {
+    const n = magSpectrum.length;
+    const inPtr = wasmCore._malloc(n * 4);
+    const outPtr = wasmCore._malloc(N_MFCC * 4);
+
+    wasmCore.HEAPF32.set(magSpectrum, inPtr / 4);
+    wasmCore._computeMFCC(inPtr, n, outPtr);
+
+    const mfcc = new Array<number>(N_MFCC);
+    const outArr = new Float32Array(wasmCore.HEAPF32.buffer, outPtr, N_MFCC);
+    for(let i=0; i<N_MFCC; i++) mfcc[i] = outArr[i];
+
+    wasmCore._free(inPtr);
+    wasmCore._free(outPtr);
+    return mfcc;
+  }
+
+  // JS Fallback
+  if (!jsFilterbank) return new Array(N_MFCC).fill(0);
+
   const melEnergies = new Float32Array(N_MELS);
   for (let i = 0; i < N_MELS; i++) {
     let energy = 0;
-    const filter = filterbank[i];
+    const filter = jsFilterbank[i];
     for (let j = 0; j < Math.min(magSpectrum.length, filter.length); j++) {
       energy += magSpectrum[j] * filter[j];
     }

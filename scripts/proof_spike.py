@@ -11,14 +11,16 @@ proof_spike.py — Prove the gap and the fix.
 
 import os
 import struct
-import sys
 import time
 import wave
 
 import numpy as np
 
+from src.claudio.intent.intent_decoder import IntentDecoder
+from src.claudio.intent.intent_encoder import IntentEncoder
+from src.claudio.intent.intent_protocol import IntentStream
+
 # Add project to path
-sys.path.insert(0, "src")
 
 OUTPUT_DIR = "demo_output/proof"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -88,9 +90,6 @@ max_samples = sr * 2
 audio = audio[:max_samples]
 
 print("\n  ── TEST 1: Intent Pipeline (Additive Synth) ──")
-from claudio.intent.intent_decoder import IntentDecoder
-from claudio.intent.intent_encoder import IntentEncoder
-from claudio.intent.intent_protocol import IntentStream
 
 encoder = IntentEncoder(sample_rate=sr)
 decoder = IntentDecoder(sample_rate=sr)

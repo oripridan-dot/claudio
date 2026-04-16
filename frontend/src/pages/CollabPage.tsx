@@ -5,7 +5,7 @@ import {
   type PeerInfo,
   type CollabMetrics,
 } from '../engine/IntentEngine';
-import { ResynthEngine } from '../engine/ResynthEngine';
+
 import {
   PITCH_HISTORY_SIZE,
   freqToNote,
@@ -29,6 +29,7 @@ export default function CollabPage() {
   const [connected, setConnected] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [ddspMode, setDdspMode] = useState(false);
+  const [loopbackMode, setLoopbackMode] = useState(false);
   const [roomId, setRoomId] = useState('');
   const [inputRoom, setInputRoom] = useState('');
   const [userName, setUserName] = useState('Musician');
@@ -39,11 +40,7 @@ export default function CollabPage() {
   const [localFrame, setLocalFrame] = useState<IntentFrame | null>(null);
   const [remoteFrame, setRemoteFrame] = useState<IntentFrame | null>(null);
 
-  // Phase 3: Neural Resynth
-  const [resynthEngine] = useState(() => new ResynthEngine());
-  const [resynthActive, setResynthActive] = useState(false);
-  const [resynthState, setResynthState] = useState<'idle' | 'capturing' | 'playing' | 'error'>('idle');
-  const [resynthLatency, setResynthLatency] = useState(0);
+
 
   // RT Calibration Component
   const [calibrationEngine, setCalibrationEngine] = useState<RTCalibrationEngine | null>(null);
@@ -128,7 +125,7 @@ export default function CollabPage() {
     setCapturing(true);
 
     const ctx = engine.getAudioContext();
-    if (ctx && !resynthActive) {
+    if (ctx) {
       if (calibrationEngine) calibrationEngine.destroy();
       const calib = new RTCalibrationEngine(ctx);
       const micSrc = engine.getInputAnalyser();
@@ -147,10 +144,8 @@ export default function CollabPage() {
   const handleStopCapture = useCallback(() => {
     engine.stopCapture();
     setCapturing(false);
-    if (!resynthActive) {
-      calibrationEngine?.destroy();
-      setCalibrationEngine(null);
-    }
+    calibrationEngine?.destroy();
+    setCalibrationEngine(null);
   }, [engine, resynthActive, calibrationEngine]);
 
   const handleDisconnect = useCallback(() => {
@@ -167,61 +162,7 @@ export default function CollabPage() {
     setCalibrationEngine(null);
   }, [engine, calibrationEngine]);
 
-  const handleResynthToggle = useCallback(async () => {
-    if (resynthActive) {
-      resynthEngine.stop();
-      setResynthActive(false);
-      setResynthState('idle');
-      
-      calibrationEngine?.destroy();
-      
-      if (capturing) {
-          const ctx = engine.getAudioContext();
-          if (ctx) {
-             const calib = new RTCalibrationEngine(ctx);
-             const micSrc = engine.getInputAnalyser();
-             if (micSrc) calib.connectInputSource(micSrc);
-             const compNode = calib.getCompensationInputNode();
-             engine.redirectOutput(compNode);
-             calib.connectOutputTap(compNode);
-             calib.getFinalOutputNode().connect(ctx.destination);
-             setCalibrationEngine(calib);
-          }
-      } else {
-          setCalibrationEngine(null);
-      }
-    } else {
-      resynthEngine.onStateChange = (s) => {
-        setResynthState(s);
-        setResynthLatency(resynthEngine.latencyMs);
-      };
-      
-      if (capturing) {
-         // Connect IntentEngine directly to speakers before destroying the shared dashboard
-         const ctx = engine.getAudioContext();
-         if (ctx) engine.redirectOutput(ctx.destination);
-      }
-      calibrationEngine?.destroy();
-      
-      await resynthEngine.start(SERVER_URL);
-      setResynthActive(true);
 
-      const ctx = resynthEngine.getAudioContext();
-      if (ctx) {
-         const calib = new RTCalibrationEngine(ctx);
-         const micSrc = resynthEngine.getInputSource();
-         if (micSrc) calib.connectInputSource(micSrc);
-         
-         const compNode = calib.getCompensationInputNode();
-         resynthEngine.redirectOutput(compNode);
-         
-         calib.connectOutputTap(compNode);
-         calib.getFinalOutputNode().connect(ctx.destination);
-
-         setCalibrationEngine(calib);
-      }
-    }
-  }, [resynthActive, resynthEngine, capturing, engine, calibrationEngine]);
 
   return (
     <div style={styles.container}>
@@ -240,13 +181,22 @@ export default function CollabPage() {
             {connected ? `Room: ${roomId}` : 'Disconnected'}
           </span>
           {connected && (
-             <label style={{ marginLeft: '20px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: '#ccc', fontSize: '0.9rem' }}>
-                <input type="checkbox" checked={ddspMode} onChange={e => {
-                   setDdspMode(e.target.checked);
-                   engine.setDDSPMode(e.target.checked);
-                }} />
-                High-Fidelity DDSP Mode (Server-Side)
-             </label>
+             <>
+               <label style={{ marginLeft: '20px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: '#ccc', fontSize: '0.9rem' }}>
+                  <input type="checkbox" checked={ddspMode} onChange={e => {
+                     setDdspMode(e.target.checked);
+                     engine.setDDSPMode(e.target.checked);
+                  }} />
+                  High-Fidelity DDSP Mode (Server-Side)
+               </label>
+               <label style={{ marginLeft: '20px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: '#00ff88', fontSize: '0.9rem' }}>
+                  <input type="checkbox" checked={loopbackMode} onChange={e => {
+                     setLoopbackMode(e.target.checked);
+                     engine.setLocalLoopback(e.target.checked);
+                  }} />
+                  Local Neural Loopback
+               </label>
+             </>
           )}
         </div>
         {connected && (
@@ -319,61 +269,7 @@ export default function CollabPage() {
               }
             </div>
 
-            {/* Phase 3: Neural Codec — raw audio → EnCodec → compressed playback */}
-            <div style={{
-              ...styles.sideSection,
-              borderTop: '1px solid #333',
-              paddingTop: '14px',
-            }}>
-              <h3 style={{ ...styles.sideTitle, color: resynthActive ? '#ff88ff' : '#aaa' }}>
-                🎙 Neural Resynth
-              </h3>
-              <p style={{ fontSize: '0.75rem', color: '#888', margin: '0 0 10px', lineHeight: '1.4' }}>
-                Streams your mic through the server's STFT vocoder. Near-lossless quality, ~100ms latency.
-              </p>
-              <button
-                id="btn-resynth-toggle"
-                onClick={handleResynthToggle}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  fontSize: '0.9rem',
-                  background: resynthActive
-                    ? 'linear-gradient(135deg, #7700aa, #ff00ff)'
-                    : 'linear-gradient(135deg, #333, #555)',
-                  color: '#fff',
-                  boxShadow: resynthActive ? '0 0 12px #ff00ff66' : 'none',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                {resynthActive ? '⏹ Stop Resynth' : '▶ Start Neural Resynth'}
-              </button>
-              {resynthActive && (
-                <div style={{ marginTop: '8px', fontSize: '0.78rem', color: '#bbb' }}>
-                  <div style={styles.metricRow}>
-                    <span style={styles.metricLabel}>Status</span>
-                    <span style={{
-                      ...styles.metricValue,
-                      color: resynthState === 'playing' ? '#ff88ff'
-                           : resynthState === 'capturing' ? '#ffaa44'
-                           : resynthState === 'error' ? '#ff4444' : '#888'
-                    }}>
-                      {resynthState.toUpperCase()}
-                    </span>
-                  </div>
-                  {resynthLatency > 0 && (
-                    <div style={styles.metricRow}>
-                      <span style={styles.metricLabel}>Round-trip</span>
-                      <span style={styles.metricValue}>{resynthLatency.toFixed(0)} ms</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+
 
           </aside>
 

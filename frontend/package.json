@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:teach": "VITE_APP_ENV=teaching vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
     "lucide-react": "^0.460.0",
+    "onnxruntime-web": "^1.17.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
