@@ -34,22 +34,25 @@ import {
   computeMelBands
 } from './dsp';
 
+import { initIntentWebSocket, initIntentWebRTC } from './IntentWebRTC';
 import { encodePacket, decodePacket } from './protocol';
 import { DDSPDecoder } from './DDSPDecoder';
+import { RTCalibrationEngine } from './RTCalibrationEngine';
 
 const FRAME_RATE = 120;
 
 // ─── Intent Engine ──────────────────────────────────────────────────────────
 
 export class IntentEngine {
+  private rcEngine: RTCalibrationEngine | null = null;
   private latestLocalMelBands: any = new Float32Array(64);
-  private latestRemoteMelBands: any = new Float32Array(64);
+  latestRemoteMelBands: any = new Float32Array(64);
   private deltaSeqCounter = 10000;
 
   private audioCtx: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
   private analyser: AnalyserNode | null = null;
-  private ws: WebSocket | null = null;
+  ws: WebSocket | null = null;
 
   private isCapturing = false;
   private captureInterval: number | null = null;
@@ -64,10 +67,10 @@ export class IntentEngine {
   onCritique?: (critiques: any[]) => void;
 
   // WebRTC state
-  private pc: RTCPeerConnection | null = null;
-  private dataChannel: RTCDataChannel | null = null;
-  private remoteStream: MediaStream | null = null;
-  private remoteStreamSource: MediaStreamAudioSourceNode | null = null;
+  pc: RTCPeerConnection | null = null;
+  dataChannel: RTCDataChannel | null = null;
+  remoteStream: MediaStream | null = null;
+  remoteStreamSource: MediaStreamAudioSourceNode | null = null;
 
   // State
   peerId = '';
@@ -80,18 +83,18 @@ export class IntentEngine {
   private melFilterbank: Float32Array[] | null = null;
   ddspMode = false;
   localLoopback = false;
-  private nextAudioTime = 0;
+  nextAudioTime = 0;
 
   // Onset detection state
   private prevRMS = 0;
 
   // Reconnection state
-  private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectTimer: number | null = null;
-  private serverUrl = '';
-  private displayName = '';
-  private jwtToken: string | null = null;
+  reconnectAttempts = 0;
+  maxReconnectAttempts = 5;
+  reconnectTimer: number | null = null;
+  serverUrl = '';
+  displayName = '';
+  jwtToken: string | null = null;
 
   // Audio output routing
   masterOut: GainNode | null = null;
@@ -110,17 +113,17 @@ export class IntentEngine {
   }
 
   // Latency & Network Telemetry logging
-  private lastPingTs = 0;
+  lastPingTs = 0;
   latencyMs = 0;
   
   jitterMs = 0.0;
   packetLossPercent = 0.0;
-  private remoteSeq: number | null = null;
-  private packetsReceived = 0;
-  private packetsLost = 0;
-  private packetsWindowReceived = 0;
-  private packetsWindowLost = 0;
-  private lastNetworkUpdateTs = 0;
+  remoteSeq: number | null = null;
+  packetsReceived = 0;
+  packetsLost = 0;
+  packetsWindowReceived = 0;
+  packetsWindowLost = 0;
+  lastNetworkUpdateTs = 0;
 
   async startCapture(): Promise<void> {
     this.audioCtx = new AudioContext({ sampleRate: 48000, latencyHint: 'interactive' });
@@ -158,6 +161,29 @@ export class IntentEngine {
     this.remoteSynth = new DDSPDecoder(this.audioCtx);
     await this.remoteSynth.loadModel();
 
+    // Real-Time Auto-Calibration Loop (Ghost Observer)
+    this.rcEngine = new RTCalibrationEngine(this.audioCtx);
+    this.rcEngine.connectInputSource(source);
+    this.rcEngine.connectOutputTap(this.remoteSynth.getOutputNode());
+    
+    this.rcEngine.onAutoCalibrate = (metrics) => {
+        if (!this.remoteSynth) return;
+        
+        // Scenario A: The Bleeding Gate (Unvoiced DC Rumble Tracking)
+        if (metrics.inputMagnitudeDb < -55 && metrics.outputMagnitudeDb > -35) {
+            this.remoteSynth.setGateOverride(0.01);
+        } else {
+            this.remoteSynth.setGateOverride(1.0);
+        }
+
+        // Scenario B: The Muffled Synth (Brightness Shift)
+        if (metrics.inputCentroidHz > 3000 && metrics.outputCentroidHz < 1500) {
+            this.remoteSynth.setNoiseMultiplier(1.5);
+        } else {
+            this.remoteSynth.setNoiseMultiplier(1.0);
+        }
+    };
+
     // [Learning Kit] Instantiate Shadow Worker if in teaching environment
     if (import.meta.env.VITE_APP_ENV === 'teaching') {
       this.shadowWorker = new Worker(new URL('./learning/ValidationWorker.ts', import.meta.url), { type: 'module' });
@@ -180,6 +206,8 @@ export class IntentEngine {
 
     this.captureInterval = window.setInterval(() => {
       if (!this.analyser || !this.audioCtx) return;
+
+      this.rcEngine?.updateMetrics();
 
       const timeDomain = new Float32Array(this.analyser.fftSize);
       this.analyser.getFloatTimeDomainData(timeDomain as Float32Array<ArrayBuffer>);
@@ -323,172 +351,8 @@ export class IntentEngine {
     this.onConnectionChange?.(false);
   }
 
-  private _connectWebSocket(): void {
-    if (!this.jwtToken) return;
-    const wsUrl = `${this.serverUrl.replace('http', 'ws')}/ws/collab/${this.roomId}?name=${encodeURIComponent(this.displayName)}&token=${this.jwtToken}`;
-    this.ws = new WebSocket(wsUrl);
-    this.ws.binaryType = 'arraybuffer';
-
-    this.ws.onopen = () => {
-      this.connected = true;
-      this.reconnectAttempts = 0;
-      this.onConnectionChange?.(true);
-
-      // Start ping interval for latency measurement
-      this._startPing();
-      this._initWebRTC();
-    };
-
-    this.ws.onclose = () => {
-      this.connected = false;
-      this.onConnectionChange?.(false);
-      this._attemptReconnect();
-    };
-
-    this.ws.onmessage = async (ev) => {
-
-      if (ev.data instanceof ArrayBuffer) {
-        const view = new DataView(ev.data);
-        if (ev.data.byteLength > 4) {
-          const magic = view.getUint32(0, false); // Big endian read of "DDSP"
-          if (magic === 0x44445350) { // b"DDSP"
-            const audioData = new Float32Array(ev.data.slice(12)); // skip 4 magic + 8 peer_id
-            this._scheduleAudioBlock(audioData);
-            return;
-          }
-        }
-
-        // Binary: remote intent packet
-        const decoded = decodePacket(ev.data);
-        if (decoded) {
-            
-          if (decoded.type === 'delta') {
-              this.latestRemoteMelBands = decoded.melBands;
-              return;
-          }
-
-          const { seq } = decoded;
-          const hybridFrame: IntentFrame = { ...(decoded as PivotFrame), melBands: this.latestRemoteMelBands };
-
-          this.onRemoteIntent?.(hybridFrame);
-          
-          // Network Telemetry calculate: Packet Loss
-          if (this.remoteSeq !== null) {
-              const expected = this.remoteSeq + 1;
-              if (seq > expected) {
-                  const lost = seq - expected;
-                  this.packetsLost += lost;
-                  this.packetsWindowLost += lost;
-              }
-          }
-          this.remoteSeq = seq;
-          this.packetsReceived++;
-          this.packetsWindowReceived++;
-
-          // Network Telemetry calculate: Jitter
-          const now = performance.now();
-          if (this.lastNetworkUpdateTs > 0) {
-              const deltaR = now - this.lastNetworkUpdateTs;
-              const deltaS = 8.33; // Nominal at 120Hz
-              const diff = Math.abs(deltaR - deltaS);
-              // Moving average using RTCP formula J = J + (|D| - J) / 16
-              this.jitterMs += (diff - this.jitterMs) / 16;
-          }
-          this.lastNetworkUpdateTs = now;
-          
-          // Periodically update packet loss percent (every 1 second approx 120 pkts)
-          if (this.packetsWindowReceived > 120) {
-              const totalWindow = this.packetsWindowReceived + this.packetsWindowLost;
-              this.packetLossPercent = totalWindow > 0 ? (this.packetsWindowLost / totalWindow) * 100 : 0;
-              this.packetsWindowReceived = 0;
-              this.packetsWindowLost = 0;
-          }
-
-          this.regenerateFromIntent(hybridFrame);
-        }
-      } else {
-        // JSON: signaling
-        const msg = JSON.parse(ev.data);
-        switch (msg.type) {
-          case 'webrtc_offer': {
-            // Relayed offer from another peer — create answer and send back
-            if (this.pc && msg.sdp) {
-              try {
-                if (this.pc.signalingState !== 'stable') {
-                  console.warn('Ignoring webrtc_offer: state is', this.pc.signalingState);
-                  break;
-                }
-                await this.pc.setRemoteDescription(new RTCSessionDescription({ type: msg.rtc_type, sdp: msg.sdp }));
-                const answer = await this.pc.createAnswer();
-                if (answer.sdp) {
-                  // Force Opus Stereo and 48kHz High-fidelity
-                  answer.sdp = answer.sdp.replace(
-                    /a=fmtp:101 .*/g, 
-                    'a=fmtp:101 minptime=10; useinbandfec=1; stereo=1; sprop-stereo=1; maxplaybackrate=48000; sprop-maxcapturerate=48000; cbr=1'
-                  );
-                }
-                await this.pc.setLocalDescription(answer);
-                this.ws?.send(JSON.stringify({
-                  type: 'webrtc_answer',
-                  to_peer: msg.from_peer,
-                  sdp: answer.sdp,
-                  rtc_type: answer.type,
-                }));
-              } catch (e) {
-                console.warn('Failed to process webrtc_offer:', e);
-              }
-            }
-            break;
-          }
-          case 'webrtc_answer':
-            if (this.pc && msg.sdp) {
-              try {
-                if (this.pc.signalingState !== 'have-local-offer') {
-                  console.warn('Ignoring webrtc_answer: state is', this.pc.signalingState);
-                  break;
-                }
-                await this.pc.setRemoteDescription(new RTCSessionDescription({
-                  type: msg.rtc_type,
-                  sdp: msg.sdp
-                }));
-              } catch (e) {
-                console.warn('Failed to process webrtc_answer:', e);
-              }
-            }
-            break;
-          case 'ice_candidate':
-            if (this.pc && msg.candidate) {
-              this.pc.addIceCandidate(new RTCIceCandidate({
-                candidate: msg.candidate,
-                sdpMid: msg.sdpMid,
-                sdpMLineIndex: msg.sdpMLineIndex,
-              })).catch(() => {}); // ignore if ICE already complete
-            }
-            break;
-          case 'welcome':
-            this.peerId = msg.peer_id;
-            this.peers = msg.peers || [];
-            this.onPeersUpdated?.(this.peers);
-            break;
-          case 'peer_joined':
-          case 'peer_updated':
-          case 'peer_left':
-            this.peers = msg.peers || [];
-            this.onPeersUpdated?.(this.peers);
-            break;
-          case 'metrics':
-            this.onMetrics?.(msg);
-            break;
-          case 'pong': {
-            if (this.lastPingTs > 0) {
-              this.latencyMs = performance.now() - this.lastPingTs;
-            }
-            break;
-          }
-        }
-
-      }
-    };
+  _connectWebSocket(): void {
+    initIntentWebSocket(this);
   }
 
   private _startPing(): void {
@@ -545,6 +409,9 @@ export class IntentEngine {
         if (packetsReceived > 0) {
            this.packetLossPercent = (packetsLost / (packetsLost + packetsReceived)) * 100;
         }
+
+        // Apply smart routing (Auto-fallback if network is thrashing)
+        this._updateAudioRouting();
       }).catch(err => console.error("WebRTC Stats Error:", err));
     }
   }
@@ -557,8 +424,35 @@ export class IntentEngine {
 
   setDDSPMode(enabled: boolean): void {
     this.ddspMode = enabled;
+    this._updateAudioRouting();
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'ddsp_toggle', enabled }));
+    }
+  }
+
+  private _updateAudioRouting(): void {
+    const isNetworkPoor = this.packetLossPercent > 15 || this.jitterMs > 100;
+    const forceDDSP = this.ddspMode || isNetworkPoor || !this.remoteStreamSource;
+
+    if (forceDDSP) {
+      // Mute Raw WebRTC Audio
+      if (this.remoteStreamSource) {
+         try { this.remoteStreamSource.disconnect(); } catch(e) {}
+      }
+      // Unmute DDSP Synth so Neural Regeneration can seamlessly take over
+      this.remoteSynth?.setMuted(false);
+    } else {
+      // Unmute Raw WebRTC Audio
+      if (this.remoteStreamSource && this.audioCtx) {
+         try { this.remoteStreamSource.disconnect(); } catch(e) {}
+         if (this.masterOut) {
+           this.remoteStreamSource.connect(this.masterOut);
+         } else {
+           this.remoteStreamSource.connect(this.audioCtx.destination);
+         }
+      }
+      // Mute DDSP Synth to prevent horrific double-audio echo
+      this.remoteSynth?.setMuted(true);
     }
   }
 
@@ -566,83 +460,8 @@ export class IntentEngine {
     this.localLoopback = enabled;
   }
 
-  private async _initWebRTC(): Promise<void> {
-    if (this.pc) { this.pc.close(); this.pc = null; }
-
-    this.pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-      ]
-    });
-
-    // Phase 2: add local audio track so peers hear us directly
-    if (this.mediaStream) {
-      this.mediaStream.getAudioTracks().forEach(track => {
-        const sender = this.pc!.addTrack(track, this.mediaStream!);
-        const params = sender.getParameters();
-        if (!params.encodings) params.encodings = [{}];
-        params.encodings[0].maxBitrate = 256000; // Force 256kbps for Studio Fidelity
-        sender.setParameters(params).catch(e => console.warn('Failed to set WebRTC maxBitrate:', e));
-      });
-    }
-
-    // Data channel for intent packets (low-latency fallback)
-    this.dataChannel = this.pc.createDataChannel('intent');
-    this.dataChannel.binaryType = 'arraybuffer';
-    this.dataChannel.onmessage = (ev) => {
-      if (this.ws && ev.data instanceof ArrayBuffer)
-        this.ws.onmessage!(new MessageEvent('message', { data: ev.data }));
-    };
-
-    // Receive remote audio track — wire directly to output (near-lossless)
-    this.pc.ontrack = (event) => {
-      if (event.track.kind === 'audio' && this.audioCtx) {
-        this.remoteStream = event.streams[0];
-        if (this.remoteStreamSource) this.remoteStreamSource.disconnect();
-        this.remoteStreamSource = this.audioCtx.createMediaStreamSource(this.remoteStream);
-        // Wire directly to destination; mute the synth when live audio arrives
-        if (this.masterOut) {
-          this.remoteStreamSource.connect(this.masterOut);
-        } else {
-          this.remoteStreamSource.connect(this.audioCtx.destination);
-        }
-        if (this.remoteSynth) {
-          // Keep synth as safety fallback but silence it
-          // (it will re-activate if WebRTC track drops)
-        }
-      }
-    };
-
-    // ICE candidate relay
-    this.pc.onicecandidate = (event) => {
-      if (event.candidate && this.ws?.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({
-          type: 'ice_candidate',
-          candidate: event.candidate.candidate,
-          sdpMid: event.candidate.sdpMid,
-          sdpMLineIndex: event.candidate.sdpMLineIndex,
-        }));
-      }
-    };
-
-    const offer = await this.pc.createOffer();
-    if (offer.sdp) {
-      // Force Opus Stereo and 48kHz High-fidelity
-      offer.sdp = offer.sdp.replace(
-        /a=fmtp:101 .*/g, 
-        'a=fmtp:101 minptime=10; useinbandfec=1; stereo=1; sprop-stereo=1; maxplaybackrate=48000; sprop-maxcapturerate=48000; cbr=1'
-      );
-    }
-    await this.pc.setLocalDescription(offer);
-
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({
-        type: 'webrtc_offer',
-        sdp: offer.sdp,
-        rtc_type: offer.type,
-      }));
-    }
+  async _initWebRTC(): Promise<void> {
+    await initIntentWebRTC(this);
   }
 
   private _scheduleAudioBlock(audioData: Float32Array): void {

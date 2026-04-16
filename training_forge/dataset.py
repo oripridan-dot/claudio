@@ -45,7 +45,7 @@ class IntentAudioDataset(Dataset):
             pad_frames = self.clip_frames - actual_frames
             f0 = torch.nn.functional.pad(f0, (0, 0, 0, pad_frames))
             loudness = torch.nn.functional.pad(loudness, (0, 0, 0, pad_frames))
-            z = torch.nn.functional.pad(z, (0, 0, 0, pad_frames))
+            z = torch.nn.functional.pad(z, (0, 0, 0, pad_frames), value=-80.0)
             pad_audio = pad_frames * hop
             audio = torch.nn.functional.pad(audio, (0, pad_audio))
 

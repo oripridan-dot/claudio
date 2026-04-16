@@ -17,8 +17,6 @@ export interface CalibrationMetrics {
   inputCentroidHz: number;
   outputCentroidHz: number;
   freqDeltaHz: number;
-  compensationGainLvl: number;
-  compensationFilterFreq: number;
 }
 
 export class RTCalibrationEngine {
@@ -28,34 +26,10 @@ export class RTCalibrationEngine {
   private inputAnalyser: AnalyserNode;
   private outputAnalyser: AnalyserNode;
 
-  // Compensation chain applied to the output stream
-  private compensationGain: GainNode;
-  private compensationFilter: BiquadFilterNode;
-
-  // Parameters
-  params: CalibrationParams = {
-    fftSize: 2048,
-    gainCompStrength: 0.5,
-    eqCompStrength: 0.5,
-    smoothingMs: 50
-  };
-
-  // Metrics
-  metrics: CalibrationMetrics = {
-    coherence: 0,
-    inputMagnitudeDb: -80,
-    outputMagnitudeDb: -80,
-    magnitudeDeltaDb: 0,
-    inputCentroidHz: 0,
-    outputCentroidHz: 0,
-    freqDeltaHz: 0,
-    compensationGainLvl: 1.0,
-    compensationFilterFreq: 1000
-  };
-
-  // State
   private inputConnected = false;
   private outputConnected = false;
+
+  public onAutoCalibrate?: (metrics: CalibrationMetrics) => void;
 
   constructor(audioCtx: AudioContext) {
     this.audioCtx = audioCtx;
@@ -64,24 +38,6 @@ export class RTCalibrationEngine {
     
     this.inputAnalyser.fftSize = this.params.fftSize;
     this.outputAnalyser.fftSize = this.params.fftSize;
-    
-    this.compensationGain = this.audioCtx.createGain();
-    this.compensationFilter = this.audioCtx.createBiquadFilter();
-    
-    // Default simple High-Shelf/Low-Shelf combo filter could be modeled,
-    // but we'll use a broad Peaking filter to adjust spectral balance dynamically
-    this.compensationFilter.type = 'peaking';
-    this.compensationFilter.Q.value = 0.5; // broad Q
-    this.compensationFilter.frequency.value = 1000;
-    this.compensationFilter.gain.value = 0; // neutral
-    
-    // Connect output chain: Audio in -> Filter -> Gain -> (User connects to destination)
-    this.compensationFilter.connect(this.compensationGain);
-    
-    // The output analyser reads *before* or *after* compensation?
-    // Let's read *before* compensation to see the raw delta and compute compensation accurately.
-    // Actually, reading AFTER compensation might cause a feedback loop in the math unless handled right.
-    // We will assume `connectTargetSource` attaches the raw synth, which feeds into `compensationFilter`.
   }
 
   setParams(newParams: Partial<CalibrationParams>) {
@@ -105,13 +61,7 @@ export class RTCalibrationEngine {
     this.inputConnected = true;
   }
 
-  /** 
-   * Wire the synthesized output to pass through our compensation chain.
-   * Returns the node that the generator should connect TO.
-   */
-  getCompensationInputNode(): AudioNode {
-    return this.compensationFilter;
-  }
+
   
   /** Also need a way to tap the raw synth to measure it */
   connectOutputTap(sourceNode: AudioNode) {
@@ -119,10 +69,7 @@ export class RTCalibrationEngine {
     this.outputConnected = true;
   }
 
-  /** The final node to connect to the AudioContext destination */
-  getFinalOutputNode(): AudioNode {
-    return this.compensationGain;
-  }
+
 
   private computeRMS(data: Float32Array): number {
     let sum = 0;
@@ -192,56 +139,16 @@ export class RTCalibrationEngine {
     this.metrics.freqDeltaHz = freqDelta;
     this.metrics.coherence = coherence;
 
-    this.applyCompensation(inDb, outDb, inCent, outCent);
+    if (this.onAutoCalibrate) {
+        this.onAutoCalibrate(this.metrics);
+    }
 
     return this.metrics;
   }
 
-  private applyCompensation(inDb: number, outDb: number, inCent: number, outCent: number) {
-    const now = this.audioCtx.currentTime;
-    const smoothSec = this.params.smoothingMs / 1000;
-
-    // 1. Gain Compensation
-    // Only compensate if there is active signal (e.g. > -60dB)
-    if (inDb > -60 && this.params.gainCompStrength > 0) {
-      // We want outDb + correction = inDb => correction_dB = inDb - outDb
-      const targetGainDb = (inDb - outDb) * this.params.gainCompStrength;
-      // Clamp reasonable limits (-24 to +24 dB)
-      const clampedDb = Math.max(-24, Math.min(24, targetGainDb));
-      const targetLinearGain = Math.pow(10, clampedDb / 20);
-      
-      this.compensationGain.gain.setTargetAtTime(targetLinearGain, now, smoothSec);
-      this.metrics.compensationGainLvl = targetLinearGain;
-    } else {
-      this.compensationGain.gain.setTargetAtTime(1.0, now, smoothSec);
-      this.metrics.compensationGainLvl = 1.0;
-    }
-
-    // 2. EQ Compensation (Spectral Centroid Match)
-    // If output centroid is lower than input, we need higher frequency boost.
-    if (inDb > -60 && this.params.eqCompStrength > 0) {
-      // Find proportional frequency difference
-      const freqRatio = inCent / (outCent + 1e-5);
-      
-      // If freqRatio > 1, input is brighter. We boost the highs via peaking filter at high freq.
-      // If freqRatio < 1, output is too bright. We cut the highs.
-      
-      // We arbitrarily target the filter at 3000 Hz to act broadly on brightness
-      this.compensationFilter.frequency.setTargetAtTime(3000, now, smoothSec);
-      this.metrics.compensationFilterFreq = 3000;
-
-      // Filter gain logic: 
-      let targetEqGainDb = Math.log2(freqRatio) * 6.0 * this.params.eqCompStrength; 
-      targetEqGainDb = Math.max(-12, Math.min(12, targetEqGainDb)); // +/- 12dB clamp
-      
-      this.compensationFilter.gain.setTargetAtTime(targetEqGainDb, now, smoothSec);
-    } else {
-      this.compensationFilter.gain.setTargetAtTime(0, now, smoothSec);
-    }
-  }
-
   destroy() {
-    this.compensationFilter.disconnect();
-    this.compensationGain.disconnect();
+      // Clean up analyzers
+      this.inputAnalyser.disconnect();
+      this.outputAnalyser.disconnect();
   }
 }

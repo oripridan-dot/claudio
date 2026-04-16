@@ -30,7 +30,7 @@ def extract_features(audio_path, sr=48000, hop_length=192):
     # 3. Log-Mel Spectrogram (64-dim Soul)
     S = np.abs(librosa.stft(y, n_fft=2048, hop_length=hop_length))
     mel = librosa.feature.melspectrogram(S=S**2, sr=sr, n_mels=64)
-    log_mel = librosa.power_to_db(mel, ref=np.max)
+    log_mel = librosa.power_to_db(mel, ref=1.0)
 
     # Align lengths
     min_len = min(len(f0), len(rms), log_mel.shape[1])
@@ -63,12 +63,16 @@ def process_directory(data_dir, out_dir):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data-dir", type=str, default="data/raw_wavs")
-    parser.add_argument("--out-dir", type=str, default="data/processed")
+    parser.add_argument("--data-dirs", type=str, nargs='+', default=["training_forge/data/raw_wavs", "training_forge/data/calibration_stems", "training_forge/data/multitracks"], help="Directories to scan for wav files")
+    parser.add_argument("--out-dir", type=str, default="training_forge/data/processed")
     args = parser.parse_args()
 
-    print(f"Extraction tools initialized. Searching {args.data_dir}...")
-    process_directory(args.data_dir, args.out_dir)
+    print(f"Extraction tools initialized. Searching {args.data_dirs}...")
+    for d in args.data_dirs:
+        if os.path.exists(d):
+            process_directory(d, args.out_dir)
+        else:
+            print(f"Skipping missing directory: {d}")
 
 if __name__ == '__main__':
     main()

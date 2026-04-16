@@ -16,6 +16,17 @@ export class DDSPDecoder {
   private isModelLoaded = false;
   private isProcessing = false;
 
+  private gateOverrideMultiplier = 1.0;
+  private noiseMultiplier = 1.0;
+
+  setGateOverride(multiplier: number) {
+    this.gateOverrideMultiplier = multiplier;
+  }
+
+  setNoiseMultiplier(multiplier: number) {
+    this.noiseMultiplier = multiplier;
+  }
+
   constructor(private audioCtx: AudioContext) {
     // Connect directly to the audio context destination so audio is heard
     this.synth = new HarmonicSynth(audioCtx, audioCtx.destination);
@@ -24,6 +35,11 @@ export class DDSPDecoder {
     // Fallback to WASM or WebGL.
     ort.env.wasm.numThreads = 1;
     ort.env.wasm.simd = true;
+    
+    // Explicitly point to the JSDelivr CDN matched exactly to our installed 1.24.3 binaries.
+    // This perfectly bypasses all Vite Dev Server /public URL blockages, Node.js ESM strict 
+    // export bindings, and local caching issues by serving raw, unbundled WASM and MJS wrappers.
+    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/';
   }
 
   async loadModel(url: string = '/models/ddsp_model.onnx') {
@@ -32,11 +48,25 @@ export class DDSPDecoder {
       this.session = await ort.InferenceSession.create(url, { 
         executionProviders: ['webnn', 'wasm'] 
       });
+      // Also load the default Studio A Reverb Impulse Response (IR)
+      const baseUrl = url.substring(0, url.lastIndexOf('/'));
+      await this.synth.loadReverb(`${baseUrl}/irs/Studio_A.wav`);
+      
       this.isModelLoaded = true;
       console.log(`[DDSP] Model loaded successfully from ${url} using execution providers: webnn, wasm`);
     } catch (e) {
       console.warn(`[DDSP] Failed to load ONNX model from ${url}. It might not exist yet. Run in basic additive synth mode.`);
       this.isModelLoaded = false;
+    }
+  }
+
+  async setEnvironment(irName: string) {
+    if (!this.synth) return;
+    try {
+      await this.synth.loadReverb(`/models/irs/${irName}.wav`);
+      console.log(`[DDSP] Environment changed to ${irName}`);
+    } catch (e) {
+      console.error(`[DDSP] Failed to load environment ${irName}:`, e);
     }
   }
 
@@ -76,10 +106,28 @@ export class DDSPDecoder {
       // Shapes are assumed to be [1, 1, 60] for harmonics, [1, 1, 65] for noise
       const harmonicDistribution = results.harmonics?.data as Float32Array;
       const noiseMagnitudes = results.noise?.data as Float32Array;
+      const reverbMix = results.reverb_mix?.data as Float32Array;
+      const f0Residual = results.f0_residual?.data as Float32Array;
+      const voicedMask = results.voiced_mask?.data as Float32Array;
+
+      // Apply Feedback Controller Mutators
+      if (voicedMask && this.gateOverrideMultiplier !== 1.0) {
+        for (let i = 0; i < voicedMask.length; i++) {
+          voicedMask[i] *= this.gateOverrideMultiplier;
+        }
+      }
+
+      if (noiseMagnitudes && this.noiseMultiplier !== 1.0) {
+        for (let i = 0; i < noiseMagnitudes.length; i++) {
+          noiseMagnitudes[i] *= this.noiseMultiplier;
+        }
+      }
 
       // 4. Apply to synth
       if (harmonicDistribution) {
-        (this.synth as any).setTarget(frame.f0Hz, frame.rmsEnergy, harmonicDistribution, noiseMagnitudes);
+        (this.synth as any).setTarget(
+          frame.f0Hz, frame.rmsEnergy, harmonicDistribution, noiseMagnitudes, reverbMix, f0Residual, voicedMask
+        );
       } else {
         (this.synth as any).update(frame);
       }
@@ -88,6 +136,12 @@ export class DDSPDecoder {
       console.error("[DDSP] Inference error:", e);
     } finally {
       this.isProcessing = false;
+    }
+  }
+
+  setMuted(muted: boolean) {
+    if (this.synth && typeof (this.synth as any).setMuted === 'function') {
+      (this.synth as any).setMuted(muted);
     }
   }
 
