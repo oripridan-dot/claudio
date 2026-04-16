@@ -108,61 +108,31 @@ export class HarmonicSynth {
 
   update(frame: IntentFrame) {
     const now = this.ctx.currentTime;
-    const smooth = 0.015; // 15ms smoothing
+    const smooth = 0.02;
 
-    if (frame.f0Hz > 0 && frame.confidence > 0.45 && frame.loudnessNorm > 0.01) {
-      // Use natural harmonic rolloff — melBands used for timbre shaping when available
-      let amps: number[];
-      const melBands = frame.melBands;
-      if (melBands && melBands.some(v => v !== 0)) {
-        // Direct mel-band to harmonic amplitude mapping (64 mel → 60 partials)
-        const melMax = Math.max(...Array.from(melBands).map(Math.abs)) + 1e-10;
-        amps = Array.from({ length: N_PARTIALS }, (_, h) => {
-          const freq = frame.f0Hz * (h + 1);
-          if (freq >= this.ctx.sampleRate / 2) return 0;
-          const melIdx = Math.min(Math.floor((h / N_PARTIALS) * melBands.length), melBands.length - 1);
-          const melAmp = Math.exp(melBands[melIdx] / melMax);
-          return (melAmp / Math.pow(h + 1, 0.5));
-        });
-        const maxAmp = Math.max(...amps) + 1e-10;
-        amps = amps.map(a => a / maxAmp);
-      } else {
-        // Natural harmonic series fallback
-        amps = Array.from({ length: N_PARTIALS }, (_, h) => 1 / Math.pow(h + 1, 0.6));
-      }
-
-      for (let h = 0; h < N_PARTIALS; h++) {
-        this.partials[h].frequency.setTargetAtTime(frame.f0Hz * (h + 1), now, smooth);
-        this.gains[h].gain.setTargetAtTime(amps[h] * 0.15, now, smooth);
-      }
-
-      // Set master loudness
-      this.masterGain.gain.setTargetAtTime(frame.loudnessNorm * 0.7, now, smooth);
-
-      // Shape noise: spectral centroid drives filter cutoff
-      if (this.noiseBands.length > 0) {
-        const cutoff = Math.min(Math.max(frame.spectralCentroid * 1.5, 200), 8000);
-        const noiseLevel = (1 - frame.confidence) * 0.08 * frame.loudnessNorm;
-        for (let i = 0; i < this.N_NOISE_BANDS; i++) {
-            const center = this.noiseBands[i].frequency.value;
-            const rollOff = Math.max(0, 1 - (center / cutoff));
-            this.noiseGains[i].gain.setTargetAtTime(noiseLevel * rollOff, now, smooth);
+    // Minimal, bulletproof update: 8 partials, no mel complexity
+    if (frame.f0Hz > 20 && frame.f0Hz < 2000 && frame.loudnessNorm > 0.005) {
+      for (let h = 0; h < 8; h++) {
+        const freq = frame.f0Hz * (h + 1);
+        if (freq < this.ctx.sampleRate / 2.5) {
+          const amp = 1 / Math.pow(h + 1, 0.8);
+          this.partials[h].frequency.setTargetAtTime(freq, now, smooth);
+          this.gains[h].gain.setTargetAtTime(amp * 0.2, now, smooth);
         }
       }
-
-      // Onset transient: brief gain burst
-      if (frame.isOnset && frame.onsetStrength > 0.05) {
-        this.masterGain.gain.setValueAtTime(frame.loudnessNorm * 1.5, now);
-        this.masterGain.gain.setTargetAtTime(frame.loudnessNorm * 0.7, now + 0.005, 0.02);
+      // Silence upper partials
+      for (let h = 8; h < N_PARTIALS; h++) {
+        this.gains[h].gain.setTargetAtTime(0, now, smooth);
       }
-
+      const masterAmp = Math.min(0.8, Math.max(0.1, frame.loudnessNorm));
+      this.masterGain.gain.setTargetAtTime(masterAmp, now, smooth);
     } else {
-      // Silence: fade out
       this.masterGain.gain.setTargetAtTime(0, now, 0.05);
     }
 
     this.prevF0 = frame.f0Hz;
   }
+
 
   setTarget(f0Hz: number, rmsEnergy: number, harmonics: Float32Array | number[], noiseMagnitudes?: Float32Array | number[]) {
     const now = this.ctx.currentTime;
