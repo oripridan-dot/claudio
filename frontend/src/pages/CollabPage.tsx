@@ -29,6 +29,7 @@ export default function CollabPage() {
   const [connected, setConnected] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [ddspMode, setDdspMode] = useState(false);
+  const [loopbackMode, setLoopbackMode] = useState(false);
   const [roomId, setRoomId] = useState('');
   const [inputRoom, setInputRoom] = useState('');
   const [userName, setUserName] = useState('Musician');
@@ -180,13 +181,22 @@ export default function CollabPage() {
             {connected ? `Room: ${roomId}` : 'Disconnected'}
           </span>
           {connected && (
-             <label style={{ marginLeft: '20px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: '#ccc', fontSize: '0.9rem' }}>
-                <input type="checkbox" checked={ddspMode} onChange={e => {
-                   setDdspMode(e.target.checked);
-                   engine.setDDSPMode(e.target.checked);
-                }} />
-                High-Fidelity DDSP Mode (Server-Side)
-             </label>
+             <>
+               <label style={{ marginLeft: '20px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: '#ccc', fontSize: '0.9rem' }}>
+                  <input type="checkbox" checked={ddspMode} onChange={e => {
+                     setDdspMode(e.target.checked);
+                     engine.setDDSPMode(e.target.checked);
+                  }} />
+                  High-Fidelity DDSP Mode (Server-Side)
+               </label>
+               <label style={{ marginLeft: '20px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: '#00ff88', fontSize: '0.9rem' }}>
+                  <input type="checkbox" checked={loopbackMode} onChange={e => {
+                     setLoopbackMode(e.target.checked);
+                     engine.setLocalLoopback(e.target.checked);
+                  }} />
+                  Local Neural Loopback
+               </label>
+             </>
           )}
         </div>
         {connected && (

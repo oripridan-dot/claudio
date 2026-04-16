@@ -21,6 +21,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from claudio.hrtf_engine import AudioSource, HRTFBinauralEngine
 from claudio.signal_flow_config import balanced_config
+from claudio.intent.intent_encoder import IntentEncoder
+from claudio.intent.intent_decoder import IntentDecoder
 
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "demo_output" / "ab_demo"
 SR = 48_000  # export sample rate
@@ -345,6 +347,31 @@ def process_binaural(
     return stereo
 
 
+def process_intent_resynthesis(mono: np.ndarray) -> np.ndarray:
+    """Process mono audio through Intent Encoder -> Decoder for resynthesis preview."""
+    encoder = IntentEncoder(sample_rate=SR)
+    decoder = IntentDecoder(sample_rate=SR, frame_rate=250, n_harmonics=40)
+    hop = encoder.hop
+    n_blocks = len(mono) // hop
+    
+    out_audio = np.zeros(len(mono), dtype=np.float32)
+    
+    for i in range(n_blocks):
+        start = i * hop
+        block = mono[start : start + encoder.frame_len]
+        if len(block) < encoder.frame_len:
+            block = np.pad(block, (0, encoder.frame_len - len(block)))
+            
+        frames = encoder.encode_block(block, start_time_ms=(start/SR)*1000)
+        
+        if frames:
+            frame = frames[0]
+            decoded_chunk = decoder._decode_single_frame(frame)
+            out_audio[start : start + hop] = decoded_chunk[:hop]
+            
+    return out_audio
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Main
 # ═══════════════════════════════════════════════════════════════════════
@@ -377,6 +404,11 @@ def main():
         stereo = process_binaural(mono, azimuth=azimuth)
         wet_path = OUTPUT_DIR / f"{slug}_claudio.wav"
         write_wav_float32(wet_path, stereo, SR, channels=2)
+
+        # Process through Intent Resynthesis
+        resyn = process_intent_resynthesis(mono)
+        resyn_path = OUTPUT_DIR / f"{slug}_intent.wav"
+        write_wav_float32(resyn_path, resyn, SR, channels=1)
 
         print()
 
