@@ -22,11 +22,11 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # Standard offline training setup
+    # Standard offline training setup — always start optimizer fresh
     model = DDSPDecoder().to(device)
     synth = DDSPSynth(sample_rate=48000, frame_rate=250).to(device)
     loss_fn = MultiScaleSpectralLoss().to(device)
-    optimizer = optim.Adam(model.parameters(), lr=1e-4) # Start slightly higher
+    optimizer = optim.Adam(model.parameters(), lr=3e-4)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=12, min_lr=1e-5)
 
     if os.path.exists("checkpoints/best.pt"):
@@ -34,17 +34,11 @@ def main():
             checkpoint = torch.load("checkpoints/best.pt", map_location=device)
             if 'model_state_dict' in checkpoint:
                 model.load_state_dict(checkpoint['model_state_dict'])
-                optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-                print("Successfully loaded weights and optimizer state from checkpoints/best.pt!")
-                if 'scheduler_state_dict' in checkpoint:
-                    scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-                
-                # Check current learning rate gracefully
-                for param_group in optimizer.param_groups:
-                    print(f"Resuming with Learning Rate: {param_group['lr']}")
+                # IMPORTANT: DO NOT restore optimizer/scheduler state — they may be frozen
+                print("Loaded model weights from checkpoint. Starting with fresh optimizer LR=3e-4.")
             else:
                 model.load_state_dict(checkpoint)
-                print("Successfully loaded legacy weights from checkpoints/best.pt! Building momentum...")
+                print("Loaded legacy weights. Starting with fresh optimizer LR=3e-4.")
         except BaseException as e:
             print(f"Could not load checkpoint: {e}. Starting from scratch.")
 

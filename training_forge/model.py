@@ -38,9 +38,16 @@ class DDSPDecoder(nn.Module):
 
     def forward(self, f0, loudness, z):
         # f0, loudness, z expected shape: (batch, time, features)
-        h_f0 = self.fc_f0(f0)
-        h_loud = self.fc_loud(loudness)
-        h_z = self.fc_z(z)
+        # Normalize f0 from Hz (0-2000) to [0,1] to stabilize gradients
+        f0_norm = f0 / 2000.0
+        # Normalize loudness: clip to safe range
+        loudness_norm = torch.clamp(loudness, 0.0, 1.0)
+        # Normalize z (log-mel) from [-80,0] dB to [0,1]
+        z_norm = (z + 80.0) / 80.0
+
+        h_f0 = self.fc_f0(f0_norm)
+        h_loud = self.fc_loud(loudness_norm)
+        h_z = self.fc_z(z_norm)
 
         # Concatenate encoded intents
         x = torch.cat([h_f0, h_loud, h_z], dim=-1)
