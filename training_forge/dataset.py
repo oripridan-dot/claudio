@@ -58,4 +58,4 @@ class IntentAudioDataset(Dataset):
 
 def get_dataloader(data_dir, batch_size=8, shuffle=True):
     dataset = IntentAudioDataset(data_dir)
-    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=2)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=0)
