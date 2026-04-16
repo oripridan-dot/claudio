@@ -27,7 +27,7 @@ class IntentAudioDataset(Dataset):
         hop = 192
         f0 = data['f0']
         loudness = data['loudness']
-        mfcc = data['mfcc']
+        z = data['z']
         audio = data['audio']
 
         actual_frames = f0.shape[0]
@@ -37,7 +37,7 @@ class IntentAudioDataset(Dataset):
             start = torch.randint(0, actual_frames - self.clip_frames, (1,)).item()
             f0 = f0[start:start+self.clip_frames]
             loudness = loudness[start:start+self.clip_frames]
-            mfcc = mfcc[start:start+self.clip_frames]
+            z = z[start:start+self.clip_frames]
             a_start = start * hop
             audio = audio[a_start:a_start+(self.clip_frames*hop)]
         elif actual_frames < self.clip_frames:
@@ -45,14 +45,14 @@ class IntentAudioDataset(Dataset):
             pad_frames = self.clip_frames - actual_frames
             f0 = torch.nn.functional.pad(f0, (0, 0, 0, pad_frames))
             loudness = torch.nn.functional.pad(loudness, (0, 0, 0, pad_frames))
-            mfcc = torch.nn.functional.pad(mfcc, (0, 0, 0, pad_frames))
+            z = torch.nn.functional.pad(z, (0, 0, 0, pad_frames))
             pad_audio = pad_frames * hop
             audio = torch.nn.functional.pad(audio, (0, pad_audio))
 
         return {
             'f0': f0,
             'loudness': loudness,
-            'mfcc': mfcc,
+            'z': z,
             'audio': audio
         }
 

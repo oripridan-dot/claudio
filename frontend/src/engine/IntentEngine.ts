@@ -11,7 +11,9 @@ import {
   CollabMetrics,
   IntentCallback,
   PeerCallback,
-  MetricsCallback
+  MetricsCallback,
+  PivotFrame,
+  DeltaFrame
 } from './types';
 
 export type {
@@ -29,10 +31,10 @@ import {
   computeRMS,
   computeSpectralCentroid,
   buildMelFilterbank,
-  computeMFCC
+  computeMelBands
 } from './dsp';
 
-import { encodeIntentPacket, decodeIntentPacket } from './protocol';
+import { encodePacket, decodePacket } from './protocol';
 import { DDSPDecoder } from './DDSPDecoder';
 
 const FRAME_RATE = 120;
@@ -40,6 +42,10 @@ const FRAME_RATE = 120;
 // ─── Intent Engine ──────────────────────────────────────────────────────────
 
 export class IntentEngine {
+  private latestLocalMelBands: any = new Float32Array(64);
+  private latestRemoteMelBands: any = new Float32Array(64);
+  private deltaSeqCounter = 10000;
+
   private audioCtx: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
   private analyser: AnalyserNode | null = null;
@@ -142,7 +148,7 @@ export class IntentEngine {
     source.connect(this.analyser);
 
     // Build mel filterbank once (2048-point FFT, 48000 Hz)
-    this.melFilterbank = buildMelFilterbank(2048, 48000);
+    buildMelFilterbank(2048, 48000);
 
     // Ensure WASM core is ready for sub-millisecond intent extraction
     await initWasmDSP();
@@ -194,37 +200,61 @@ export class IntentEngine {
 
       const { f0, confidence } = autocorrelationF0(timeDomain, this.audioCtx.sampleRate);
       const centroid = computeSpectralCentroid(freqData, this.audioCtx.sampleRate);
-      const mfcc = computeMFCC(magSpectrum, this.melFilterbank);
-
+      
       const rmsJump = rms - this.prevRMS;
       const isOnset = rmsJump > 0.05 && rms > 0.02;
       this.prevRMS = rms;
 
-      const frame: IntentFrame = {
+      this.seq++;
+
+      const pivot: PivotFrame = {
+        type: 'pivot',
+        seq: this.seq,
         timestamp: performance.now(),
         f0Hz: f0, confidence, loudnessDb, loudnessNorm,
         spectralCentroid: centroid, isOnset,
         onsetStrength: Math.max(0, rmsJump),
-        rmsEnergy: rms, mfcc,
+        rmsEnergy: rms,
       };
 
-      this.onLocalIntent?.(frame);
+      const isDeltaCycle = (this.seq % 4 === 0) || isOnset;
+      if (isDeltaCycle) {
+        Promise.resolve().then(() => {
+            const melBands = computeMelBands(magSpectrum);
+            this.latestLocalMelBands = melBands;
+            this.deltaSeqCounter++;
+            const delta: DeltaFrame = {
+                type: 'delta',
+                seq: this.deltaSeqCounter,
+                ref_seq: pivot.seq,
+                timestamp: pivot.timestamp,
+                melBands
+            };
+            if (this.dataChannel?.readyState === 'open') {
+                this.dataChannel.send(encodePacket(delta));
+            } else if (this.ws?.readyState === WebSocket.OPEN) {
+                this.ws.send(encodePacket(delta));
+            }
+        });
+      }
+
+      const hybridFrame: IntentFrame = { ...pivot, melBands: this.latestLocalMelBands };
+
+      this.onLocalIntent?.(hybridFrame);
       
       if (this.localLoopback) {
-          this.regenerateFromIntent(frame);
+          this.regenerateFromIntent(hybridFrame);
       }
 
       // [Learning Kit] Post frame off main-thread to be ruthlessly evaluated
       if (this.shadowWorker) {
-        this.shadowWorker.postMessage({ type: 'frame', frame });
+        this.shadowWorker.postMessage({ type: 'frame', frame: hybridFrame });
       }
 
       if (this.dataChannel?.readyState === 'open') {
-        this.seq++;
-        this.dataChannel.send(encodeIntentPacket(frame, this.seq));
+        this.dataChannel.send(encodePacket(pivot));
       } else if (this.ws?.readyState === WebSocket.OPEN) {
-        this.seq++;
-        this.ws.send(encodeIntentPacket(frame, this.seq));
+        this.ws.send(encodePacket(pivot));
       }
     }, Math.floor(1000 / FRAME_RATE));
   }
@@ -331,10 +361,18 @@ export class IntentEngine {
         }
 
         // Binary: remote intent packet
-        const decoded = decodeIntentPacket(ev.data);
+        const decoded = decodePacket(ev.data);
         if (decoded) {
-          const { seq, frame } = decoded;
-          this.onRemoteIntent?.(frame);
+            
+          if (decoded.type === 'delta') {
+              this.latestRemoteMelBands = decoded.melBands;
+              return;
+          }
+
+          const { seq } = decoded;
+          const hybridFrame: IntentFrame = { ...(decoded as PivotFrame), melBands: this.latestRemoteMelBands };
+
+          this.onRemoteIntent?.(hybridFrame);
           
           // Network Telemetry calculate: Packet Loss
           if (this.remoteSeq !== null) {
@@ -368,7 +406,7 @@ export class IntentEngine {
               this.packetsWindowLost = 0;
           }
 
-          this.regenerateFromIntent(frame);
+          this.regenerateFromIntent(hybridFrame);
         }
       } else {
         // JSON: signaling

@@ -48,12 +48,12 @@ def main():
         for batch in dataloader:
             f0 = batch['f0'].to(device)
             loudness = batch['loudness'].to(device)
-            mfcc = batch['mfcc'].to(device)
+            z = batch['z'].to(device)
             audio_true = batch['audio'].to(device)
 
             # Forward pass Model -> (Harmonics, Noise params)
             optimizer.zero_grad()
-            harmonics, noise = model(f0, loudness, mfcc)
+            harmonics, noise = model(f0, loudness, z)
 
             # Differentiable Synthesis -> Audio waveform
             audio_hat = synth(f0, loudness, harmonics, noise)

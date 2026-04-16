@@ -1,14 +1,15 @@
 import { IntentFrame } from './types';
 import { N_MELS } from './dsp';
 
-const N_PARTIALS = 16;
+const N_PARTIALS = 60;
 
 export class HarmonicSynth {
   private partials: OscillatorNode[] = [];
   private gains: GainNode[] = [];
   private noiseSource: AudioBufferSourceNode | null = null;
-  private noiseFilter: BiquadFilterNode | null = null;
-  private noiseGain: GainNode | null = null;
+  private noiseBands: BiquadFilterNode[] = [];
+  private noiseGains: GainNode[] = [];
+  private readonly N_NOISE_BANDS = 16;
   private masterGain: GainNode;
   private ctx: AudioContext;
   private prevF0 = 0;
@@ -50,17 +51,29 @@ export class HarmonicSynth {
     this.noiseSource.buffer = noiseBuffer;
     this.noiseSource.loop = true;
 
-    this.noiseFilter = this.ctx.createBiquadFilter();
-    this.noiseFilter.type = 'lowpass';
-    this.noiseFilter.frequency.value = 800;
-    this.noiseFilter.Q.value = 0.5;
+    const nyquist = this.ctx.sampleRate / 2;
+    const bandwidth = nyquist / this.N_NOISE_BANDS;
 
-    this.noiseGain = this.ctx.createGain();
-    this.noiseGain.gain.value = 0;
+    for (let i = 0; i < this.N_NOISE_BANDS; i++) {
+        const filter = this.ctx.createBiquadFilter();
+        // Lowest band is lowpass, rest are bandpass
+        filter.type = i === 0 ? 'lowpass' : 'bandpass';
+        
+        const centerFreq = nyquist * ((i + 0.5) / this.N_NOISE_BANDS);
+        filter.frequency.value = centerFreq;
+        filter.Q.value = i === 0 ? 0.7 : (centerFreq / bandwidth);
 
-    this.noiseSource.connect(this.noiseFilter);
-    this.noiseFilter.connect(this.noiseGain);
-    this.noiseGain.connect(this.masterGain);
+        const gain = this.ctx.createGain();
+        gain.gain.value = 0;
+
+        this.noiseSource.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.masterGain);
+
+        this.noiseBands.push(filter);
+        this.noiseGains.push(gain);
+    }
+
     this.noiseSource.start();
   }
 
@@ -111,12 +124,14 @@ export class HarmonicSynth {
       this.masterGain.gain.setTargetAtTime(frame.loudnessNorm * 0.7, now, smooth);
 
       // Shape noise: spectral centroid drives filter cutoff
-      if (this.noiseFilter && this.noiseGain) {
+      if (this.noiseBands.length > 0) {
         const cutoff = Math.min(Math.max(frame.spectralCentroid * 1.5, 200), 8000);
-        this.noiseFilter.frequency.setTargetAtTime(cutoff, now, smooth);
-        // Noise level: higher for breathy/noisy sounds (low F0 confidence → more noise)
         const noiseLevel = (1 - frame.confidence) * 0.08 * frame.loudnessNorm;
-        this.noiseGain.gain.setTargetAtTime(noiseLevel, now, smooth);
+        for (let i = 0; i < this.N_NOISE_BANDS; i++) {
+            const center = this.noiseBands[i].frequency.value;
+            const rollOff = Math.max(0, 1 - (center / cutoff));
+            this.noiseGains[i].gain.setTargetAtTime(noiseLevel * rollOff, now, smooth);
+        }
       }
 
       // Onset transient: brief gain burst
@@ -131,6 +146,53 @@ export class HarmonicSynth {
     }
 
     this.prevF0 = frame.f0Hz;
+  }
+
+  setTarget(f0Hz: number, rmsEnergy: number, harmonics: Float32Array | number[], noiseMagnitudes?: Float32Array | number[]) {
+    const now = this.ctx.currentTime;
+    const smooth = 0.015; // 15ms smoothing
+
+    if (f0Hz > 0 && rmsEnergy > 0.01) {
+      for (let h = 0; h < N_PARTIALS; h++) {
+        const hFreq = f0Hz * (h + 1);
+        // Anti-aliasing check (Nyquist limit)
+        if (hFreq < this.ctx.sampleRate / 2) {
+          this.partials[h].frequency.setTargetAtTime(hFreq, now, smooth);
+          const amp = h < harmonics.length ? harmonics[h] : 0;
+          this.gains[h].gain.setTargetAtTime(amp * 0.15, now, smooth);
+        } else {
+          this.gains[h].gain.setTargetAtTime(0, now, smooth);
+        }
+      }
+
+      this.masterGain.gain.setTargetAtTime(rmsEnergy * 0.7, now, smooth);
+
+      // Highly-detailed Neural Noise mapping
+      if (noiseMagnitudes && noiseMagnitudes.length > 0) {
+        const ratio = noiseMagnitudes.length / this.N_NOISE_BANDS;
+        for (let b = 0; b < this.N_NOISE_BANDS; b++) {
+            const startBin = Math.floor(b * ratio);
+            const endBin = Math.floor((b + 1) * ratio);
+            let sum = 0;
+            for (let j = startBin; j < endBin; j++) sum += noiseMagnitudes[j];
+            const avgMag = sum / (endBin - startBin + 1e-6);
+            
+            // Map the band magnitude to subjective gain
+            const gain = rmsEnergy * avgMag;
+            this.noiseGains[b].gain.setTargetAtTime(gain, now, smooth);
+        }
+      } else if (this.noiseBands.length > 0) {
+        const baseLevel = Math.max(0, rmsEnergy * 0.02);
+        for (let i = 0; i < this.N_NOISE_BANDS; i++) {
+             const roll = 1.0 / (1.0 + i); 
+             this.noiseGains[i].gain.setTargetAtTime(baseLevel * roll, now, smooth);
+        }
+      }
+    } else {
+      this.masterGain.gain.setTargetAtTime(0, now, 0.05);
+    }
+
+    this.prevF0 = f0Hz;
   }
 
   destroy() {

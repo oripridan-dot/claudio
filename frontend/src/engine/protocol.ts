@@ -1,56 +1,70 @@
-import { IntentFrame } from './types';
-import { N_MFCC } from './dsp';
+import { NetworkPacket, PivotFrame, DeltaFrame } from './types';
 
-export const PACKET_BYTES = 86;
+// PACKET SIZES
+export const PIVOT_BYTES = 5 + 4 + 4 + 4 + 4 + 1; // 22 bytes
+export const DELTA_BYTES = 5 + 4 + (64 * 4); // 265 bytes
 
-export function encodeIntentPacket(frame: IntentFrame, seq: number): ArrayBuffer {
-  const buf = new ArrayBuffer(PACKET_BYTES);
-  const view = new DataView(buf);
-  let o = 0;
-  view.setUint32(o, seq, true); o += 4;
-  view.setFloat32(o, frame.timestamp, true); o += 4;
-  const flags = frame.loudnessNorm < 0.01 ? 0x08 : frame.isOnset ? 0x05 : 0x01;
-  view.setUint8(o, flags); o += 1;
-  view.setFloat32(o, frame.f0Hz, true); o += 4;
-  view.setFloat32(o, frame.confidence, true); o += 4;
-  view.setFloat32(o, frame.loudnessDb, true); o += 4;
-  view.setFloat32(o, frame.loudnessNorm, true); o += 4;
-  view.setFloat32(o, frame.spectralCentroid, true); o += 4;
-  view.setUint8(o, frame.isOnset ? 1 : 0); o += 1;
-  view.setFloat32(o, frame.onsetStrength, true); o += 4;
-  // MFCCs
-  const mfcc = frame.mfcc.length === N_MFCC ? frame.mfcc : Array(N_MFCC).fill(0);
-  for (let i = 0; i < N_MFCC; i++) { view.setFloat32(o, mfcc[i], true); o += 4; }
-  return buf;
+// MAGIC BYTES
+export const PACKET_TYPE_PIVOT = 0x01;
+export const PACKET_TYPE_DELTA = 0x02;
+
+export function encodePacket(packet: NetworkPacket): ArrayBuffer {
+  if (packet.type === 'pivot') {
+    const buf = new ArrayBuffer(PIVOT_BYTES);
+    const view = new DataView(buf);
+    let o = 0;
+    view.setUint8(o, PACKET_TYPE_PIVOT); o += 1;
+    view.setUint32(o, packet.seq, true); o += 4;
+    
+    view.setFloat32(o, packet.timestamp, true); o += 4;
+    view.setFloat32(o, packet.f0Hz, true); o += 4;
+    view.setFloat32(o, packet.loudnessNorm, true); o += 4;
+    view.setFloat32(o, packet.spectralCentroid, true); o += 4;
+    view.setUint8(o, packet.isOnset ? 1 : 0); o += 1;
+    return buf;
+  } else {
+    // Delta Packet
+    const buf = new ArrayBuffer(DELTA_BYTES);
+    const view = new DataView(buf);
+    let o = 0;
+    view.setUint8(o, PACKET_TYPE_DELTA); o += 1;
+    view.setUint32(o, packet.seq, true); o += 4;
+    
+    view.setUint32(o, packet.ref_seq, true); o += 4;
+    for (let i = 0; i < 64; i++) {
+        view.setFloat32(o, packet.melBands?.[i] || 0, true); o += 4;
+    }
+    return buf;
+  }
 }
 
-export function decodeIntentPacket(data: ArrayBuffer): { seq: number; frame: IntentFrame } | null {
-  if (data.byteLength < 9) return null;
+export function decodePacket(data: ArrayBuffer): NetworkPacket | null {
+  if (data.byteLength < 5) return null;
+  
   const view = new DataView(data);
   let o = 0;
+  
+  const typeId = view.getUint8(o); o += 1;
   const seq = view.getUint32(o, true); o += 4;
-  const ts = view.getFloat32(o, true); o += 4;
-  const flags = view.getUint8(o); o += 1;
-
-  const emptyMfcc = Array(N_MFCC).fill(0);
-
-  if (flags & 0x08) {
-    return { seq, frame: { timestamp: ts, f0Hz: 0, confidence: 0, loudnessDb: -80,
-      loudnessNorm: 0, spectralCentroid: 0, isOnset: false, onsetStrength: 0,
-      rmsEnergy: 0, mfcc: emptyMfcc } };
+  
+  if (typeId === PACKET_TYPE_PIVOT) {
+    if (data.byteLength < PIVOT_BYTES) return null;
+    const timestamp = view.getFloat32(o, true); o += 4;
+    const f0Hz = view.getFloat32(o, true); o += 4;
+    const loudnessNorm = view.getFloat32(o, true); o += 4;
+    const spectralCentroid = view.getFloat32(o, true); o += 4;
+    const isOnset = view.getUint8(o) === 1; o += 1;
+    
+    return { type: 'pivot', seq, timestamp, f0Hz, loudnessNorm, spectralCentroid, isOnset } as PivotFrame;
+  } else if (typeId === PACKET_TYPE_DELTA) {
+    if (data.byteLength < DELTA_BYTES) return null;
+    const ref_seq = view.getUint32(o, true); o += 4;
+    
+    // Construct Float32Array directly off the ArrayBuffer buffer cache
+    const melBands = new Float32Array(data.slice(o, o + (64 * 4)));
+    
+    return { type: 'delta', seq, ref_seq, melBands } as DeltaFrame;
   }
-  if (data.byteLength < PACKET_BYTES) return null;
-
-  const f0Hz = view.getFloat32(o, true); o += 4;
-  const confidence = view.getFloat32(o, true); o += 4;
-  const loudnessDb = view.getFloat32(o, true); o += 4;
-  const loudnessNorm = view.getFloat32(o, true); o += 4;
-  const spectralCentroid = view.getFloat32(o, true); o += 4;
-  const isOnset = view.getUint8(o) === 1; o += 1;
-  const onsetStrength = view.getFloat32(o, true); o += 4;
-  const mfcc: number[] = [];
-  for (let i = 0; i < N_MFCC; i++) { mfcc.push(view.getFloat32(o, true)); o += 4; }
-
-  return { seq, frame: { timestamp: ts, f0Hz, confidence, loudnessDb, loudnessNorm,
-    spectralCentroid, isOnset, onsetStrength, rmsEnergy: 0, mfcc } };
+  
+  return null;
 }

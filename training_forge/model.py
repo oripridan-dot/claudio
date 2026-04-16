@@ -12,35 +12,38 @@ class DDSPDecoder(nn.Module):
         # Input features:
         # f0: [batch, time, 1]
         # loudness/rms: [batch, time, 1]
-        # mfcc: [batch, time, 13]
+        # z: [batch, time, 64] (Log-Mel Spectrogram)
 
         # We embed and scale the inputs
         self.fc_f0 = nn.Linear(1, 16)
         self.fc_loud = nn.Linear(1, 16)
-        self.fc_mfcc = nn.Linear(13, 32)
+        self.fc_z = nn.Linear(64, 32)
 
         # Decoder MLP
         self.mlp = nn.Sequential(
-            nn.Linear(64, 256),
-            nn.LayerNorm(256),
-            nn.ReLU(),
-            nn.Linear(256, 128),
-            nn.LayerNorm(128),
-            nn.ReLU()
+            nn.Linear(64, 512),
+            nn.LayerNorm(512),
+            nn.SiLU(),
+            nn.Linear(512, 512),
+            nn.LayerNorm(512),
+            nn.SiLU(),
+            nn.Linear(512, 512),
+            nn.LayerNorm(512),
+            nn.SiLU()
         )
 
         # DDSP Outputs (Additive Harmonics & Filtered Noise Magnitudes)
-        self.out_harmonics = nn.Linear(128, n_harmonics)
-        self.out_noise = nn.Linear(128, n_noise)
+        self.out_harmonics = nn.Linear(512, n_harmonics)
+        self.out_noise = nn.Linear(512, n_noise)
 
-    def forward(self, f0, loudness, mfcc):
-        # f0, loudness, mfcc expected shape: (batch, time, features)
+    def forward(self, f0, loudness, z):
+        # f0, loudness, z expected shape: (batch, time, features)
         h_f0 = self.fc_f0(f0)
         h_loud = self.fc_loud(loudness)
-        h_mfcc = self.fc_mfcc(mfcc)
+        h_z = self.fc_z(z)
 
         # Concatenate encoded intents
-        x = torch.cat([h_f0, h_loud, h_mfcc], dim=-1)
+        x = torch.cat([h_f0, h_loud, h_z], dim=-1)
         x = self.mlp(x)
 
         # Synthesizer Amplitudes Control

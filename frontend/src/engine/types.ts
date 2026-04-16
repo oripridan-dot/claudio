@@ -1,4 +1,6 @@
-export interface IntentFrame {
+export interface PivotFrame {
+  type: 'pivot';
+  seq: number;
   timestamp: number;
   f0Hz: number;
   confidence: number;
@@ -8,8 +10,22 @@ export interface IntentFrame {
   isOnset: boolean;
   onsetStrength: number;
   rmsEnergy: number;
-  mfcc: number[]; // 13 coefficients — timbre fingerprint
 }
+
+export interface DeltaFrame {
+  type: 'delta';
+  seq: number;
+  ref_seq: number;
+  timestamp: number; // reference to the pivot block if async
+  melBands: Float32Array;
+}
+
+export type NetworkPacket = PivotFrame | DeltaFrame;
+
+export type IntentFrame = PivotFrame & { 
+  mfcc?: number[]; // Deprecated compatibility field
+  melBands?: Float32Array; // New 64-dim field
+};
 
 export interface PeerInfo {
   peer_id: string;
