@@ -147,8 +147,9 @@ export class IntentEngine {
     this.analyser.fftSize = 2048;
     source.connect(this.analyser);
 
-    // Build mel filterbank once (2048-point FFT, 48000 Hz)
-    this.melFilterbank = buildMelFilterbank(2048, 48000);
+    // Build mel filterbank once (2048-point FFT, 48000 Hz) — stores internally in dsp.ts module
+    buildMelFilterbank(2048, 48000);
+    this.melFilterbank = []; // Mark as initialized — actual state lives in dsp.ts module
 
     // Ensure WASM core is ready for sub-millisecond intent extraction
     await initWasmDSP();
@@ -178,7 +179,7 @@ export class IntentEngine {
     this.isCapturing = true;
 
     this.captureInterval = window.setInterval(() => {
-      if (!this.analyser || !this.audioCtx || !this.melFilterbank) return;
+      if (!this.analyser || !this.audioCtx) return;
 
       const timeDomain = new Float32Array(this.analyser.fftSize);
       this.analyser.getFloatTimeDomainData(timeDomain as Float32Array<ArrayBuffer>);
