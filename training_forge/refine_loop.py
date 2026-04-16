@@ -25,8 +25,8 @@ def execute_refinement_loop(target_mcd=10.0, target_lsd=3.0, max_iterations=5):
         print(f"\n>>> ITERATION {iteration + 1} / {max_iterations} <<<")
         
         # 1. Train
-        # We start with 50 epochs per refinement pass
-        run_training_cycle(epochs=50)
+        # We start with 12 epochs per refinement pass
+        run_training_cycle(epochs=12)
         
         # 2. Evaluate
         run_evaluation()

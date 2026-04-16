@@ -88,6 +88,10 @@ class FilteredNoise(nn.Module):
         # Inverse real-FFT to get noise frames (batch, frames, 256)
         noise_frames = torch.fft.irfft(complex_noise, n=n_fft, dim=-1)
         
+        # Apply Hann window to eliminate transient clicking during overlap-add
+        window = torch.hann_window(n_fft, device=noise_frames.device).view(1, 1, -1)
+        noise_frames = noise_frames * window
+        
         # Overlap-add the frames using nn.Fold
         # Transpose to (batch, 256, frames)
         noise_frames = noise_frames.transpose(1, 2)
