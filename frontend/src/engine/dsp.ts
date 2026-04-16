@@ -1,5 +1,5 @@
 export const N_MFCC = 13;
-export const N_MELS = 26;
+export const N_MELS = 64;
 
 // ─── WASM Integration ───────────────────────────────────────────────────────
 
@@ -182,43 +182,25 @@ export function buildMelFilterbank(fftSize: number, sampleRate: number): void {
 }
 
 export function computeMFCC(magSpectrum: Float32Array, ignoreFilterbankParam?: any): number[] {
-  if (isWasmLoaded && wasmCore) {
-    const n = magSpectrum.length;
-    const inPtr = wasmCore._malloc(n * 4);
-    const outPtr = wasmCore._malloc(N_MFCC * 4);
+  // Deprecated - kept for structural safety if modules are still bound
+  return new Array(N_MFCC).fill(0);
+}
 
-    wasmCore.HEAPF32.set(magSpectrum, inPtr / 4);
-    wasmCore._computeMFCC(inPtr, n, outPtr);
-
-    const mfcc = new Array<number>(N_MFCC);
-    const outArr = new Float32Array(wasmCore.HEAPF32.buffer, outPtr, N_MFCC);
-    for(let i=0; i<N_MFCC; i++) mfcc[i] = outArr[i];
-
-    wasmCore._free(inPtr);
-    wasmCore._free(outPtr);
-    return mfcc;
-  }
-
-  // JS Fallback
-  if (!jsFilterbank) return new Array(N_MFCC).fill(0);
+export function computeMelBands(magSpectrum: Float32Array): Float32Array {
+  // Always use JS Fallback for 64-dim Log-Mels until WASM module is re-compiled
+  if (!jsFilterbank) return new Float32Array(N_MELS);
 
   const melEnergies = new Float32Array(N_MELS);
   for (let i = 0; i < N_MELS; i++) {
     let energy = 0;
     const filter = jsFilterbank[i];
     for (let j = 0; j < Math.min(magSpectrum.length, filter.length); j++) {
-      energy += magSpectrum[j] * filter[j];
+      // Mag spectrum is magnitude, so we square it to get power for power_to_db equivalent
+      energy += (magSpectrum[j] * magSpectrum[j]) * filter[j];
     }
-    melEnergies[i] = Math.log(Math.max(energy, 1e-10));
+    // 10 * log10 matches Librosa's power_to_db
+    melEnergies[i] = 10 * Math.log10(Math.max(energy, 1e-10));
   }
 
-  const mfcc = new Array<number>(N_MFCC);
-  for (let k = 0; k < N_MFCC; k++) {
-    let sum = 0;
-    for (let n = 0; n < N_MELS; n++) {
-      sum += melEnergies[n] * Math.cos((Math.PI * k * (n + 0.5)) / N_MELS);
-    }
-    mfcc[k] = sum;
-  }
-  return mfcc;
+  return melEnergies;
 }

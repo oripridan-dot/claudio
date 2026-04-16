@@ -11,7 +11,11 @@ def export_model(output_path, checkpoint=None):
 
     if checkpoint and os.path.exists(checkpoint):
         print(f"Loading weights from {checkpoint}")
-        model.load_state_dict(torch.load(checkpoint, map_location="cpu"))
+        checkpoint_data = torch.load(checkpoint, map_location="cpu")
+        if 'model_state_dict' in checkpoint_data:
+            model.load_state_dict(checkpoint_data['model_state_dict'])
+        else:
+            model.load_state_dict(checkpoint_data)
     else:
         print("No checkpoint found or specified, exporting with untrained weights.")
 
@@ -21,14 +25,14 @@ def export_model(output_path, checkpoint=None):
     # [batch, time, channels]
     dummy_f0 = torch.randn(1, 1, 1)
     dummy_loud = torch.randn(1, 1, 1)
-    dummy_mfcc = torch.randn(1, 1, 13)
+    dummy_z = torch.randn(1, 1, 64)
 
     out_dir = Path(output_path).parent
     out_dir.mkdir(parents=True, exist_ok=True)
 
     torch.onnx.export(
         model,
-        (dummy_f0, dummy_loud, dummy_mfcc),
+        (dummy_f0, dummy_loud, dummy_z),
         output_path,
         export_params=True,
         input_names=['f0', 'loudness', 'z'],

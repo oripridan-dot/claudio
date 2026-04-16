@@ -69,22 +69,36 @@ class FilteredNoise(nn.Module):
         batch, time_frames, n_noise = noise_envelope.shape
         audio_len = time_frames * self.hop_length
 
-        # Generate uniform white noise [-1, 1]
-        white_noise = torch.rand(batch, audio_len, device=noise_envelope.device) * 2.0 - 1.0
+        # STFT overlap-add construction for differentiable noise filtering
+        # Since our hop size is 192, we need an n_fft >= 192 to prevent dropouts.
+        # We will pad the 65-bin envelope to 129 bins (which represents n_fft=256),
+        # placing silence in the uppermost frequencies (12kHz - 24kHz), which is fine for noise.
+        n_fft = 256
+        target_bins = (n_fft // 2) + 1 # 129
+        
+        if n_noise < target_bins:
+            env_pad = F.pad(noise_envelope, (0, target_bins - n_noise))
+        else:
+            env_pad = noise_envelope[..., :target_bins]
 
-        # This is a simplification logic for DDSP style filtered noise:
-        # We usually take the STFT of white noise, multiply by the envelope, and iSTFT back.
-        # Alternatively, we design FIR filters. STFT is more differentiable.
-
-        # For simplicity of this minimal architectural forge, we will just return scaled white noise
-        # in a complete implementation you'd use torch.stft and multiply.
-
-        # To maintain isolation constraint without complex dependencies,
-        # we approx it by upsampling the mean envelope scale
-        mean_scale = torch.mean(noise_envelope, dim=-1, keepdim=True)
-        scale_up = F.interpolate(mean_scale.transpose(1, 2), size=audio_len, mode='linear', align_corners=False).squeeze(1)
-
-        return white_noise * scale_up * 0.1 # scaled down to prevent blowouts
+        # Generate complex spectrum with random phase for the noise
+        phases = torch.rand(*env_pad.shape, device=env_pad.device) * 2 * torch.pi
+        complex_noise = env_pad * torch.exp(1j * phases)
+        
+        # Inverse real-FFT to get noise frames (batch, frames, 256)
+        noise_frames = torch.fft.irfft(complex_noise, n=n_fft, dim=-1)
+        
+        # Overlap-add the frames using nn.Fold
+        # Transpose to (batch, 256, frames)
+        noise_frames = noise_frames.transpose(1, 2)
+        
+        expected_len = time_frames * self.hop_length + n_fft - self.hop_length
+        fold = nn.Fold(output_size=(1, expected_len), kernel_size=(1, n_fft), stride=(1, self.hop_length))
+        
+        noise_out = fold(noise_frames).squeeze(1).squeeze(1)
+        
+        # Trim back to exactly audio_len
+        return noise_out[:, :audio_len] * 0.1
 
 class DDSPSynth(nn.Module):
     def __init__(self, sample_rate=48000, frame_rate=250):

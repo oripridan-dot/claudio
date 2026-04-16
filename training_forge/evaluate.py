@@ -15,7 +15,11 @@ def evaluate(checkpoint_path="checkpoints/best.pt", data_dir="data/processed", o
 
     decoder = DDSPDecoder()
     if os.path.exists(checkpoint_path):
-        decoder.load_state_dict(torch.load(checkpoint_path, map_location='cpu'))
+        checkpoint_data = torch.load(checkpoint_path, map_location='cpu')
+        if 'model_state_dict' in checkpoint_data:
+            decoder.load_state_dict(checkpoint_data['model_state_dict'])
+        else:
+            decoder.load_state_dict(checkpoint_data)
         print(f"Loaded weights from {checkpoint_path}")
     else:
         print(f"Warning: Checkpoint not found at {checkpoint_path}")
@@ -32,11 +36,11 @@ def evaluate(checkpoint_path="checkpoints/best.pt", data_dir="data/processed", o
 
         f0 = batch['f0']
         loudness = batch['loudness']
-        mfcc = batch['mfcc']
+        z = batch['z']
         orig_audio = batch['audio']
 
         with torch.no_grad():
-            harmonics, noise = decoder(f0, loudness, mfcc)
+            harmonics, noise = decoder(f0, loudness, z)
             gen_audio = synth(f0, loudness, harmonics, noise)
 
         gen_audio = gen_audio.squeeze().cpu().numpy()

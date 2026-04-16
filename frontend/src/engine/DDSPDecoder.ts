@@ -6,7 +6,7 @@ import { HarmonicSynth } from './HarmonicSynth';
  * DDSPDecoder
  * 
  * Uses ONNX Runtime Web to infer high-fidelity audio parameters from
- * IntentFrames [F0, Loudness, MFCC (Z)]. 
+ * IntentFrames [F0, Loudness, MelBands (Z)]. 
  * The inferred parameters are sent to a multi-oscillator harmonic synth
  * and a filtered noise generator (standard DDSP architecture).
  */
@@ -51,7 +51,7 @@ export class DDSPDecoder {
   async processFrame(frame: IntentFrame) {
     // Basic fallback if no DDSP model exists
     if (!this.isModelLoaded || !this.session) {
-      this.synth.setTarget(frame.f0Hz, frame.rmsEnergy);
+      this.synth.update(frame);
       // Optional: manipulate synth harmonics roughly using MFCC here if desired
       return;
     }
@@ -60,10 +60,10 @@ export class DDSPDecoder {
     this.isProcessing = true;
 
     try {
-      // 1. Prepare tensors [1, 1, 1] for f0/loudness, [1, 1, 13] for mfcc
+      // 1. Prepare tensors [1, 1, 1] for f0/loudness, [1, 1, 64] for z
       const f0Tensor = new ort.Tensor('float32', Float32Array.from([frame.f0Hz]), [1, 1, 1]);
       const loudTensor = new ort.Tensor('float32', Float32Array.from([frame.rmsEnergy]), [1, 1, 1]);
-      const zTensor = new ort.Tensor('float32', Float32Array.from(frame.mfcc || new Array(13).fill(0)), [1, 1, 13]);
+      const zTensor = new ort.Tensor('float32', Float32Array.from(frame.melBands || new Float32Array(64)), [1, 1, 64]);
 
       // 2. Infer
       const results = await this.session.run({
@@ -79,13 +79,10 @@ export class DDSPDecoder {
 
       // 4. Apply to synth
       if (harmonicDistribution) {
-        (this.synth as any).setTarget(frame.f0Hz, frame.rmsEnergy, harmonicDistribution);
+        (this.synth as any).setTarget(frame.f0Hz, frame.rmsEnergy, harmonicDistribution, noiseMagnitudes);
       } else {
         (this.synth as any).update(frame);
       }
-      
-      // Note: A true DDSP implementation would also route noiseMagnitudes to a 
-      // dynamically filtered noise generator here.
 
     } catch (e) {
       console.error("[DDSP] Inference error:", e);
@@ -95,6 +92,6 @@ export class DDSPDecoder {
   }
 
   destroy() {
-    this.synth.stop();
+    this.synth.destroy();
   }
 }

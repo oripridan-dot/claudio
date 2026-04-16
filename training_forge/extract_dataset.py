@@ -27,17 +27,18 @@ def extract_features(audio_path, sr=48000, hop_length=192):
     # 2. Loudness (RMS mapped to dB then normalized)
     rms = librosa.feature.rms(y=y, frame_length=2048, hop_length=hop_length)[0]
 
-    # 3. MFCC (Timbre)
+    # 3. Log-Mel Spectrogram (64-dim Soul)
     S = np.abs(librosa.stft(y, n_fft=2048, hop_length=hop_length))
-    mfcc = librosa.feature.mfcc(S=librosa.power_to_db(S**2), n_mfcc=13)
+    mel = librosa.feature.melspectrogram(S=S**2, sr=sr, n_mels=64)
+    log_mel = librosa.power_to_db(mel, ref=np.max)
 
     # Align lengths
-    min_len = min(len(f0), len(rms), mfcc.shape[1])
+    min_len = min(len(f0), len(rms), log_mel.shape[1])
 
     features = {
         'f0': torch.tensor(f0[:min_len], dtype=torch.float32).unsqueeze(1),
         'loudness': torch.tensor(rms[:min_len], dtype=torch.float32).unsqueeze(1),
-        'mfcc': torch.tensor(mfcc[:, :min_len].T, dtype=torch.float32),
+        'z': torch.tensor(log_mel[:, :min_len].T, dtype=torch.float32),
         'audio': torch.tensor(y[:min_len*hop_length], dtype=torch.float32)
     }
 
