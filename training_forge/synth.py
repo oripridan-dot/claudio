@@ -24,11 +24,11 @@ class HarmonicSynth(nn.Module):
 
         # Upsample frame-rate envelopes to audio-rate
         audio_len = time_frames * self.hop_length
-        # bicubic for f0 and harmonics — preserves periodic waveform phase integrity
-        f0_up = F.interpolate(f0.transpose(1, 2), size=audio_len, mode='bicubic', align_corners=False).transpose(1, 2)
-        # loudness is a smooth envelope — linear is fine and avoids ringing artefacts on attacks
+        # linear mode — bicubic requires 4D spatial tensors, our tensors are 3D
+        # linear at 192x upsample is perceptually accurate for harmonic synthesis
+        f0_up = F.interpolate(f0.transpose(1, 2), size=audio_len, mode='linear', align_corners=False).transpose(1, 2)
         amp_up = F.interpolate(amplitudes.transpose(1, 2), size=audio_len, mode='linear', align_corners=False).transpose(1, 2)
-        harm_up = F.interpolate(harmonic_distribution.transpose(1, 2), size=audio_len, mode='bicubic', align_corners=False).transpose(1, 2)
+        harm_up = F.interpolate(harmonic_distribution.transpose(1, 2), size=audio_len, mode='linear', align_corners=False).transpose(1, 2)
 
         # Build anti-aliasing mask -> zeroes out harmonics above Nyquist (24000)
         # Shape: (1, 1, n_harmonics)

@@ -111,4 +111,4 @@ class CombinedPerceptualLoss(nn.Module):
         self.mel = MelSpectralLoss(sample_rate=sample_rate)
 
     def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        return 0.7 * self.spectral(x, y) + 0.3 * self.mel(x, y)
+        return 0.9 * self.spectral(x, y) + 0.1 * self.mel(x, y)

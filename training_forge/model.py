@@ -4,59 +4,80 @@ import torch.nn as nn
 
 class DDSPDecoder(nn.Module):
     """
-    DDSP Neural Decoder mirroring the frontend WebNN inference layer.
-    Maps Intent Tensor [F0, RMS, MFCC] -> Synth Parameters [Harmonics, Noise].
-    """
-    def __init__(self, n_harmonics=60, n_noise=65):
-        super().__init__()
-        # Input features:
-        # f0: [batch, time, 1]
-        # loudness/rms: [batch, time, 1]
-        # z: [batch, time, 64] (Log-Mel Spectrogram)
+    DDSP Neural Decoder with GRU temporal context.
 
-        # We embed and scale the inputs
+    The original frame-by-frame MLP had no memory across frames — it plateaued
+    at spectral loss ~11.5 because it could not learn articulations or note
+    transitions that span multiple 250Hz frames.
+
+    This version adds a single bidirectional GRU (hidden=256) before the MLP.
+    The GRU sees the full sequence and passes contextual hidden states to the
+    output heads, enabling the model to learn temporal dynamics (vibrato onset,
+    note attack/release, spectral transitions).
+
+    Architecture:
+      Embed(f0)=[16], Embed(loud)=[16], Embed(z)=[32]  →  concat [64]
+      GRU(64 → 256, bidirectional=True)                →  [512]
+      MLP(512 → 512 → 512)                             →  [512]
+      Head(harmonics) = Softmax([512→60])
+      Head(noise)     = Sigmoid([512→65])
+    """
+    def __init__(self, n_harmonics: int = 60, n_noise: int = 65):
+        super().__init__()
+
+        # Input feature embeddings
         self.fc_f0 = nn.Linear(1, 16)
         self.fc_loud = nn.Linear(1, 16)
         self.fc_z = nn.Linear(64, 32)
 
-        # Decoder MLP
-        self.mlp = nn.Sequential(
-            nn.Linear(64, 512),
-            nn.LayerNorm(512),
-            nn.SiLU(),
-            nn.Linear(512, 512),
-            nn.LayerNorm(512),
-            nn.SiLU(),
-            nn.Linear(512, 512),
-            nn.LayerNorm(512),
-            nn.SiLU()
+        # GRU for temporal context — processes full sequence, not frame-by-frame
+        # bidirectional=True: hidden=256 per direction → 512 total
+        self.gru = nn.GRU(
+            input_size=64,
+            hidden_size=256,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=True,
         )
 
-        # DDSP Outputs (Additive Harmonics & Filtered Noise Magnitudes)
+        # MLP refiner on top of GRU output
+        self.mlp = nn.Sequential(
+            nn.Linear(512, 512),
+            nn.LayerNorm(512),
+            nn.SiLU(),
+            nn.Linear(512, 512),
+            nn.LayerNorm(512),
+            nn.SiLU(),
+        )
+
+        # DDSP output heads
         self.out_harmonics = nn.Linear(512, n_harmonics)
         self.out_noise = nn.Linear(512, n_noise)
 
-    def forward(self, f0, loudness, z):
-        # f0, loudness, z expected shape: (batch, time, features)
-        # Normalize f0 from Hz (0-2000) to [0,1] to stabilize gradients
-        f0_norm = f0 / 2000.0
-        # Normalize loudness: clip to safe range
+    def forward(
+        self, f0: torch.Tensor, loudness: torch.Tensor, z: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        # Inputs: (batch, time, features)
+        # Normalize to stabilize gradients
+        f0_norm = f0 / 2000.0                         # Hz → [0,1]
         loudness_norm = torch.clamp(loudness, 0.0, 1.0)
-        # Normalize z (log-mel) from [-80,0] dB to [0,1]
-        z_norm = (z + 80.0) / 80.0
+        z_norm = (z + 80.0) / 80.0                    # dB range [-80,0] → [0,1]
 
         h_f0 = self.fc_f0(f0_norm)
         h_loud = self.fc_loud(loudness_norm)
         h_z = self.fc_z(z_norm)
 
-        # Concatenate encoded intents
+        # Shape: (batch, time, 64)
         x = torch.cat([h_f0, h_loud, h_z], dim=-1)
+
+        # GRU: (batch, time, 64) → (batch, time, 512)
+        x, _ = self.gru(x)
+
+        # MLP refinement
         x = self.mlp(x)
 
-        # Synthesizer Amplitudes Control
-        # Harmonics sum to 1 (spectral distribution), scaled by loudness later in synth
+        # Synthesizer parameter heads
         harmonics = torch.softmax(self.out_harmonics(x), dim=-1)
-        # Noise magnitude envelope
         noise = torch.sigmoid(self.out_noise(x))
 
         return harmonics, noise

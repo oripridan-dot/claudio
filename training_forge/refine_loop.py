@@ -20,13 +20,12 @@ from model import DDSPDecoder
 from synth import DDSPSynth
 
 # ─── Configuration ────────────────────────────────────────────────
-EPOCHS_PER_CYCLE = 30       # Short bursts — measure between each
+EPOCHS_PER_CYCLE = 40       # 40 epochs/cycle — GRU stabilises faster than pure MLP
 MAX_CYCLES = 20             # Max training cycles
 # Realistic targets for ~45 clips + spectral+perceptual loss.
 # (MCD<200 / LSD<15 requires 1000s of clips + adversarial training — out of scope here)
 MCD_TARGET = 500.0          # Achievable floor with augmented 45-clip dataset
 LSD_TARGET = 25.0           # Achievable floor with augmented 45-clip dataset
-MCD_IMPROVEMENT_GATE = 0.05 # Halve LR if MCD doesn't improve by 5% within a cycle
 # Use augmented dataset if available, fall back to processed
 DATA_DIR = "data/augmented" if os.path.isdir("data/augmented") else "data/processed"
 CHECKPOINT = "checkpoints/best.pt"
@@ -180,12 +179,12 @@ def main():
         print(f"  CYCLE {cycle} / {MAX_CYCLES}")
         print(f"{'─'*50}")
 
-        # Fresh optimizer every cycle — never carry frozen state
-        # lr is local and mutable across cycles for metric-gated decay
-        if cycle == 1:
-            lr = 3e-4
-        optimizer = optim.Adam(model.parameters(), lr=lr)  # type: ignore[possibly-undefined]
-        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS_PER_CYCLE, eta_min=1e-5)
+        # Fresh optimizer + scheduler every cycle — resets LR to 3e-4 each time
+        # This prevents LR from dying at min_lr across multi-cycle runs
+        optimizer = optim.Adam(model.parameters(), lr=3e-4)
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode='min', factor=0.5, patience=12, min_lr=1e-5
+        )
 
         best_loss = run_training_cycle(
             model, synth, loss_fn, optimizer, scheduler,
@@ -221,17 +220,10 @@ def main():
             print(f"   Run: uv run python export_onnx.py --checkpoint {CHECKPOINT}")
             break
 
-        # Metric-gated LR: if MCD didn't improve this cycle, halve LR for next
-        if cycle > 1:
-            prev_mcd = getattr(main, "_prev_mcd", mcd)
-            improvement = (prev_mcd - mcd) / (prev_mcd + 1e-9)
-            if improvement < MCD_IMPROVEMENT_GATE:
-                lr = max(lr * 0.5, 1e-5)  # type: ignore[possibly-undefined]
-                print(f"  ⚡ MCD improvement {improvement*100:.1f}% < {MCD_IMPROVEMENT_GATE*100:.0f}% — LR → {lr:.2e}")
-        main._prev_mcd = mcd  # type: ignore[attr-defined]
-
+        # ReduceLROnPlateau manages LR decay — just report current LR for visibility
+        current_lr = optimizer.param_groups[0]["lr"]  # type: ignore[possibly-undefined]
         remaining = MAX_CYCLES - cycle
-        print(f"  ⚙ Targets not yet met. {remaining} cycles remaining...")
+        print(f"  ⚙ LR: {current_lr:.2e} | Targets not yet met. {remaining} cycles remaining...")
 
     print("\n✅ Refinement loop complete.")
 
