@@ -1,6 +1,7 @@
 import argparse
 import os
 import time
+import warnings
 
 import torch
 import torch.optim as optim
@@ -11,6 +12,7 @@ from synth import DDSPSynth
 
 
 def main():
+    warnings.filterwarnings('ignore', category=UserWarning)
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch-size", type=int, default=4)
@@ -22,6 +24,13 @@ def main():
 
     # Standard offline training setup
     model = DDSPDecoder().to(device)
+    if os.path.exists("checkpoints/best.pt"):
+        try:
+            model.load_state_dict(torch.load("checkpoints/best.pt", map_location=device))
+            print("Successfully loaded weights from checkpoints/best.pt! Building momentum...")
+        except BaseException as e:
+            print(f"Could not load checkpoint: {e}. Starting from scratch.")
+            
     synth = DDSPSynth(sample_rate=48000, frame_rate=250).to(device)
     loss_fn = MultiScaleSpectralLoss().to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
