@@ -1,13 +1,14 @@
-import os
 import argparse
+import os
 from pathlib import Path
-import torch
 
+import torch
 from model import DDSPDecoder
+
 
 def export_model(output_path, checkpoint=None):
     model = DDSPDecoder()
-    
+
     if checkpoint and os.path.exists(checkpoint):
         print(f"Loading weights from {checkpoint}")
         model.load_state_dict(torch.load(checkpoint, map_location="cpu"))
@@ -26,7 +27,7 @@ def export_model(output_path, checkpoint=None):
     out_dir.mkdir(parents=True, exist_ok=True)
 
     torch.onnx.export(
-        model, 
+        model,
         (dummy_f0, dummy_loud, dummy_mfcc),
         output_path,
         export_params=True,
@@ -49,5 +50,5 @@ if __name__ == '__main__':
     # Default to placing it directly where the React frontend expects it!
     parser.add_argument("--output", type=str, default="../frontend/public/models/ddsp_model.onnx")
     args = parser.parse_args()
-    
+
     export_model(args.output, args.checkpoint)

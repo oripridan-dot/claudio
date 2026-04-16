@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+
 class DDSPDecoder(nn.Module):
     """
     DDSP Neural Decoder mirroring the frontend WebNN inference layer.
@@ -12,12 +13,12 @@ class DDSPDecoder(nn.Module):
         # f0: [batch, time, 1]
         # loudness/rms: [batch, time, 1]
         # mfcc: [batch, time, 13]
-        
+
         # We embed and scale the inputs
         self.fc_f0 = nn.Linear(1, 16)
         self.fc_loud = nn.Linear(1, 16)
         self.fc_mfcc = nn.Linear(13, 32)
-        
+
         # Decoder MLP
         self.mlp = nn.Sequential(
             nn.Linear(64, 256),
@@ -27,7 +28,7 @@ class DDSPDecoder(nn.Module):
             nn.LayerNorm(128),
             nn.ReLU()
         )
-        
+
         # DDSP Outputs (Additive Harmonics & Filtered Noise Magnitudes)
         self.out_harmonics = nn.Linear(128, n_harmonics)
         self.out_noise = nn.Linear(128, n_noise)
@@ -37,15 +38,15 @@ class DDSPDecoder(nn.Module):
         h_f0 = self.fc_f0(f0)
         h_loud = self.fc_loud(loudness)
         h_mfcc = self.fc_mfcc(mfcc)
-        
+
         # Concatenate encoded intents
         x = torch.cat([h_f0, h_loud, h_mfcc], dim=-1)
         x = self.mlp(x)
-        
+
         # Synthesizer Amplitudes Control
         # Harmonics sum to 1 (spectral distribution), scaled by loudness later in synth
         harmonics = torch.softmax(self.out_harmonics(x), dim=-1)
         # Noise magnitude envelope
         noise = torch.sigmoid(self.out_noise(x))
-        
+
         return harmonics, noise

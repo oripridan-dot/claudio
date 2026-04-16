@@ -1,20 +1,22 @@
 import os
+import warnings
+
 import librosa
 import soundfile as sf
-import warnings
+
 
 def main():
     out_dir = "data/raw_wavs"
     os.makedirs(out_dir, exist_ok=True)
-    
+
     print("Fetching high-quality open-source reference stems via Librosa...")
-    
+
     warnings.filterwarnings('ignore')
-    
+
     stems = {
         'trumpet': librosa.util.example('trumpet')
     }
-    
+
     for name, path in stems.items():
         if os.path.exists(path):
             y, sr = librosa.load(path, sr=48000)

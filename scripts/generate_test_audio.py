@@ -62,7 +62,7 @@ def generate_electric_guitar() -> np.ndarray:
     n = int(SR * DURATION)
     output = np.zeros(n, dtype=np.float32)
 
-    for note, t in zip(notes, timings):
+    for note, t in zip(notes, timings, strict=False):
         start = int(t * SR)
         pluck = karplus_strong(note, DURATION - t, SR, brightness=0.7)
         # Add harmonics (pickup resonance)
@@ -91,7 +91,7 @@ def generate_acoustic_guitar() -> np.ndarray:
     n = int(SR * DURATION)
     output = np.zeros(n, dtype=np.float32)
 
-    for note, t in zip(notes, timings):
+    for note, t in zip(notes, timings, strict=False):
         start = int(t * SR)
         pluck = karplus_strong(note, DURATION - t, SR, brightness=0.4)
         end = min(start + len(pluck), n)
@@ -114,7 +114,7 @@ def generate_bass_guitar() -> np.ndarray:
     n = int(SR * DURATION)
     output = np.zeros(n, dtype=np.float32)
 
-    for note, t in zip(notes, timings):
+    for note, t in zip(notes, timings, strict=False):
         start = int(t * SR)
         pluck = karplus_strong(note, DURATION - t, SR, brightness=0.3)
         end = min(start + len(pluck), n)
@@ -132,7 +132,7 @@ def generate_drum_kit() -> np.ndarray:
     """Drum kit — kick, snare, hi-hat pattern."""
     n = int(SR * DURATION)
     output = np.zeros(n, dtype=np.float32)
-    t = np.arange(n) / SR
+    np.arange(n) / SR
 
     # BPM = 120, 8th notes
     beat_interval = 0.5  # seconds
@@ -181,7 +181,7 @@ def generate_piano() -> np.ndarray:
     n = int(SR * DURATION)
     output = np.zeros(n, dtype=np.float32)
 
-    for note, t_start in zip(notes, timings):
+    for note, t_start in zip(notes, timings, strict=False):
         start = int(t_start * SR)
         remaining = DURATION - t_start
         note_len = int(remaining * SR)

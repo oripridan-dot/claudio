@@ -1,8 +1,10 @@
-import os
 import argparse
+import os
+
 import librosa
 import numpy as np
 import torch
+
 
 def extract_features(audio_path, sr=48000, hop_length=192):
     """
@@ -10,35 +12,35 @@ def extract_features(audio_path, sr=48000, hop_length=192):
     Aligns exactly to the 250Hz frame rate expected by the frontend.
     """
     y, _ = librosa.load(audio_path, sr=sr)
-    
+
     # Pad to ensure hop aligns
     pad_len = (hop_length - (len(y) % hop_length)) % hop_length
     y = np.pad(y, (0, pad_len))
-    
+
     # 1. Pitch
     f0, voiced_flag, voiced_probs = librosa.pyin(
-        y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C7'), 
+        y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C7'),
         sr=sr, frame_length=2048, hop_length=hop_length
     )
     f0 = np.nan_to_num(f0)
-    
+
     # 2. Loudness (RMS mapped to dB then normalized)
     rms = librosa.feature.rms(y=y, frame_length=2048, hop_length=hop_length)[0]
-    
+
     # 3. MFCC (Timbre)
     S = np.abs(librosa.stft(y, n_fft=2048, hop_length=hop_length))
     mfcc = librosa.feature.mfcc(S=librosa.power_to_db(S**2), n_mfcc=13)
-    
+
     # Align lengths
     min_len = min(len(f0), len(rms), mfcc.shape[1])
-    
+
     features = {
         'f0': torch.tensor(f0[:min_len], dtype=torch.float32).unsqueeze(1),
         'loudness': torch.tensor(rms[:min_len], dtype=torch.float32).unsqueeze(1),
         'mfcc': torch.tensor(mfcc[:, :min_len].T, dtype=torch.float32),
         'audio': torch.tensor(y[:min_len*hop_length], dtype=torch.float32)
     }
-    
+
     return features
 
 def process_directory(data_dir, out_dir):
@@ -63,7 +65,7 @@ def main():
     parser.add_argument("--data-dir", type=str, default="data/raw_wavs")
     parser.add_argument("--out-dir", type=str, default="data/processed")
     args = parser.parse_args()
-    
+
     print(f"Extraction tools initialized. Searching {args.data_dir}...")
     process_directory(args.data_dir, args.out_dir)
 

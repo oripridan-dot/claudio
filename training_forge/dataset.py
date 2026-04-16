@@ -1,6 +1,8 @@
 import os
+
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader, Dataset
+
 
 class IntentAudioDataset(Dataset):
     """
@@ -11,25 +13,25 @@ class IntentAudioDataset(Dataset):
         self.data_dir = data_dir
         self.clip_frames = clip_frames
         self.files = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('.pt')]
-        
+
     def __len__(self):
         return len(self.files)
-        
+
     def __getitem__(self, idx):
         data = torch.load(self.files[idx], map_location='cpu')
-        
+
         # Truncate or pad to exactly `clip_frames` length
         # At 250Hz frame rate, 250 frames = 1.0 second context
         # Audio length will be 250 * 192 (hop) = 48000
-        
+
         hop = 192
         f0 = data['f0']
         loudness = data['loudness']
         mfcc = data['mfcc']
         audio = data['audio']
-        
+
         actual_frames = f0.shape[0]
-        
+
         if actual_frames > self.clip_frames:
             # Crop random window
             start = torch.randint(0, actual_frames - self.clip_frames, (1,)).item()
@@ -46,7 +48,7 @@ class IntentAudioDataset(Dataset):
             mfcc = torch.nn.functional.pad(mfcc, (0, 0, 0, pad_frames))
             pad_audio = pad_frames * hop
             audio = torch.nn.functional.pad(audio, (0, pad_audio))
-            
+
         return {
             'f0': f0,
             'loudness': loudness,

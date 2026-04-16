@@ -1,7 +1,7 @@
 """
 spectrogram_diff.py - Visual Metrology Tool
 
-Generates high-resolution spectrogram diffs between reference and regenerated audio. 
+Generates high-resolution spectrogram diffs between reference and regenerated audio.
 Saves the output to an image for visual verification of transient and frequency gaps.
 """
 import argparse

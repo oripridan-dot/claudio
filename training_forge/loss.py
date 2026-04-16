@@ -2,14 +2,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 def stft(x, fft_size, hop_size, win_length, window):
     """Perform STFT and convert to magnitude spectrogram."""
     x_stft = torch.stft(
-        x, 
-        n_fft=fft_size, 
-        hop_length=hop_size, 
-        win_length=win_length, 
-        window=window, 
+        x,
+        n_fft=fft_size,
+        hop_length=hop_size,
+        win_length=win_length,
+        window=window,
         return_complex=True,
         pad_mode='reflect'
     )
@@ -29,7 +30,7 @@ class SpectralLoss(nn.Module):
         # L1 linear loss
         loss_lin = F.l1_loss(x_mag, y_mag)
         # L1 log loss
-        loss_log = F.l1_loss(torch.log(torch.clamp(x_mag, min=1e-7)), 
+        loss_log = F.l1_loss(torch.log(torch.clamp(x_mag, min=1e-7)),
                              torch.log(torch.clamp(y_mag, min=1e-7)))
         return loss_lin + loss_log
 
@@ -37,10 +38,16 @@ class MultiScaleSpectralLoss(nn.Module):
     """
     Computes spectral loss across multiple STFT resolutions.
     """
-    def __init__(self, fft_sizes=[2048, 1024, 512, 256, 128, 64], hop_sizes=[512, 256, 128, 64, 32, 16], win_lengths=[2048, 1024, 512, 256, 128, 64]):
+    def __init__(self, fft_sizes=None, hop_sizes=None, win_lengths=None):
+        if win_lengths is None:
+            win_lengths = [2048, 1024, 512, 256, 128, 64]
+        if hop_sizes is None:
+            hop_sizes = [512, 256, 128, 64, 32, 16]
+        if fft_sizes is None:
+            fft_sizes = [2048, 1024, 512, 256, 128, 64]
         super().__init__()
         self.spectral_losses = nn.ModuleList()
-        for fs, ss, wl in zip(fft_sizes, hop_sizes, win_lengths):
+        for fs, ss, wl in zip(fft_sizes, hop_sizes, win_lengths, strict=False):
             self.spectral_losses.append(SpectralLoss(fs, ss, wl))
 
     def forward(self, x, y):

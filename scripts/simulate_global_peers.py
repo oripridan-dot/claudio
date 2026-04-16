@@ -2,6 +2,7 @@
 import asyncio
 import json
 import sys
+import urllib.request
 import wave
 
 import numpy as np
@@ -56,8 +57,6 @@ async def simulate_peer(ws_url: str, config: dict):
                     await asyncio.sleep(len(audio_chunk) / 44100.0)
     except Exception as e:
         print(f"[{config['name']}] Disconnected: {e}")
-
-import urllib.request
 
 
 async def main():
