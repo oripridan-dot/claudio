@@ -55,6 +55,7 @@ export class IntentEngine {
   onPeersUpdated: PeerCallback | null = null;
   onMetrics: MetricsCallback | null = null;
   onConnectionChange: ((connected: boolean) => void) | null = null;
+  onCritique?: (critiques: any[]) => void;
 
   // WebRTC state
   private pc: RTCPeerConnection | null = null;
@@ -160,8 +161,11 @@ export class IntentEngine {
       
       this.shadowWorker.onmessage = (e) => {
         if (e.data.type === 'critiques') {
+          if (this.onCritique) {
+             this.onCritique(e.data.critiques);
+          }
           e.data.critiques.forEach((c: any) => {
-            // "See-Then-Read" UI Hook Placeholder (Route to local console for now)
+            // Log to console for backup
             console.warn(`[BRUTAL HONESTY] ${c.message} (Delta: ${c.delta.toFixed(2)})`);
           });
         }

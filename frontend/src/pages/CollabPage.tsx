@@ -16,6 +16,7 @@ import {
 } from '../components/IntentVisualizer';
 import { RTCalibrationEngine } from '../engine/RTCalibrationEngine';
 import { RTCalibrationPanel } from '../components/RTCalibrationPanel';
+import { GeometricFracture, type Critique } from '../components/GeometricFracture';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -44,6 +45,9 @@ export default function CollabPage() {
 
   // RT Calibration Component
   const [calibrationEngine, setCalibrationEngine] = useState<RTCalibrationEngine | null>(null);
+
+  // Geometric Validation State
+  const [activeCritiques, setActiveCritiques] = useState<Critique[]>([]);
 
   const localHistoryRef = useRef<IntentFrame[]>([]);
   const remoteHistoryRef = useRef<IntentFrame[]>([]);
@@ -91,6 +95,11 @@ export default function CollabPage() {
     engine.onPeersUpdated = setPeers;
     engine.onMetrics = setMetrics;
     engine.onConnectionChange = setConnected;
+    engine.onCritique = (critiques: Critique[]) => {
+      setActiveCritiques(critiques);
+      // Auto-clear visual feedback after 1.5 seconds to bounce back to cohesive state if the musician fixed their performance
+      setTimeout(() => setActiveCritiques([]), 1500);
+    };
   }, [engine]);
 
   useEffect(() => {
@@ -166,6 +175,9 @@ export default function CollabPage() {
 
   return (
     <div style={styles.container}>
+      {import.meta.env.VITE_APP_ENV === 'teaching' && connected && (
+        <GeometricFracture critiques={activeCritiques} />
+      )}
       <header style={styles.header}>
         <div style={styles.headerLeft}>
           <h1 style={styles.title}>
