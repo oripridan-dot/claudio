@@ -13,7 +13,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torchaudio
+import scipy.io.wavfile as wav
 
 from dataset import get_dataloader
 from fidelity_analyzer import calculate_lsd, calculate_mcd, calculate_f0_rmse
@@ -117,11 +117,11 @@ def synthesize_eval_samples(model, synth, dataloader, device, n_samples=3):
             orig_np = audio_true[0, :min_len].cpu().numpy()
             gen_np = audio_hat[0, :min_len].detach().cpu().numpy()
 
-            # Save as WAV using torchaudio
-            orig_t = torch.tensor(orig_np).unsqueeze(0)
-            gen_t = torch.tensor(gen_np).unsqueeze(0)
-            torchaudio.save(f"{DEMO_DIR}/sample_{saved}_original.wav", orig_t, SR)
-            torchaudio.save(f"{DEMO_DIR}/sample_{saved}_generated.wav", gen_t, SR)
+            # Save as int16 WAV using scipy
+            orig_int16 = (orig_np * 32767).clip(-32768, 32767).astype("int16")
+            gen_int16 = (gen_np * 32767).clip(-32768, 32767).astype("int16")
+            wav.write(f"{DEMO_DIR}/sample_{saved}_original.wav", SR, orig_int16)
+            wav.write(f"{DEMO_DIR}/sample_{saved}_generated.wav", SR, gen_int16)
             saved += 1
     print(f"  ✓ Saved {saved} eval pairs to {DEMO_DIR}/")
     return saved
