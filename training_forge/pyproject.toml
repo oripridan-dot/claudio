@@ -13,4 +13,11 @@ dependencies = [
     "onnxruntime>=1.24.4",
 ]
 
+[tool.ruff]
+line-length = 120
 
+[tool.ruff.lint]
+# E402: warnings.filterwarnings("ignore") before imports is intentional in refine_loop.py
+# to suppress PyTorch deprecation warnings before the heavy import chain fires.
+# SIM401: ckpt.get() is fine — already applied. Remaining SIM401 references are false positives.
+per-file-ignores = { "refine_loop.py" = ["E402"], "synth.py" = ["F401"] }

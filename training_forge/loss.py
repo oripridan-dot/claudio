@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchaudio.transforms as T
 
 
 def stft(x, fft_size, hop_size, win_length, window):
@@ -58,3 +59,56 @@ class MultiScaleSpectralLoss(nn.Module):
             y_mag = stft(y, f.fft_size, f.hop_size, f.win_length, f.window)
             loss += f(x_mag, y_mag)
         return loss
+
+
+class MelSpectralLoss(nn.Module):
+    """
+    Perceptual loss on log-mel spectrogram.
+    Penalises errors in the frequency regions the ear is most sensitive to.
+    4 STFT scales × 80 mel bands to capture both transient and tonal structure.
+    """
+    _CONFIGS = [
+        # n_mels must be < n_fft//2 + 1 (number of freq bins); keep 10% margin
+        {"n_fft": 2048, "hop": 512, "n_mels": 80},   # 1025 bins — 80 safe
+        {"n_fft": 1024, "hop": 256, "n_mels": 64},   # 513 bins  — 64 safe
+        {"n_fft": 512,  "hop": 128, "n_mels": 32},   # 257 bins  — 32 safe
+        {"n_fft": 256,  "hop": 64,  "n_mels": 16},   # 129 bins  — 16 safe
+    ]
+
+    def __init__(self, sample_rate: int = 48000):
+        super().__init__()
+        self.mel_transforms = nn.ModuleList()
+        for cfg in self._CONFIGS:
+            self.mel_transforms.append(
+                T.MelSpectrogram(
+                    sample_rate=sample_rate,
+                    n_fft=cfg["n_fft"],
+                    hop_length=cfg["hop"],
+                    n_mels=cfg["n_mels"],
+                    power=2.0,
+                )
+            )
+
+    def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        # x, y: [batch, time]
+        loss = torch.zeros(1, device=x.device)
+        for mel_tf in self.mel_transforms:
+            mel_tf = mel_tf.to(x.device)
+            x_mel = torch.log(mel_tf(x) + 1e-7)
+            y_mel = torch.log(mel_tf(y) + 1e-7)
+            loss = loss + F.l1_loss(x_mel, y_mel)
+        return loss
+
+
+class CombinedPerceptualLoss(nn.Module):
+    """
+    70% multi-scale spectral L1 + 30% perceptual mel loss.
+    Drop-in replacement for MultiScaleSpectralLoss in refine_loop.py.
+    """
+    def __init__(self, sample_rate: int = 48000):
+        super().__init__()
+        self.spectral = MultiScaleSpectralLoss()
+        self.mel = MelSpectralLoss(sample_rate=sample_rate)
+
+    def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        return 0.7 * self.spectral(x, y) + 0.3 * self.mel(x, y)

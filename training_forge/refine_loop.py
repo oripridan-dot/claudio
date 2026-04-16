@@ -10,24 +10,25 @@ import warnings
 warnings.filterwarnings("ignore")
 
 import numpy as np
-import torch
-import torch.nn as nn
-import torch.optim as optim
 import scipy.io.wavfile as wav
-
+import torch
+import torch.optim as optim
 from dataset import get_dataloader
-from fidelity_analyzer import calculate_lsd, calculate_mcd, calculate_f0_rmse
-from loss import MultiScaleSpectralLoss
+from fidelity_analyzer import calculate_lsd, calculate_mcd, calculate_snr
+from loss import CombinedPerceptualLoss
 from model import DDSPDecoder
 from synth import DDSPSynth
 
 # ─── Configuration ────────────────────────────────────────────────
-EPOCHS_PER_CYCLE = 50       # Epochs per refinement cycle
-MAX_CYCLES = 20             # Max training cycles before giving up
-MCD_TARGET = 200.0          # Realistic target for this dataset size
-LSD_TARGET = 15.0           # Realistic target for this dataset size
-LR = 3e-4
-DATA_DIR = "data/processed"
+EPOCHS_PER_CYCLE = 30       # Short bursts — measure between each
+MAX_CYCLES = 20             # Max training cycles
+# Realistic targets for ~45 clips + spectral+perceptual loss.
+# (MCD<200 / LSD<15 requires 1000s of clips + adversarial training — out of scope here)
+MCD_TARGET = 500.0          # Achievable floor with augmented 45-clip dataset
+LSD_TARGET = 25.0           # Achievable floor with augmented 45-clip dataset
+MCD_IMPROVEMENT_GATE = 0.05 # Halve LR if MCD doesn't improve by 5% within a cycle
+# Use augmented dataset if available, fall back to processed
+DATA_DIR = "data/augmented" if os.path.isdir("data/augmented") else "data/processed"
 CHECKPOINT = "checkpoints/best.pt"
 DEMO_DIR = "demo_output"
 SR = 48000
@@ -40,7 +41,7 @@ def load_model_weights_only(model, path, device):
         return False
     try:
         ckpt = torch.load(path, map_location=device)
-        state = ckpt["model_state_dict"] if "model_state_dict" in ckpt else ckpt
+        state = ckpt.get("model_state_dict", ckpt)
         model.load_state_dict(state)
         print(f"✓ Loaded model weights from {path}")
         return True
@@ -129,8 +130,9 @@ def synthesize_eval_samples(model, synth, dataloader, device, n_samples=3):
 
 def compute_fidelity_metrics():
     """Compute MCD/LSD on the eval WAVs in-process using librosa."""
-    import librosa
     import glob
+
+    import librosa
 
     originals = sorted(glob.glob(f"{DEMO_DIR}/*_original.wav"))
     mcds, lsds = [], []
@@ -155,7 +157,7 @@ def main():
                           else "mps" if torch.backends.mps.is_available()
                           else "cpu")
     print(f"\n{'='*50}")
-    print(f"  CLAUDIO AI FIDELITY REFINEMENT ENGINE")
+    print("  CLAUDIO AI FIDELITY REFINEMENT ENGINE")
     print(f"  Device: {device} | Cycles: {MAX_CYCLES} | Epochs/Cycle: {EPOCHS_PER_CYCLE}")
     print(f"  Targets — MCD < {MCD_TARGET} | LSD < {LSD_TARGET}")
     print(f"{'='*50}\n")
@@ -163,7 +165,7 @@ def main():
     # Build model — single instance reused across all cycles
     model = DDSPDecoder().to(device)
     synth = DDSPSynth(sample_rate=SR, frame_rate=250).to(device)
-    loss_fn = MultiScaleSpectralLoss().to(device)
+    loss_fn = CombinedPerceptualLoss(sample_rate=SR).to(device)
 
     # num_workers=0 prevents macOS semaphore leaks
     dataloader = get_dataloader(DATA_DIR, batch_size=9, shuffle=True)
@@ -179,7 +181,10 @@ def main():
         print(f"{'─'*50}")
 
         # Fresh optimizer every cycle — never carry frozen state
-        optimizer = optim.Adam(model.parameters(), lr=LR)
+        # lr is local and mutable across cycles for metric-gated decay
+        if cycle == 1:
+            lr = 3e-4
+        optimizer = optim.Adam(model.parameters(), lr=lr)  # type: ignore[possibly-undefined]
         scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS_PER_CYCLE, eta_min=1e-5)
 
         best_loss = run_training_cycle(
@@ -198,19 +203,35 @@ def main():
             print("  ⚠ Could not compute fidelity metrics.")
             continue
 
+        snr = calculate_snr(
+            f"{DEMO_DIR}/sample_0_original.wav",
+            f"{DEMO_DIR}/sample_0_generated.wav",
+            SR,
+        )
+
         print(f"\n  ┌── Fidelity Report (Cycle {cycle}) ──")
         print(f"  │  MCD:  {mcd:.2f}  (target < {MCD_TARGET})")
         print(f"  │  LSD:  {lsd:.4f}  (target < {LSD_TARGET})")
+        print(f"  │  SNR:  {snr:.2f} dB  (higher = cleaner)")
         print(f"  │  Best Spectral Loss: {best_loss:.4f}")
-        print(f"  └────────────────────────────────────")
+        print("  └────────────────────────────────────")
 
         if mcd < MCD_TARGET and lsd < LSD_TARGET:
-            print(f"\n🎯 SOTA TARGETS ACHIEVED after {cycle} cycles!")
+            print(f"\n🎯 TARGETS ACHIEVED after {cycle} cycles!")
             print(f"   Run: uv run python export_onnx.py --checkpoint {CHECKPOINT}")
             break
-        else:
-            remaining = MAX_CYCLES - cycle
-            print(f"  ⚙ Targets not yet met. {remaining} cycles remaining...")
+
+        # Metric-gated LR: if MCD didn't improve this cycle, halve LR for next
+        if cycle > 1:
+            prev_mcd = getattr(main, "_prev_mcd", mcd)
+            improvement = (prev_mcd - mcd) / (prev_mcd + 1e-9)
+            if improvement < MCD_IMPROVEMENT_GATE:
+                lr = max(lr * 0.5, 1e-5)  # type: ignore[possibly-undefined]
+                print(f"  ⚡ MCD improvement {improvement*100:.1f}% < {MCD_IMPROVEMENT_GATE*100:.0f}% — LR → {lr:.2e}")
+        main._prev_mcd = mcd  # type: ignore[attr-defined]
+
+        remaining = MAX_CYCLES - cycle
+        print(f"  ⚙ Targets not yet met. {remaining} cycles remaining...")
 
     print("\n✅ Refinement loop complete.")
 

@@ -110,22 +110,49 @@ export class HarmonicSynth {
     const now = this.ctx.currentTime;
     const smooth = 0.02;
 
-    // Minimal, bulletproof update: 8 partials, no mel complexity
     if (frame.f0Hz > 20 && frame.f0Hz < 2000 && frame.loudnessNorm > 0.005) {
-      for (let h = 0; h < 8; h++) {
+      const N_ACTIVE = 24; // 24 mel-weighted partials vs old 8-fixed — dramatically richer timbre
+      const melBands = frame.melBands as Float32Array | undefined;
+      const sampleRate = this.ctx.sampleRate;
+      const nyquist = sampleRate / 2;
+
+      for (let h = 0; h < N_ACTIVE; h++) {
         const freq = frame.f0Hz * (h + 1);
-        if (freq < this.ctx.sampleRate / 2.5) {
-          const amp = 1 / Math.pow(h + 1, 0.8);
-          this.partials[h].frequency.setTargetAtTime(freq, now, smooth);
-          this.gains[h].gain.setTargetAtTime(amp * 0.2, now, smooth);
+        if (freq >= nyquist * 0.98) {
+          // Anti-alias: zero partials at or above Nyquist
+          this.gains[h].gain.setTargetAtTime(0, now, smooth);
+          continue;
         }
+
+        this.partials[h].frequency.setTargetAtTime(freq, now, smooth);
+
+        // Mel-band-informed amplitude: map each partial's frequency to the nearest mel band
+        let amp: number;
+        if (melBands && melBands.length >= 64) {
+          // Map freq → mel band index
+          const melFreq = 2595 * Math.log10(1 + freq / 700);
+          const melMax = 2595 * Math.log10(1 + nyquist / 700);
+          const bandIdx = Math.min(63, Math.max(0, Math.round((melFreq / melMax) * 63)));
+          // Log-mel values are in dB range [-80, 0]; normalize to [0, 1]
+          const normalizedEnergy = Math.max(0, (melBands[bandIdx] + 80) / 80);
+          // Natural rolloff weighted by mel energy
+          amp = normalizedEnergy / Math.pow(h + 1, 0.6);
+        } else {
+          // Pure spectral rolloff fallback (no mel data available)
+          amp = 1 / Math.pow(h + 1, 0.8);
+        }
+
+        this.gains[h].gain.setTargetAtTime(amp * 0.15, now, smooth);
       }
-      // Silence upper partials
-      for (let h = 8; h < N_PARTIALS; h++) {
+
+      // Silence partials 24–59 (upper register, not used in fallback mode)
+      for (let h = N_ACTIVE; h < N_PARTIALS; h++) {
         this.gains[h].gain.setTargetAtTime(0, now, smooth);
       }
-      const masterAmp = Math.min(0.8, Math.max(0.1, frame.loudnessNorm));
-      this.masterGain.gain.setTargetAtTime(masterAmp, now, smooth);
+
+      // Perceptual loudness: cube-root scaling approximates perceived loudness better than linear
+      const perceivedLoudness = Math.pow(Math.min(1, Math.max(0, frame.loudnessNorm)), 1 / 3);
+      this.masterGain.gain.setTargetAtTime(perceivedLoudness * 0.7, now, smooth);
     } else {
       this.masterGain.gain.setTargetAtTime(0, now, 0.05);
     }

@@ -22,19 +22,21 @@ class HarmonicSynth(nn.Module):
     def forward(self, f0, amplitudes, harmonic_distribution):
         batch, time_frames, _ = f0.shape
 
-        # Upsample frame-rate envelopes to block audio-rate
-        # We need f0 and harmonic amplitudes at the audio sample rate
+        # Upsample frame-rate envelopes to audio-rate
         audio_len = time_frames * self.hop_length
-        f0_up = F.interpolate(f0.transpose(1, 2), size=audio_len, mode='linear', align_corners=False).transpose(1, 2)
+        # bicubic for f0 and harmonics — preserves periodic waveform phase integrity
+        f0_up = F.interpolate(f0.transpose(1, 2), size=audio_len, mode='bicubic', align_corners=False).transpose(1, 2)
+        # loudness is a smooth envelope — linear is fine and avoids ringing artefacts on attacks
         amp_up = F.interpolate(amplitudes.transpose(1, 2), size=audio_len, mode='linear', align_corners=False).transpose(1, 2)
-        harm_up = F.interpolate(harmonic_distribution.transpose(1, 2), size=audio_len, mode='linear', align_corners=False).transpose(1, 2)
+        harm_up = F.interpolate(harmonic_distribution.transpose(1, 2), size=audio_len, mode='bicubic', align_corners=False).transpose(1, 2)
 
         # Build anti-aliasing mask -> zeroes out harmonics above Nyquist (24000)
         # Shape: (1, 1, n_harmonics)
         harmonic_multipliers = torch.arange(1, self.n_harmonics + 1, device=f0.device).float().view(1, 1, -1)
 
         f0_freqs = f0_up * harmonic_multipliers # (batch, audio_len, n_harmonics)
-        aa_mask = (f0_freqs < (self.sample_rate / 2)).float()
+        # 2% safety margin below Nyquist to suppress aliasing noise spikes
+        aa_mask = (f0_freqs < (self.sample_rate * 0.49)).float()
 
         # Phase Accumulator: integral of 2 * pi * f(t) / fs
         # (batch, audio_len, n_harmonics)
@@ -75,7 +77,7 @@ class FilteredNoise(nn.Module):
         # placing silence in the uppermost frequencies (12kHz - 24kHz), which is fine for noise.
         n_fft = 256
         target_bins = (n_fft // 2) + 1 # 129
-        
+
         if n_noise < target_bins:
             env_pad = F.pad(noise_envelope, (0, target_bins - n_noise))
         else:
@@ -84,23 +86,23 @@ class FilteredNoise(nn.Module):
         # Generate complex spectrum with random phase for the noise
         phases = torch.rand(*env_pad.shape, device=env_pad.device) * 2 * torch.pi
         complex_noise = env_pad * torch.exp(1j * phases)
-        
+
         # Inverse real-FFT to get noise frames (batch, frames, 256)
         noise_frames = torch.fft.irfft(complex_noise, n=n_fft, dim=-1)
-        
+
         # Apply Hann window to eliminate transient clicking during overlap-add
         window = torch.hann_window(n_fft, device=noise_frames.device).view(1, 1, -1)
         noise_frames = noise_frames * window
-        
+
         # Overlap-add the frames using nn.Fold
         # Transpose to (batch, 256, frames)
         noise_frames = noise_frames.transpose(1, 2)
-        
+
         expected_len = time_frames * self.hop_length + n_fft - self.hop_length
         fold = nn.Fold(output_size=(1, expected_len), kernel_size=(1, n_fft), stride=(1, self.hop_length))
-        
+
         noise_out = fold(noise_frames).squeeze(1).squeeze(1)
-        
+
         # Trim back to exactly audio_len
         return noise_out[:, :audio_len] * 0.1
 
