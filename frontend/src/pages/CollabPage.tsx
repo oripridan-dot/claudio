@@ -148,14 +148,14 @@ export default function CollabPage() {
 
       setCalibrationEngine(calib);
     }
-  }, [engine, resynthActive, calibrationEngine]);
+  }, [engine, calibrationEngine]);
 
   const handleStopCapture = useCallback(() => {
     engine.stopCapture();
     setCapturing(false);
     calibrationEngine?.destroy();
     setCalibrationEngine(null);
-  }, [engine, resynthActive, calibrationEngine]);
+  }, [engine, calibrationEngine]);
 
   const handleDisconnect = useCallback(() => {
     engine.disconnect();
@@ -175,9 +175,6 @@ export default function CollabPage() {
 
   return (
     <div style={styles.container}>
-      {import.meta.env.VITE_APP_ENV === 'teaching' && connected && (
-        <GeometricFracture critiques={activeCritiques} />
-      )}
       <header style={styles.header}>
         <div style={styles.headerLeft}>
           <h1 style={styles.title}>
@@ -279,6 +276,20 @@ export default function CollabPage() {
                 ? <button id="btn-start-capture" style={styles.captureBtn} onClick={handleStartCapture}>Start Capture</button>
                 : <button id="btn-stop-capture" style={styles.stopBtn} onClick={handleStopCapture}>Stop Capture</button>
               }
+              {import.meta.env.VITE_APP_ENV === 'teaching' && (
+                <button 
+                  style={{ ...styles.captureBtn, marginTop: '10px', backgroundColor: '#8844ff', boxShadow: '0 0 10px #8844ff' }} 
+                  onClick={() => {
+                    setActiveCritiques([
+                      { passed: false, metric: 'onsetStrength', message: 'TRANSIENT MISMATCH', delta: 0.8, severity: 'high' },
+                      { passed: false, metric: 'pitchDrift', message: 'PITCH DRIFT (FLAT)', delta: 1.2, severity: 'high' }
+                    ]);
+                    setTimeout(() => setActiveCritiques([]), 2500);
+                  }}
+                >
+                  Simulate Shatter
+                </button>
+              )}
             </div>
 
 
@@ -287,9 +298,14 @@ export default function CollabPage() {
 
           <main style={styles.mainArea}>
             {calibrationEngine && <RTCalibrationPanel engine={calibrationEngine} />}
-            <div style={styles.arenaBox}>
+            <div style={{...styles.arenaBox, marginBottom: '20px'}}>
               <canvas ref={arenaRef} width={800} height={280} style={styles.canvas} />
             </div>
+            {import.meta.env.VITE_APP_ENV === 'teaching' && (
+              <div style={{ width: '100%', height: '300px', marginBottom: '20px' }}>
+                <GeometricFracture critiques={activeCritiques} />
+              </div>
+            )}
             <div style={styles.frameRow}>
               <div style={styles.frameBox}>
                 <div style={styles.frameLabel}>LOCAL PITCH</div>

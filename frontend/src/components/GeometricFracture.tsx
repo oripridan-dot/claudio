@@ -55,12 +55,15 @@ export function GeometricFracture({ critiques }: GeometricFractureProps) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Responsive fullscreen
+    // Responsive container
     const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      if (canvas.parentElement) {
+        canvas.width = canvas.parentElement.clientWidth;
+        canvas.height = canvas.parentElement.clientHeight;
+      }
     };
-    window.addEventListener('resize', resize);
+    const ro = new ResizeObserver(resize);
+    if (canvas.parentElement) ro.observe(canvas.parentElement);
     resize();
 
     // 3D Geometry vertices (Icosahedron basic mapping)
@@ -183,23 +186,26 @@ export function GeometricFracture({ critiques }: GeometricFractureProps) {
     draw();
 
     return () => {
-      window.removeEventListener('resize', resize);
+      ro.disconnect();
       cancelAnimationFrame(animRef.current);
     };
   }, [critiques]);
 
   return (
     <div style={{
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      width: '100vw',
-      height: '100vh',
-      pointerEvents: 'none',
-      zIndex: 9999, // Overlay on top of everything
-      mixBlendMode: 'screen', // Melds elegantly with deep dark tech UI
+      position: 'relative',
+      width: '100%',
+      height: '100%',
+      backgroundColor: 'rgba(20, 25, 30, 0.4)',
+      borderRadius: '12px',
+      border: '1px solid rgba(255, 255, 255, 0.05)',
+      overflow: 'hidden',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      boxShadow: 'inset 0 0 20px rgba(0,0,0,0.5)',
     }}>
-      <canvas ref={canvasRef} style={{ width: '100%', height: '100%' }} />
+      <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
     </div>
   );
 }
