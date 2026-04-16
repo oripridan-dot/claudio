@@ -17,10 +17,13 @@ class DDSPDecoder(nn.Module):
 
     Architecture:
       Embed(f0)=[16], Embed(loud)=[16], Embed(z)=[32]  →  concat [64]
-      GRU(64 → 256, bidirectional=True)                →  [512]
+      GRU(64 → 256, bidirectional=True, layers=2)      →  [512]
       MLP(512 → 512 → 512)                             →  [512]
       Head(harmonics) = Softmax([512→60])
       Head(noise)     = Sigmoid([512→65])
+      Head(reverb)    = Sigmoid([512→1])
+      Head(f0_residual) = Tanh([512→1]) * 0.05
+      Head(voiced)    = Sigmoid([512→1])
     """
     def __init__(self, n_harmonics: int = 60, n_noise: int = 65):
         super().__init__()
@@ -35,9 +38,10 @@ class DDSPDecoder(nn.Module):
         self.gru = nn.GRU(
             input_size=64,
             hidden_size=256,
-            num_layers=1,
+            num_layers=2,
             batch_first=True,
             bidirectional=True,
+            dropout=0.1
         )
 
         # MLP refiner on top of GRU output
@@ -53,10 +57,13 @@ class DDSPDecoder(nn.Module):
         # DDSP output heads
         self.out_harmonics = nn.Linear(512, n_harmonics)
         self.out_noise = nn.Linear(512, n_noise)
+        self.out_reverb = nn.Linear(512, 1)
+        self.out_f0_residual = nn.Linear(512, 1)
+        self.out_voiced = nn.Linear(512, 1)
 
     def forward(
         self, f0: torch.Tensor, loudness: torch.Tensor, z: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # Inputs: (batch, time, features)
         # Normalize to stabilize gradients
         f0_norm = f0 / 2000.0                         # Hz → [0,1]
@@ -79,5 +86,8 @@ class DDSPDecoder(nn.Module):
         # Synthesizer parameter heads
         harmonics = torch.softmax(self.out_harmonics(x), dim=-1)
         noise = torch.sigmoid(self.out_noise(x))
+        reverb_mix = torch.sigmoid(self.out_reverb(x))
+        f0_residual = torch.tanh(self.out_f0_residual(x)) * 0.05
+        voiced_mask = torch.sigmoid(self.out_voiced(x))
 
-        return harmonics, noise
+        return harmonics, noise, reverb_mix, f0_residual, voiced_mask

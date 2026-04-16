@@ -40,7 +40,7 @@ from claudio.server import auth
 from claudio.server.billing import billing_manager
 from claudio.server.collab_router import handle_collab_ws
 
-app = FastAPI(title="Claudio Intelligence Server", version="1.2.0")
+app = FastAPI(title="Claudio Intelligence Server", version="3.0.0")
 
 app.add_middleware(
     CORSMiddleware,

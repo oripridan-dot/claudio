@@ -11,17 +11,58 @@ export class HarmonicSynth {
   private noiseGains: GainNode[] = [];
   private readonly N_NOISE_BANDS = 16;
   private masterGain: GainNode;
+  private dryGain: GainNode;
+  private wetGain: GainNode;
+  private convolver: ConvolverNode;
+  private outputGain: GainNode;
+  
   private ctx: AudioContext;
   private prevF0 = 0;
   private melFb: Float32Array[] | null = null;
 
   constructor(ctx: AudioContext, destination: AudioNode) {
     this.ctx = ctx;
+    
     this.masterGain = ctx.createGain();
     this.masterGain.gain.value = 0;
-    this.masterGain.connect(destination);
+    
+    // Setup Dry/Wet Reverb Mix
+    this.dryGain = ctx.createGain();
+    this.wetGain = ctx.createGain();
+    this.convolver = ctx.createConvolver();
+    this.outputGain = ctx.createGain();
+    this.outputGain.gain.value = 1.0;
+
+    this.dryGain.gain.value = 1.0;
+    this.wetGain.gain.value = 0.0; // fully dry until DDSP drives it
+
+    this.masterGain.connect(this.dryGain);
+    this.masterGain.connect(this.convolver);
+    this.convolver.connect(this.wetGain);
+    
+    this.dryGain.connect(this.outputGain);
+    this.wetGain.connect(this.outputGain);
+    this.outputGain.connect(destination);
+
     this._initPartials();
     this._initNoise();
+  }
+
+  async loadReverb(url: string = '/models/reverb_ir.wav') {
+    try {
+      const response = await fetch(url);
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+      this.convolver.buffer = audioBuffer;
+      console.log(`[DDSP Reverb] Loaded IR from ${url}`);
+    } catch (e) {
+      console.warn(`[DDSP Reverb] Reverb IR not found at ${url}, running completely dry.`);
+    }
+  }
+
+  setMuted(muted: boolean) {
+    const now = this.ctx.currentTime;
+    this.outputGain.gain.setTargetAtTime(muted ? 0.0 : 1.0, now, 0.05); // 50ms smooth fade
   }
 
   setMelFilterbank(fb: Float32Array[]) { this.melFb = fb; }
@@ -161,18 +202,28 @@ export class HarmonicSynth {
   }
 
 
-  setTarget(f0Hz: number, rmsEnergy: number, harmonics: Float32Array | number[], noiseMagnitudes?: Float32Array | number[]) {
+  setTarget(f0Hz: number, rmsEnergy: number, harmonics: Float32Array, noiseMagnitudes?: Float32Array, reverbMix?: Float32Array, f0Residual?: Float32Array, voicedMask?: Float32Array) {
     const now = this.ctx.currentTime;
-    const smooth = 0.015; // 15ms smoothing
+    
+    // Apply pitch error correction (native f0 bend residual predicted by DDSP)
+    if (f0Residual && f0Residual.length > 0) {
+      f0Hz = f0Hz * (1.0 + f0Residual[0]);
+    }
+
+    const smooth = Math.abs(f0Hz - this.prevF0) > 50 ? 0.005 : 0.05;
 
     if (f0Hz > 0 && rmsEnergy > 0.01) {
+      const vGate = (voicedMask && voicedMask.length > 0) ? voicedMask[0] : 1.0;
+
       for (let h = 0; h < N_PARTIALS; h++) {
         const hFreq = f0Hz * (h + 1);
         // Anti-aliasing check (Nyquist limit)
         if (hFreq < this.ctx.sampleRate / 2) {
           this.partials[h].frequency.setTargetAtTime(hFreq, now, smooth);
           const amp = h < harmonics.length ? harmonics[h] : 0;
-          this.gains[h].gain.setTargetAtTime(amp * 0.15, now, smooth);
+          
+          // Apply explicit Voiced/Unvoiced gate to mute partials during consonants
+          this.gains[h].gain.setTargetAtTime(amp * 0.15 * vGate, now, smooth);
         } else {
           this.gains[h].gain.setTargetAtTime(0, now, smooth);
         }
@@ -201,8 +252,21 @@ export class HarmonicSynth {
              this.noiseGains[i].gain.setTargetAtTime(baseLevel * roll, now, smooth);
         }
       }
+
+      // Reverb Mixing
+      if (reverbMix && reverbMix.length > 0 && this.convolver.buffer) {
+        // Average the mix over the frame
+        const mix = reverbMix[0]; 
+        this.dryGain.gain.setTargetAtTime(Math.max(0, 1.0 - mix), now, smooth);
+        this.wetGain.gain.setTargetAtTime(Math.max(0, mix), now, smooth);
+      } else {
+        this.dryGain.gain.setTargetAtTime(1.0, now, smooth);
+        this.wetGain.gain.setTargetAtTime(0.0, now, smooth);
+      }
     } else {
       this.masterGain.gain.setTargetAtTime(0, now, 0.05);
+      this.dryGain.gain.setTargetAtTime(1.0, now, 0.05);
+      this.wetGain.gain.setTargetAtTime(0.0, now, 0.05);
     }
 
     this.prevF0 = f0Hz;
@@ -212,5 +276,9 @@ export class HarmonicSynth {
     this.partials.forEach(o => { try { o.stop(); } catch (_) {} });
     this.noiseSource?.stop();
     this.masterGain.disconnect();
+    this.dryGain.disconnect();
+    this.wetGain.disconnect();
+    this.convolver.disconnect();
+    this.outputGain.disconnect();
   }
 }

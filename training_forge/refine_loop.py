@@ -33,25 +33,30 @@ DEMO_DIR = "demo_output"
 SR = 48000
 # ──────────────────────────────────────────────────────────────────
 
-def load_model_weights_only(model, path, device):
+def load_model_weights_only(model, synth, path, device):
     """Load only model weights — never restore optimizer/scheduler state."""
     if not os.path.exists(path):
         print("No checkpoint found — training from scratch.")
         return False
     try:
         ckpt = torch.load(path, map_location=device)
-        state = ckpt.get("model_state_dict", ckpt)
-        model.load_state_dict(state)
-        print(f"✓ Loaded model weights from {path}")
+        model.load_state_dict(ckpt.get("model_state_dict", ckpt))
+        if "synth_state_dict" in ckpt:
+            synth.load_state_dict(ckpt["synth_state_dict"])
+        print(f"✓ Loaded weights from {path}")
         return True
     except Exception as e:
         print(f"⚠ Could not load checkpoint ({e}) — training from scratch.")
         return False
 
 
-def save_checkpoint(model, best_loss, path):
+def save_checkpoint(model, synth, best_loss, path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    torch.save({"model_state_dict": model.state_dict(), "best_loss": best_loss}, path)
+    torch.save({
+        "model_state_dict": model.state_dict(), 
+        "synth_state_dict": synth.state_dict(),
+        "best_loss": best_loss
+    }, path)
 
 
 def run_training_cycle(model, synth, loss_fn, optimizer, scheduler, dataloader, device, epochs, cycle_num):
@@ -68,8 +73,8 @@ def run_training_cycle(model, synth, loss_fn, optimizer, scheduler, dataloader, 
             audio_true = batch["audio"].to(device)
 
             optimizer.zero_grad()
-            harmonics, noise = model(f0, loudness, z)
-            audio_hat = synth(f0, loudness, harmonics, noise)
+            harmonics, noise, reverb_mix, f0_residual, voiced_mask = model(f0, loudness, z)
+            audio_hat = synth(f0, loudness, harmonics, noise, reverb_mix, f0_residual, voiced_mask)
 
             min_len = min(audio_hat.shape[-1], audio_true.shape[-1])
             audio_hat = audio_hat[:, :min_len]
@@ -90,7 +95,7 @@ def run_training_cycle(model, synth, loss_fn, optimizer, scheduler, dataloader, 
 
         if avg_loss < best_loss:
             best_loss = avg_loss
-            save_checkpoint(model, best_loss, CHECKPOINT)
+            save_checkpoint(model, synth, best_loss, CHECKPOINT)
 
     print(f"  ✅ Cycle {cycle_num} complete — Best loss: {best_loss:.4f}")
     return best_loss
@@ -110,8 +115,8 @@ def synthesize_eval_samples(model, synth, dataloader, device, n_samples=3):
             z = batch["z"][:1].to(device)
             audio_true = batch["audio"][:1]
 
-            harmonics, noise = model(f0, loudness, z)
-            audio_hat = synth(f0, loudness, harmonics, noise)
+            harmonics, noise, reverb_mix, f0_residual, voiced_mask = model(f0, loudness, z)
+            audio_hat = synth(f0, loudness, harmonics, noise, reverb_mix, f0_residual, voiced_mask)
 
             min_len = min(audio_hat.shape[-1], audio_true.shape[-1])
             orig_np = audio_true[0, :min_len].cpu().numpy()
@@ -172,7 +177,7 @@ def main():
     print(f"Dataset: {len(dataloader.dataset)} clips")
 
     # Load existing weights (not optimizer state)
-    load_model_weights_only(model, CHECKPOINT, device)
+    load_model_weights_only(model, synth, CHECKPOINT, device)
 
     for cycle in range(1, MAX_CYCLES + 1):
         print(f"\n{'─'*50}")
@@ -181,7 +186,11 @@ def main():
 
         # Fresh optimizer + scheduler every cycle — resets LR to 3e-4 each time
         # This prevents LR from dying at min_lr across multi-cycle runs
-        optimizer = optim.Adam(model.parameters(), lr=3e-4)
+        # Optimize BOTH model weights and the learnable Reverb IR inside synth
+        optimizer = optim.Adam(
+            list(model.parameters()) + list(synth.reverb.parameters()), 
+            lr=3e-4
+        )
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode='min', factor=0.5, patience=12, min_lr=1e-5
         )
@@ -192,7 +201,7 @@ def main():
         )
 
         # Reload best weights from this cycle before evaluating
-        load_model_weights_only(model, CHECKPOINT, device)
+        load_model_weights_only(model, synth, CHECKPOINT, device)
 
         # Evaluate
         synthesize_eval_samples(model, synth, dataloader_eval, device)

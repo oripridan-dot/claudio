@@ -67,12 +67,12 @@ def main():
             z = batch['z'].to(device)
             audio_true = batch['audio'].to(device)
 
-            # Forward pass Model -> (Harmonics, Noise params)
+            # Forward pass Model -> (Harmonics, Noise params, Reverb Mix, F0 Residual, Voiced Mask)
             optimizer.zero_grad()
-            harmonics, noise = model(f0, loudness, z)
+            harmonics, noise, reverb_mix, f0_residual, voiced_mask = model(f0, loudness, z)
 
             # Differentiable Synthesis -> Audio waveform
-            audio_hat = synth(f0, loudness, harmonics, noise)
+            audio_hat = synth(f0, loudness, harmonics, noise, reverb_mix, f0_residual, voiced_mask)
 
             # Pad or truncate to match exactly due to upsampling rounding
             min_len = min(audio_hat.shape[-1], audio_true.shape[-1])

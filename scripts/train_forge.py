@@ -24,8 +24,8 @@ from torch.utils.data import DataLoader, TensorDataset
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from claudio.forge.loss.spectral_loss import MultiScaleSpectralLoss  # noqa: E402
-from claudio.forge.model.autoencoder import AudioAutoEncoder  # noqa: E402
+from claudio.forge.loss.spectral_loss import MultiScaleSpectralLoss
+from claudio.forge.model.autoencoder import AudioAutoEncoder
 
 
 def get_device() -> torch.device:

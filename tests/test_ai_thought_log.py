@@ -29,7 +29,7 @@ def test_thought_context_success():
     """Context manager should log thought + outcome on success."""
     logger = ThoughtLogger(log_path=os.devnull)
     with thought_context(logger, "classifier", "Peak energy > threshold"):
-        x = 1 + 1  # noqa: F841
+        x = 1 + 1
 
     assert logger.pending_count == 0
     recent = logger.get_recent(1)
