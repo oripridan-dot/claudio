@@ -36,8 +36,6 @@ import {
 
 import { initIntentWebSocket, initIntentWebRTC } from './IntentWebRTC';
 import { encodePacket, decodePacket } from './protocol';
-import { DDSPDecoder } from './DDSPDecoder';
-import { RTCalibrationEngine } from './RTCalibrationEngine';
 
 import { scheduleAudioBlock, updateAudioRouting } from './IntentAudioOutput';
 import { requestMetrics } from './IntentTelemetry';
@@ -47,7 +45,6 @@ const FRAME_RATE = 120;
 // ─── Intent Engine ──────────────────────────────────────────────────────────
 
 export class IntentEngine {
-  private rcEngine: RTCalibrationEngine | null = null;
   private latestLocalMelBands: any = new Float32Array(64);
   latestRemoteMelBands: any = new Float32Array(64);
   private deltaSeqCounter = 10000;
@@ -81,11 +78,9 @@ export class IntentEngine {
   peers: PeerInfo[] = [];
   connected = false;
 
-  // Remote regeneration — DDSP Neural Synth Cluster
-  private remoteSynths: Map<string, DDSPDecoder> = new Map();
+  // Remote intent caches for visualizer telemetry
   remoteMelBandsCaches: Map<string, Float32Array> = new Map();
   private melFilterbank: Float32Array[] | null = null;
-  ddspMode = false;
   nextAudioTime = 0;
 
   // Onset detection state
@@ -162,32 +157,8 @@ export class IntentEngine {
     // Ensure WASM core is ready for sub-millisecond intent extraction
     await initWasmDSP();
 
-    // In the new Clustered Architecture, we don't boot a global remoteSynth here.
-    // They are autonomously provisioned when a peer's Intent packet arrives 
-    // inside `regenerateFromIntent`.
-
-    // Real-Time Auto-Calibration Loop (Ghost Observer)
-    this.rcEngine = new RTCalibrationEngine(this.audioCtx);
-    this.rcEngine.connectInputSource(source);
-    
-    this.rcEngine.onAutoCalibrate = (metrics) => {
-        // Apply calibration universally to all dynamically provisioned Talker decoders
-        this.remoteSynths.forEach(synth => {
-            // Scenario A: The Bleeding Gate (Unvoiced DC Rumble Tracking)
-            if (metrics.inputMagnitudeDb < -55 && metrics.outputMagnitudeDb > -35) {
-                synth.setGateOverride(0.01);
-            } else {
-                synth.setGateOverride(1.0);
-            }
-
-            // Scenario B: The Muffled Synth (Brightness Shift)
-            if (metrics.inputCentroidHz > 3000 && metrics.outputCentroidHz < 1500) {
-                synth.setNoiseMultiplier(1.5);
-            } else {
-                synth.setNoiseMultiplier(1.0);
-            }
-        });
-    };
+    // In the new Clustered Architecture, we don't boot global remoteSynths.
+    // Telemetry and intents are extracted strictly to feed the UI Validation Worker.
 
     // [Learning Kit] Instantiate Shadow Worker if in teaching environment
     if (import.meta.env.VITE_APP_ENV === 'teaching') {
@@ -211,8 +182,6 @@ export class IntentEngine {
 
     this.captureInterval = window.setInterval(() => {
       if (!this.analyser || !this.audioCtx) return;
-
-      this.rcEngine?.updateMetrics();
 
       const timeDomain = new Float32Array(this.analyser.fftSize);
       this.analyser.getFloatTimeDomainData(timeDomain as Float32Array<ArrayBuffer>);
@@ -286,14 +255,11 @@ export class IntentEngine {
     }, Math.floor(1000 / FRAME_RATE));
   }
 
-  stopCapture(): void {
     this.isCapturing = false;
     if (this.captureInterval !== null) {
       clearInterval(this.captureInterval);
       this.captureInterval = null;
     }
-    this.remoteSynths.forEach(s => s.destroy());
-    this.remoteSynths.clear();
     if (this.shadowWorker) {
       this.shadowWorker.terminate();
       this.shadowWorker = null;
@@ -395,11 +361,6 @@ export class IntentEngine {
     }
   }
 
-  setDDSPMode(enabled: boolean): void {
-    this.ddspMode = enabled;
-    this._updateAudioRouting();
-  }
-
   _updateAudioRouting(): void {
     updateAudioRouting(this);
   }
@@ -415,35 +376,13 @@ export class IntentEngine {
   private async regenerateFromIntent(frame: IntentFrame): Promise<void> {
     if (!frame.peerId || !this.audioCtx) return;
 
-    let synth = this.remoteSynths.get(frame.peerId);
-    if (!synth) {
-        // Auto-provision a new DDSP Decoder cluster node for this Talker Profile!
-        console.log(`[Architecture] Auto-provisioning new DDSP Decoder for Talker: ${frame.peerId}`);
-        synth = new DDSPDecoder(this.audioCtx);
-        
-        // Match their specific rig configurations from the Peer Profile Matrix
-        const peerProfile = this.peers.find(p => p.peer_id === frame.peerId);
-        
-        // Wait for neural weights loading (we can support multiple models here like acoustic.onnx)
-        await synth.loadModel((peerProfile as any)?.model_url || `/models/ddsp_model.onnx`);
-        
-        const ir = (peerProfile as any)?.environment || 'Studio_A'; 
-        await synth.setEnvironment(ir);
-        
-        if (this.rcEngine) {
-            this.rcEngine.connectOutputTap(synth.getOutputNode());
-        }
-
-        this.remoteSynths.set(frame.peerId, synth);
-    }
-
     if (frame.type === 'pivot' && frame.rmsEnergy !== undefined) {
         const peerProfile = this.peers.find(p => p.peer_id === frame.peerId);
         if (peerProfile) {
             peerProfile.rmsEnergy = frame.rmsEnergy;
         }
     }
-
-    synth.processFrame(frame);
+    // Remote rendering of neural synthesis is DEPRECATED.
+    // Audio is strictly Opus WebRTC based.
   }
 }

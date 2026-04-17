@@ -14,8 +14,6 @@ export default function CollabPage() {
   const [roomId, setRoomId] = useState('');
   const [inputRoom, setInputRoom] = useState('');
   const [userName, setUserName] = useState('Musician');
-  const [instrument, setInstrument] = useState('/models/ddsp_model.onnx');
-  const [environment, setEnvironment] = useState('Studio_A');
   const [peers, setPeers] = useState<PeerInfo[]>([]);
 
   const [localFrame, setLocalFrame] = useState<IntentFrame | null>(null);
@@ -42,7 +40,7 @@ export default function CollabPage() {
       });
       const data = await res.json();
       setRoomId(data.room_id);
-      await engine.connectToRoom(SERVER_URL, data.room_id, userName, instrument, environment);
+      await engine.connectToRoom(SERVER_URL, data.room_id, userName);
       await handleStartCaptureAsync();
     } catch (e) {
       console.error('Failed to create room:', e);
@@ -53,7 +51,7 @@ export default function CollabPage() {
     if (!inputRoom) return;
     try {
       setRoomId(inputRoom);
-      await engine.connectToRoom(SERVER_URL, inputRoom, userName, instrument, environment);
+      await engine.connectToRoom(SERVER_URL, inputRoom, userName);
       await handleStartCaptureAsync();
     } catch (e) {
       console.error('Failed to join room:', e);
@@ -87,8 +85,6 @@ export default function CollabPage() {
         <JoinCard 
           userName={userName} setUserName={setUserName}
           inputRoom={inputRoom} setInputRoom={setInputRoom}
-          instrument={instrument} setInstrument={setInstrument}
-          environment={environment} setEnvironment={setEnvironment}
           onJoin={handleJoinRoom} onCreate={handleCreateRoom}
         />
       ) : (
