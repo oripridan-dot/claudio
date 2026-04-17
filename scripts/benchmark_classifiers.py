@@ -18,6 +18,7 @@ Usage:
   # Select specific backends
   python scripts/benchmark_classifiers.py --backends panns clap beats --synthetic
 """
+
 from __future__ import annotations
 
 import argparse
@@ -45,7 +46,7 @@ def generate_synthetic_instruments(sr: int = 48_000, duration: float = 2.0) -> d
     f0 = 330.0  # E4
     signal = np.zeros(n)
     for h in range(1, 8):
-        amp = 1.0 / (h ** 0.8)
+        amp = 1.0 / (h**0.8)
         signal += amp * np.sin(2 * np.pi * f0 * h * t)
     # Add pick transient
     transient = np.exp(-t / 0.005) * np.sin(2 * np.pi * 3000 * t) * 0.3
@@ -57,7 +58,7 @@ def generate_synthetic_instruments(sr: int = 48_000, duration: float = 2.0) -> d
     f0 = 220.0  # A3
     signal = np.zeros(n)
     for h in range(1, 12):
-        amp = 1.0 / (h ** 0.6)
+        amp = 1.0 / (h**0.6)
         signal += amp * np.sin(2 * np.pi * f0 * h * t)
     # Body resonance around 200Hz
     body = np.sin(2 * np.pi * 200 * t) * 0.5 * np.exp(-t / 0.8)
@@ -83,19 +84,19 @@ def generate_synthetic_instruments(sr: int = 48_000, duration: float = 2.0) -> d
     for h in range(1, 10):
         # Piano has slight inharmonicity
         partial_freq = f0 * h * (1 + 0.0005 * h**2)
-        amp = 1.0 / (h ** 0.5)
+        amp = 1.0 / (h**0.5)
         signal += amp * np.sin(2 * np.pi * partial_freq * t)
     signal *= np.exp(-t / 3.0)
     # Hammer attack
     hammer = np.exp(-t / 0.001) * 0.3
-    signal *= (1 + hammer)
+    signal *= 1 + hammer
     samples["Piano (A4, 440Hz)"] = (signal / np.max(np.abs(signal)) * 0.8).astype(np.float32)
 
     # Bass guitar — low fundamental, moderate harmonics
     f0 = 82.0  # E2
     signal = np.zeros(n)
     for h in range(1, 6):
-        amp = 1.0 / (h ** 1.2)
+        amp = 1.0 / (h**1.2)
         signal += amp * np.sin(2 * np.pi * f0 * h * t)
     signal *= np.exp(-t / 2.5)
     samples["Bass Guitar (E2, 82Hz)"] = (signal / np.max(np.abs(signal)) * 0.8).astype(np.float32)
@@ -142,16 +143,19 @@ def load_backends(backend_names: list[str], device: str) -> list[AudioClassifier
         try:
             if name == "panns":
                 from claudio.intelligence.backend_panns import PANNsBackend
+
                 backend = PANNsBackend(device=device)
                 backend.load_model()
                 backends.append(backend)
             elif name == "clap":
                 from claudio.intelligence.backend_clap import CLAPBackend
+
                 backend = CLAPBackend(device=device)
                 backend.load_model()
                 backends.append(backend)
             elif name == "beats":
                 from claudio.intelligence.backend_beats import BEATsBackend
+
                 backend = BEATsBackend(device=device)
                 backend.load_model()
                 backends.append(backend)
@@ -159,7 +163,9 @@ def load_backends(backend_names: list[str], device: str) -> list[AudioClassifier
                 print(f"⚠️  Unknown backend: {name}")
         except Exception as e:
             print(f"❌ Failed to load {name}: {e}")
-            print(f"   Install with: pip install {'panns-inference' if name == 'panns' else 'transformers laion-clap' if name == 'clap' else 'transformers'}")
+            print(
+                f"   Install with: pip install {'panns-inference' if name == 'panns' else 'transformers laion-clap' if name == 'clap' else 'transformers'}"
+            )
 
     return backends
 
@@ -176,16 +182,14 @@ def run_benchmark(
     for sample_name, audio in audio_samples.items():
         print(f"\n{'─' * 60}")
         print(f"🎵 Sample: {sample_name}")
-        print(f"   Duration: {len(audio) / sample_rate:.1f}s, "
-              f"RMS: {np.sqrt(np.mean(audio**2)):.4f}")
+        print(f"   Duration: {len(audio) / sample_rate:.1f}s, RMS: {np.sqrt(np.mean(audio**2)):.4f}")
 
         sample_results = []
         for backend in backends:
             print(f"   → Running {backend.name}...", end=" ", flush=True)
             result = backend.benchmark(audio, sample_rate, n_runs=n_runs)
             sample_results.append(result)
-            print(f"✅ {result.top1_label} ({result.top1_confidence:.2%}) "
-                  f"[{result.total_latency_ms:.1f}ms]")
+            print(f"✅ {result.top1_label} ({result.top1_confidence:.2%}) [{result.total_latency_ms:.1f}ms]")
 
         all_results[sample_name] = sample_results
 
@@ -202,22 +206,21 @@ def print_comparison_table(all_results: dict[str, list[BenchmarkResult]]) -> Non
         print(f"\n{'─' * 100}")
         print(f"🎵 {sample_name}")
         print(f"{'─' * 100}")
-        print(f"{'Backend':<25} {'Top-1 Label':<35} {'Confidence':>10} "
-              f"{'Family':>20} {'Latency':>10}")
+        print(f"{'Backend':<25} {'Top-1 Label':<35} {'Confidence':>10} {'Family':>20} {'Latency':>10}")
         print(f"{'─' * 25} {'─' * 35} {'─' * 10} {'─' * 20} {'─' * 10}")
 
         for r in results:
-            print(f"{r.backend_name:<25} {r.top1_label:<35} "
-                  f"{r.top1_confidence:>9.1%} "
-                  f"{r.top1_family.value:>20} "
-                  f"{r.total_latency_ms:>8.1f}ms")
+            print(
+                f"{r.backend_name:<25} {r.top1_label:<35} "
+                f"{r.top1_confidence:>9.1%} "
+                f"{r.top1_family.value:>20} "
+                f"{r.total_latency_ms:>8.1f}ms"
+            )
 
             # Show top-5
             for cr in r.results[1:]:
                 if cr.confidence > 0.05:
-                    print(f"{'':>25} {cr.label:<35} "
-                          f"{cr.confidence:>9.1%} "
-                          f"{cr.family.value:>20}")
+                    print(f"{'':>25} {cr.label:<35} {cr.confidence:>9.1%} {cr.family.value:>20}")
 
     # Summary
     print(f"\n{'═' * 100}")
@@ -241,8 +244,7 @@ def print_comparison_table(all_results: dict[str, list[BenchmarkResult]]) -> Non
 
         avg_lat = sum(latencies) / len(latencies) if latencies else 0
         avg_conf = sum(confidences) / len(confidences) if confidences else 0
-        print(f"  {bname:<25} Avg latency: {avg_lat:>6.1f}ms  "
-              f"Avg confidence: {avg_conf:>6.1%}")
+        print(f"  {bname:<25} Avg latency: {avg_lat:>6.1f}ms  Avg confidence: {avg_conf:>6.1%}")
 
 
 def main() -> None:
@@ -253,8 +255,9 @@ def main() -> None:
     parser.add_argument("--live", action="store_true", help="Capture from microphone")
     parser.add_argument("--duration", type=float, default=3.0, help="Live capture duration (s)")
     parser.add_argument("--synthetic", action="store_true", help="Use synthetic test tones")
-    parser.add_argument("--backends", nargs="+", default=["panns", "clap", "beats"],
-                        help="Backends to test (panns, clap, beats)")
+    parser.add_argument(
+        "--backends", nargs="+", default=["panns", "clap", "beats"], help="Backends to test (panns, clap, beats)"
+    )
     parser.add_argument("--device", default="cpu", help="Device (cpu, cuda, mps)")
     parser.add_argument("--sr", type=int, default=48_000, help="Sample rate")
     parser.add_argument("--runs", type=int, default=5, help="Number of inference runs per sample")
@@ -269,6 +272,7 @@ def main() -> None:
 
     if args.files:
         import soundfile as sf
+
         for fpath in args.files:
             audio, sr = sf.read(fpath, dtype="float32")
             if audio.ndim > 1:
@@ -279,7 +283,8 @@ def main() -> None:
                 n = int(len(audio) * ratio)
                 audio = np.interp(
                     np.linspace(0, len(audio) - 1, n),
-                    np.arange(len(audio)), audio,
+                    np.arange(len(audio)),
+                    audio,
                 ).astype(np.float32)
             audio_samples[Path(fpath).stem] = audio
 

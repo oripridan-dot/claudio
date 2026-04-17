@@ -24,6 +24,7 @@ def calculate_lsd(y_true, y_pred, sr, n_fft=2048, hop_length=512):
     lsd_per_frame = np.sqrt(np.mean(diff**2, axis=0))
     return float(np.mean(lsd_per_frame))
 
+
 def calculate_mcd(y_true, y_pred, sr):
     """Mel-Cepstral Distortion (MCD)"""
     mfcc_true = librosa.feature.mfcc(y=y_true, sr=sr, n_mfcc=13)
@@ -38,10 +39,11 @@ def calculate_mcd(y_true, y_pred, sr):
     mcd = (10.0 / np.log(10.0)) * np.sqrt(2.0) * np.mean(distance_per_frame)
     return float(mcd)
 
+
 def calculate_f0_rmse(y_true, y_pred, sr):
     """F0 RMSE"""
-    f0_true, _, _ = librosa.pyin(y_true, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C7'), sr=sr)
-    f0_pred, _, _ = librosa.pyin(y_pred, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C7'), sr=sr)
+    f0_true, _, _ = librosa.pyin(y_true, fmin=librosa.note_to_hz("C2"), fmax=librosa.note_to_hz("C7"), sr=sr)
+    f0_pred, _, _ = librosa.pyin(y_pred, fmin=librosa.note_to_hz("C2"), fmax=librosa.note_to_hz("C7"), sr=sr)
 
     # Filter out unvoiced frames (NaNs)
     valid_mask = ~np.isnan(f0_true) & ~np.isnan(f0_pred)
@@ -51,8 +53,9 @@ def calculate_f0_rmse(y_true, y_pred, sr):
     f0_t = f0_true[valid_mask]
     f0_p = f0_pred[valid_mask]
 
-    rmse = np.sqrt(np.mean((f0_t - f0_p)**2))
+    rmse = np.sqrt(np.mean((f0_t - f0_p) ** 2))
     return float(rmse)
+
 
 def calculate_crest_factor(y_true, y_pred):
     """Crest factor (Peak / RMS) indicating transient preservation"""
@@ -76,9 +79,10 @@ def calculate_snr(orig_path: str, gen_path: str, sr: int) -> float:
     min_len = min(len(y_t), len(y_p))
     y_t = y_t[:min_len]
     y_p = y_p[:min_len]
-    signal_power = np.mean(y_t ** 2) + 1e-10
+    signal_power = np.mean(y_t**2) + 1e-10
     noise_power = np.mean((y_t - y_p) ** 2) + 1e-10
     return float(10.0 * np.log10(signal_power / noise_power))
+
 
 def run_analysis(demo_dir="demo_output"):
     original_files = sorted(glob.glob(os.path.join(demo_dir, "*_original.wav")))
@@ -118,6 +122,7 @@ def run_analysis(demo_dir="demo_output"):
         json.dump(final_metrics, f, indent=4)
 
     return final_metrics
+
 
 if __name__ == "__main__":
     run_analysis()

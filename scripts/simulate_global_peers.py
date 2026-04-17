@@ -17,17 +17,18 @@ PEER_CONFIGS = [
     {"name": "NY-Vocal", "file": "data/calibration/AllHailThePower_VocalGuide.wav", "instrument": "Vocal"},
 ]
 
+
 async def simulate_peer(ws_url: str, config: dict):
     print(f"[{config['name']}] Connecting to {ws_url}...")
     try:
         async with websockets.connect(ws_url) as ws:
             print(f"[{config['name']}] Connected! Sending instrument metadata...")
-            await ws.send(json.dumps({"type": "instrument_set", "instrument": config['instrument']}))
+            await ws.send(json.dumps({"type": "instrument_set", "instrument": config["instrument"]}))
 
             encoder = IntentEncoder(sample_rate=44100)
             stream = IntentStream()
 
-            with wave.open(config['file'], 'rb') as wf:
+            with wave.open(config["file"], "rb") as wf:
                 if wf.getnchannels() != 1:
                     print(f"[{config['name']}] Requires mono audio.")
                     return
@@ -69,9 +70,11 @@ async def main():
     room_id = sys.argv[2]
 
     http_url = server_url.replace("ws://", "http://").replace("wss://", "https://")
-    req = urllib.request.Request(f"{http_url}/api/auth/token", data=b'{"username":"simulator"}', headers={'Content-Type': 'application/json'})
+    req = urllib.request.Request(
+        f"{http_url}/api/auth/token", data=b'{"username":"simulator"}', headers={"Content-Type": "application/json"}
+    )
     with urllib.request.urlopen(req) as response:
-        token = json.loads(response.read())['token']
+        token = json.loads(response.read())["token"]
 
     tasks = []
     for cfg in PEER_CONFIGS:
@@ -79,6 +82,7 @@ async def main():
         tasks.append(simulate_peer(ws_url, cfg))
 
     await asyncio.gather(*tasks)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

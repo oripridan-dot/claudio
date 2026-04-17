@@ -13,6 +13,7 @@ because they model:
 
 Output: tests/audio_fixtures/ directory with labeled WAV files
 """
+
 from __future__ import annotations
 
 import sys
@@ -68,9 +69,11 @@ def generate_electric_guitar() -> np.ndarray:
         # Add harmonics (pickup resonance)
         idx = np.arange(len(pluck))
         t_arr = idx / SR
-        pluck += 0.15 * np.sin(2 * np.pi * note * 3 * t_arr).astype(np.float32) * np.exp(-t_arr / 0.5).astype(np.float32)
+        pluck += (
+            0.15 * np.sin(2 * np.pi * note * 3 * t_arr).astype(np.float32) * np.exp(-t_arr / 0.5).astype(np.float32)
+        )
         end = min(start + len(pluck), n)
-        output[start:end] += pluck[:end - start]
+        output[start:end] += pluck[: end - start]
 
     # Soft clipping (tube amp simulation)
     output = np.tanh(output * 2.0) * 0.7
@@ -95,12 +98,22 @@ def generate_acoustic_guitar() -> np.ndarray:
         start = int(t * SR)
         pluck = karplus_strong(note, DURATION - t, SR, brightness=0.4)
         end = min(start + len(pluck), n)
-        output[start:end] += pluck[:end - start]
+        output[start:end] += pluck[: end - start]
 
     # Body resonance filter (broad peaks at ~200Hz and ~400Hz)
     t = np.arange(n) / SR
-    body_200 = np.convolve(output, np.exp(-np.arange(512) / 100.0).astype(np.float32) * np.sin(2 * np.pi * 200 * np.arange(512) / SR).astype(np.float32), mode='same')
-    body_400 = np.convolve(output, np.exp(-np.arange(256) / 50.0).astype(np.float32) * np.sin(2 * np.pi * 400 * np.arange(256) / SR).astype(np.float32), mode='same')
+    body_200 = np.convolve(
+        output,
+        np.exp(-np.arange(512) / 100.0).astype(np.float32)
+        * np.sin(2 * np.pi * 200 * np.arange(512) / SR).astype(np.float32),
+        mode="same",
+    )
+    body_400 = np.convolve(
+        output,
+        np.exp(-np.arange(256) / 50.0).astype(np.float32)
+        * np.sin(2 * np.pi * 400 * np.arange(256) / SR).astype(np.float32),
+        mode="same",
+    )
     output = output + 0.3 * body_200.astype(np.float32) + 0.15 * body_400.astype(np.float32)
 
     return output / (np.max(np.abs(output)) + 1e-10) * 0.75
@@ -118,11 +131,12 @@ def generate_bass_guitar() -> np.ndarray:
         start = int(t * SR)
         pluck = karplus_strong(note, DURATION - t, SR, brightness=0.3)
         end = min(start + len(pluck), n)
-        output[start:end] += pluck[:end - start]
+        output[start:end] += pluck[: end - start]
 
     # Warm roll-off (finger tone — cut above 2kHz)
     from scipy.signal import butter, lfilter
-    b, a = butter(4, 2000 / (SR / 2), btype='low')
+
+    b, a = butter(4, 2000 / (SR / 2), btype="low")
     output = lfilter(b, a, output).astype(np.float32)
 
     return output / (np.max(np.abs(output)) + 1e-10) * 0.85
@@ -149,7 +163,7 @@ def generate_drum_kit() -> np.ndarray:
             freq_env = 150 + 200 * np.exp(-kt / 0.008)
             kick = np.sin(2 * np.pi * np.cumsum(freq_env / SR)) * np.exp(-kt / 0.1)
             kick += 0.3 * np.exp(-kt / 0.002) * np.random.randn(kick_len)  # click
-            output[pos:pos + kick_len] += kick.astype(np.float32) * 0.8
+            output[pos : pos + kick_len] += kick.astype(np.float32) * 0.8
 
         # Snare on 2 and 4
         if beat % 4 in (2, 6):
@@ -158,7 +172,7 @@ def generate_drum_kit() -> np.ndarray:
             body = np.sin(2 * np.pi * 200 * st) * np.exp(-st / 0.04)
             snares = np.random.randn(snare_len) * np.exp(-st / 0.06) * 0.5
             snare = body + snares
-            output[pos:pos + snare_len] += snare.astype(np.float32) * 0.7
+            output[pos : pos + snare_len] += snare.astype(np.float32) * 0.7
 
         # Hi-hat on every 8th
         hh_len = min(int(0.05 * SR), n - pos)
@@ -166,9 +180,10 @@ def generate_drum_kit() -> np.ndarray:
         # Hi-hat = band-passed noise
         hh_noise = np.random.randn(hh_len)
         from scipy.signal import butter, lfilter
-        b, a = butter(2, [6000 / (SR / 2), 12000 / (SR / 2)], btype='band')
+
+        b, a = butter(2, [6000 / (SR / 2), 12000 / (SR / 2)], btype="band")
         hh = lfilter(b, a, hh_noise).astype(np.float32) * np.exp(-ht / 0.02).astype(np.float32)
-        output[pos:pos + hh_len] += hh * 0.3
+        output[pos : pos + hh_len] += hh * 0.3
 
     return output / (np.max(np.abs(output)) + 1e-10) * 0.8
 
@@ -193,14 +208,14 @@ def generate_piano() -> np.ndarray:
             # Piano inharmonicity: f_n = f0 * n * sqrt(1 + B * n^2)
             B = 0.0004  # inharmonicity coefficient
             partial = note * h * np.sqrt(1 + B * h * h)
-            amp = 1.0 / (h ** 0.6) * np.exp(-t * (0.5 + h * 0.3))
+            amp = 1.0 / (h**0.6) * np.exp(-t * (0.5 + h * 0.3))
             tone += amp * np.sin(2 * np.pi * partial * t)
 
         # Hammer attack (brief broadband transient)
         hammer = np.exp(-t / 0.001) * 0.2 * np.random.randn(note_len)
         tone += hammer
 
-        output[start:start + note_len] += tone.astype(np.float32)
+        output[start : start + note_len] += tone.astype(np.float32)
 
     return output / (np.max(np.abs(output)) + 1e-10) * 0.75
 
@@ -218,7 +233,7 @@ def generate_male_vocal() -> np.ndarray:
     # Glottal pulse — more realistic than sine
     glottal = np.zeros(n, dtype=np.float64)
     for h in range(1, 20):
-        amp = 1.0 / (h ** 1.0)  # -12dB/octave roll-off (typical voice)
+        amp = 1.0 / (h**1.0)  # -12dB/octave roll-off (typical voice)
         glottal += amp * np.sin(h * phase)
 
     # Formant filter ("ah" vowel: F1=700, F2=1200, F3=2600)
@@ -226,11 +241,12 @@ def generate_male_vocal() -> np.ndarray:
     output = np.zeros(n, dtype=np.float64)
     for f_center, bw in formants:
         from scipy.signal import butter, lfilter
+
         low = max(20, f_center - bw) / (SR / 2)
         high = min(0.99, (f_center + bw) / (SR / 2))
         if low >= high:
             continue
-        b, a = butter(2, [low, high], btype='band')
+        b, a = butter(2, [low, high], btype="band")
         filtered = lfilter(b, a, glottal)
         output += filtered
 
@@ -260,7 +276,7 @@ def generate_female_vocal() -> np.ndarray:
 
     glottal = np.zeros(n, dtype=np.float64)
     for h in range(1, 15):
-        amp = 1.0 / (h ** 1.2)
+        amp = 1.0 / (h**1.2)
         glottal += amp * np.sin(h * phase)
 
     # Female "ee" vowel formants: F1=310, F2=2800, F3=3350
@@ -268,11 +284,12 @@ def generate_female_vocal() -> np.ndarray:
     output = np.zeros(n, dtype=np.float64)
     for f_center, bw in formants:
         from scipy.signal import butter, lfilter
+
         low = max(20, f_center - bw) / (SR / 2)
         high = min(0.99, (f_center + bw) / (SR / 2))
         if low >= high:
             continue
-        b, a = butter(2, [low, high], btype='band')
+        b, a = butter(2, [low, high], btype="band")
         filtered = lfilter(b, a, glottal)
         output += filtered
 
@@ -301,7 +318,7 @@ def generate_trumpet() -> np.ndarray:
     # Trumpet has strong odd and even harmonics
     output = np.zeros(n, dtype=np.float64)
     for h in range(1, 12):
-        amp = 1.0 / (h ** 0.4)  # brass has lots of upper harmonics
+        amp = 1.0 / (h**0.4)  # brass has lots of upper harmonics
         output += amp * np.sin(h * phase)
 
     # Brass attack — slower than string, with "blat"
@@ -331,9 +348,9 @@ def generate_saxophone() -> np.ndarray:
     output = np.zeros(n, dtype=np.float64)
     for h in range(1, 15):
         if h % 2 == 0:
-            amp = 0.3 / (h ** 0.8)  # even harmonics weaker
+            amp = 0.3 / (h**0.8)  # even harmonics weaker
         else:
-            amp = 1.0 / (h ** 0.5)  # odd harmonics strong
+            amp = 1.0 / (h**0.5)  # odd harmonics strong
         output += amp * np.sin(h * phase)
 
     # Reed buzz (noise modulation)
@@ -372,8 +389,8 @@ def main() -> None:
         audio = gen_fn()
         path = OUTPUT_DIR / f"{name}.wav"
         sf.write(str(path), audio, SR)
-        rms = float(np.sqrt(np.mean(audio ** 2)))
-        print(f"  ✅ {name}.wav — {desc} (RMS: {rms:.4f}, {len(audio)/SR:.1f}s)")
+        rms = float(np.sqrt(np.mean(audio**2)))
+        print(f"  ✅ {name}.wav — {desc} (RMS: {rms:.4f}, {len(audio) / SR:.1f}s)")
 
     print(f"\n🎵 All {len(generators)} samples generated at {SR}Hz")
 

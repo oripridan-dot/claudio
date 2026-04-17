@@ -13,11 +13,12 @@ def stft(x, fft_size, hop_size, win_length, window):
         win_length=win_length,
         window=window,
         return_complex=True,
-        pad_mode='reflect'
+        pad_mode="reflect",
     )
     # L1 magnitude safely
     mag = torch.sqrt(torch.clamp(x_stft.real**2 + x_stft.imag**2, min=1e-7))
     return mag
+
 
 class SpectralLoss(nn.Module):
     def __init__(self, fft_size=1024, hop_size=256, win_length=1024):
@@ -31,14 +32,15 @@ class SpectralLoss(nn.Module):
         # L1 linear loss
         loss_lin = F.l1_loss(x_mag, y_mag)
         # L1 log loss
-        loss_log = F.l1_loss(torch.log(torch.clamp(x_mag, min=1e-7)),
-                             torch.log(torch.clamp(y_mag, min=1e-7)))
+        loss_log = F.l1_loss(torch.log(torch.clamp(x_mag, min=1e-7)), torch.log(torch.clamp(y_mag, min=1e-7)))
         return loss_lin + loss_log
+
 
 class MultiScaleSpectralLoss(nn.Module):
     """
     Computes spectral loss across multiple STFT resolutions.
     """
+
     def __init__(self, fft_sizes=None, hop_sizes=None, win_lengths=None):
         if win_lengths is None:
             win_lengths = [2048, 1024, 512, 256, 128, 64]
@@ -67,12 +69,13 @@ class MelSpectralLoss(nn.Module):
     Penalises errors in the frequency regions the ear is most sensitive to.
     4 STFT scales × 80 mel bands to capture both transient and tonal structure.
     """
+
     _CONFIGS = [
         # n_mels must be < n_fft//2 + 1 (number of freq bins); keep 10% margin
-        {"n_fft": 2048, "hop": 512, "n_mels": 80},   # 1025 bins — 80 safe
-        {"n_fft": 1024, "hop": 256, "n_mels": 64},   # 513 bins  — 64 safe
-        {"n_fft": 512,  "hop": 128, "n_mels": 32},   # 257 bins  — 32 safe
-        {"n_fft": 256,  "hop": 64,  "n_mels": 16},   # 129 bins  — 16 safe
+        {"n_fft": 2048, "hop": 512, "n_mels": 80},  # 1025 bins — 80 safe
+        {"n_fft": 1024, "hop": 256, "n_mels": 64},  # 513 bins  — 64 safe
+        {"n_fft": 512, "hop": 128, "n_mels": 32},  # 257 bins  — 32 safe
+        {"n_fft": 256, "hop": 64, "n_mels": 16},  # 129 bins  — 16 safe
     ]
 
     def __init__(self, sample_rate: int = 48000):
@@ -105,6 +108,7 @@ class CombinedPerceptualLoss(nn.Module):
     70% multi-scale spectral L1 + 30% perceptual mel loss.
     Drop-in replacement for MultiScaleSpectralLoss in refine_loop.py.
     """
+
     def __init__(self, sample_rate: int = 48000):
         super().__init__()
         self.spectral = MultiScaleSpectralLoss()

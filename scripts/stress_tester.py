@@ -22,6 +22,7 @@ import websockets
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s")
 
+
 async def simulate_client(client_id: int, room_id: str, ddsp_enabled: bool, duration: int):
     uri = f"ws://127.0.0.1:8000/ws/collab/{room_id}?name=Simulated_{client_id}"
 
@@ -56,24 +57,20 @@ async def simulate_client(client_id: int, room_id: str, ddsp_enabled: bool, dura
                 seq += 1
                 # Dummy binary packet (FULL FRAME ~34 bytes padding)
                 # Header: seq(I) ts(f) flags(B) = 9 bytes + dummy float payload
-                packet = struct.pack("<IfB", seq, time.time() - start, 0x01) + (b'\\x00' * 25)
+                packet = struct.pack("<IfB", seq, time.time() - start, 0x01) + (b"\\x00" * 25)
                 await ws.send(packet)
                 packets_sent += 1
-                await asyncio.sleep(1/120)
+                await asyncio.sleep(1 / 120)
 
             # Finish
             await ws.close()
             rx_task.cancel()
 
-            return {
-                "id": client_id,
-                "sent": packets_sent,
-                "rx": packets_received,
-                "audio_bytes": audio_bytes_received
-            }
+            return {"id": client_id, "sent": packets_sent, "rx": packets_received, "audio_bytes": audio_bytes_received}
 
     except Exception as e:
         return {"id": client_id, "error": str(e)}
+
 
 async def main():
     parser = argparse.ArgumentParser()
@@ -83,7 +80,9 @@ async def main():
     parser.add_argument("--ddsp", action="store_true", help="Enable server-side DDSP inference")
     args = parser.parse_args()
 
-    logging.info(f"🚀 Starting Stress Test: {args.clients} clients over {args.rooms} rooms for {args.duration}s. DDSP={'ON' if args.ddsp else 'OFF'}")
+    logging.info(
+        f"🚀 Starting Stress Test: {args.clients} clients over {args.rooms} rooms for {args.duration}s. DDSP={'ON' if args.ddsp else 'OFF'}"
+    )
 
     # Pre-create rooms
     room_ids = []
@@ -128,6 +127,7 @@ async def main():
     logging.info(f"  DDSP Audio Rx:    {total_audio / 1024:.1f} KB")
     logging.info(f"  Failed Clients:   {errors}")
     logging.info("-" * 40)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

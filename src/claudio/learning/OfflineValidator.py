@@ -16,6 +16,7 @@ import numpy as np
 # from claudio.ddsp.onnx_runner import run_inference
 # from claudio.metrics.mssl import compute_mssl
 
+
 def offline_validation_cycle(audio: np.ndarray, sample_rate: int) -> float:
     """
     Executes the heavy offline validation pass.
@@ -23,7 +24,7 @@ def offline_validation_cycle(audio: np.ndarray, sample_rate: int) -> float:
     2. Feed to DDSP.
     3. Calculate loss vs original.
     """
-    print(f"[OfflineValidator] Processing {len(audio)/sample_rate:.2f}s of audio locally...")
+    print(f"[OfflineValidator] Processing {len(audio) / sample_rate:.2f}s of audio locally...")
 
     # 1. intent = extract_intent(audio, sample_rate)
     # 2. synthesized = run_inference(intent)
@@ -33,6 +34,7 @@ def offline_validation_cycle(audio: np.ndarray, sample_rate: int) -> float:
     simulated_loss = np.random.uniform(2.5, 4.0)
     print(f"[OfflineValidator] MSSL Score: {simulated_loss:.4f}")
     return simulated_loss
+
 
 def main():
     parser = argparse.ArgumentParser(description="Claudio Offline Validation")
@@ -47,7 +49,7 @@ def main():
     if args.stem and os.path.exists(args.stem):
         print(f"Loading stem: {args.stem}")
         # dummy audio buffer
-        audio_buffer = np.random.randn(48000 * 5) # 5 seconds
+        audio_buffer = np.random.randn(48000 * 5)  # 5 seconds
         loss = offline_validation_cycle(audio_buffer, 48000)
 
         if loss < 3.0:
@@ -56,6 +58,7 @@ def main():
             print("❌ FAIL: Loss too high. Run AutoTuner.py to calibrate hyperparameters.")
     else:
         print("Please provide a valid --stem path.")
+
 
 if __name__ == "__main__":
     main()

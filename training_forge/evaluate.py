@@ -15,9 +15,9 @@ def evaluate(checkpoint_path="checkpoints/best.pt", data_dir="data/processed", o
 
     decoder = DDSPDecoder()
     if os.path.exists(checkpoint_path):
-        checkpoint_data = torch.load(checkpoint_path, map_location='cpu')
-        if 'model_state_dict' in checkpoint_data:
-            decoder.load_state_dict(checkpoint_data['model_state_dict'])
+        checkpoint_data = torch.load(checkpoint_path, map_location="cpu")
+        if "model_state_dict" in checkpoint_data:
+            decoder.load_state_dict(checkpoint_data["model_state_dict"])
         else:
             decoder.load_state_dict(checkpoint_data)
         print(f"Loaded weights from {checkpoint_path}")
@@ -34,10 +34,10 @@ def evaluate(checkpoint_path="checkpoints/best.pt", data_dir="data/processed", o
         if i >= 3:
             break
 
-        f0 = batch['f0']
-        loudness = batch['loudness']
-        z = batch['z']
-        orig_audio = batch['audio']
+        f0 = batch["f0"]
+        loudness = batch["loudness"]
+        z = batch["z"]
+        orig_audio = batch["audio"]
 
         with torch.no_grad():
             harmonics, noise = decoder(f0, loudness, z)
@@ -55,8 +55,10 @@ def evaluate(checkpoint_path="checkpoints/best.pt", data_dir="data/processed", o
 
     print("Evaluation complete. Fidelity check ready in demo_output/")
 
+
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", type=str, default="checkpoints/best.pt")
     parser.add_argument("--data-dir", type=str, default="data/processed")

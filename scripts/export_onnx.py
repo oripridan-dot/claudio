@@ -18,8 +18,8 @@ from claudio.forge.model.forge_model import ForgeModel
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--checkpoint", required=True)
-    p.add_argument("--output",     default="./dist/synth.onnx")
-    p.add_argument("--clip-len",   type=int,   default=44100 * 3)
+    p.add_argument("--output", default="./dist/synth.onnx")
+    p.add_argument("--clip-len", type=int, default=44100 * 3)
     args = p.parse_args()
 
     model = ForgeModel()
@@ -30,10 +30,12 @@ def main() -> None:
     dummy = torch.randn(1, args.clip_len)
 
     import pathlib
+
     pathlib.Path(args.output).parent.mkdir(parents=True, exist_ok=True)
 
     torch.onnx.export(
-        model, dummy,
+        model,
+        dummy,
         args.output,
         input_names=["audio_in"],
         output_names=["audio_out"],

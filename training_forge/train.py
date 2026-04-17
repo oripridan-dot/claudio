@@ -12,14 +12,16 @@ from synth import DDSPSynth
 
 
 def main():
-    warnings.filterwarnings('ignore', category=UserWarning)
+    warnings.filterwarnings("ignore", category=UserWarning)
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--data-dir", type=str, default="data/processed")
     args = parser.parse_args()
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+    device = torch.device(
+        "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+    )
     print(f"Using device: {device}")
 
     # Standard offline training setup — always start optimizer fresh
@@ -27,13 +29,13 @@ def main():
     synth = DDSPSynth(sample_rate=48000, frame_rate=250).to(device)
     loss_fn = MultiScaleSpectralLoss().to(device)
     optimizer = optim.Adam(model.parameters(), lr=3e-4)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=12, min_lr=1e-5)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=12, min_lr=1e-5)
 
     if os.path.exists("checkpoints/best.pt"):
         try:
             checkpoint = torch.load("checkpoints/best.pt", map_location=device)
-            if 'model_state_dict' in checkpoint:
-                model.load_state_dict(checkpoint['model_state_dict'])
+            if "model_state_dict" in checkpoint:
+                model.load_state_dict(checkpoint["model_state_dict"])
                 # IMPORTANT: DO NOT restore optimizer/scheduler state — they may be frozen
                 print("Loaded model weights from checkpoint. Starting with fresh optimizer LR=3e-4.")
             else:
@@ -54,7 +56,7 @@ def main():
 
     print(f"Initializing Isolated Forge Training... {len(dataloader.dataset)} clips found.")
 
-    best_loss = float('inf')
+    best_loss = float("inf")
 
     for epoch in range(args.epochs):
         model.train()
@@ -62,10 +64,10 @@ def main():
         t0 = time.monotonic()
 
         for batch in dataloader:
-            f0 = batch['f0'].to(device)
-            loudness = batch['loudness'].to(device)
-            z = batch['z'].to(device)
-            audio_true = batch['audio'].to(device)
+            f0 = batch["f0"].to(device)
+            loudness = batch["loudness"].to(device)
+            z = batch["z"].to(device)
+            audio_true = batch["audio"].to(device)
 
             # Forward pass Model -> (Harmonics, Noise params, Reverb Mix, F0 Residual, Voiced Mask)
             optimizer.zero_grad()
@@ -91,18 +93,22 @@ def main():
         avg_loss = epoch_loss / len(dataloader)
         # Real-time epoch-level refinement trap:
         scheduler.step(avg_loss)
-        print(f"Epoch {epoch+1}/{args.epochs} - Spectral Loss: {avg_loss:.4f} - Time: {time.monotonic()-t0:.1f}s")
+        print(f"Epoch {epoch + 1}/{args.epochs} - Spectral Loss: {avg_loss:.4f} - Time: {time.monotonic() - t0:.1f}s")
 
         if avg_loss < best_loss:
             best_loss = avg_loss
             os.makedirs("checkpoints", exist_ok=True)
-            torch.save({
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'scheduler_state_dict': scheduler.state_dict()
-            }, "checkpoints/best.pt")
+            torch.save(
+                {
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "scheduler_state_dict": scheduler.state_dict(),
+                },
+                "checkpoints/best.pt",
+            )
 
     print(f"✅ Training complete. Best loss: {best_loss:.4f} saved to checkpoints/best.pt")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

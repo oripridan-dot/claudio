@@ -3,6 +3,7 @@ Claudio AI Fidelity Refinement Loop — Single-Process Edition
 Runs training, evaluation, and analysis all in one Python process.
 No subprocesses, no semaphore leaks, no checkpoint format mismatches.
 """
+
 import os
 import time
 import warnings
@@ -20,18 +21,19 @@ from model import DDSPDecoder
 from synth import DDSPSynth
 
 # ─── Configuration ────────────────────────────────────────────────
-EPOCHS_PER_CYCLE = 40       # 40 epochs/cycle — GRU stabilises faster than pure MLP
-MAX_CYCLES = 20             # Max training cycles
+EPOCHS_PER_CYCLE = 40  # 40 epochs/cycle — GRU stabilises faster than pure MLP
+MAX_CYCLES = 20  # Max training cycles
 # Realistic targets for ~45 clips + spectral+perceptual loss.
 # (MCD<200 / LSD<15 requires 1000s of clips + adversarial training — out of scope here)
-MCD_TARGET = 500.0          # Achievable floor with augmented 45-clip dataset
-LSD_TARGET = 25.0           # Achievable floor with augmented 45-clip dataset
+MCD_TARGET = 500.0  # Achievable floor with augmented 45-clip dataset
+LSD_TARGET = 25.0  # Achievable floor with augmented 45-clip dataset
 # Use augmented dataset if available, fall back to processed
 DATA_DIR = "data/augmented" if os.path.isdir("data/augmented") else "data/processed"
 CHECKPOINT = "checkpoints/best.pt"
 DEMO_DIR = "demo_output"
 SR = 48000
 # ──────────────────────────────────────────────────────────────────
+
 
 def load_model_weights_only(model, synth, path, device):
     """Load only model weights — never restore optimizer/scheduler state."""
@@ -52,11 +54,9 @@ def load_model_weights_only(model, synth, path, device):
 
 def save_checkpoint(model, synth, best_loss, path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    torch.save({
-        "model_state_dict": model.state_dict(), 
-        "synth_state_dict": synth.state_dict(),
-        "best_loss": best_loss
-    }, path)
+    torch.save(
+        {"model_state_dict": model.state_dict(), "synth_state_dict": synth.state_dict(), "best_loss": best_loss}, path
+    )
 
 
 def run_training_cycle(model, synth, loss_fn, optimizer, scheduler, dataloader, device, epochs, cycle_num):
@@ -91,7 +91,7 @@ def run_training_cycle(model, synth, loss_fn, optimizer, scheduler, dataloader, 
         elapsed = time.monotonic() - t0
 
         lr_now = optimizer.param_groups[0]["lr"]
-        print(f"  Epoch {epoch+1:>3}/{epochs} | Loss: {avg_loss:.4f} | LR: {lr_now:.2e} | {elapsed:.1f}s")
+        print(f"  Epoch {epoch + 1:>3}/{epochs} | Loss: {avg_loss:.4f} | LR: {lr_now:.2e} | {elapsed:.1f}s")
 
         if avg_loss < best_loss:
             best_loss = avg_loss
@@ -157,22 +157,20 @@ def compute_fidelity_metrics():
 
 
 def main():
-    device = torch.device("cuda" if torch.cuda.is_available()
-                          else "mps" if torch.backends.mps.is_available()
-                          else "cpu")
-    print(f"\n{'='*50}")
+    device = torch.device(
+        "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+    )
+    print(f"\n{'=' * 50}")
     print("  CLAUDIO AI FIDELITY REFINEMENT ENGINE")
     print(f"  Device: {device} | Cycles: {MAX_CYCLES} | Epochs/Cycle: {EPOCHS_PER_CYCLE}")
     print(f"  Targets — MCD < {MCD_TARGET} | LSD < {LSD_TARGET}")
-    print(f"{'='*50}\n")
+    print(f"{'=' * 50}\n")
 
     # Build model — single instance reused across all cycles
     model = DDSPDecoder().to(device)
-    synth = DDSPSynth(
-        sample_rate=SR, 
-        frame_rate=250, 
-        init_ir_path="../frontend/public/models/irs/Studio_A.wav"
-    ).to(device)
+    synth = DDSPSynth(sample_rate=SR, frame_rate=250, init_ir_path="../frontend/public/models/irs/Studio_A.wav").to(
+        device
+    )
     loss_fn = CombinedPerceptualLoss(sample_rate=SR).to(device)
 
     # num_workers=0 prevents macOS semaphore leaks
@@ -184,24 +182,18 @@ def main():
     load_model_weights_only(model, synth, CHECKPOINT, device)
 
     for cycle in range(1, MAX_CYCLES + 1):
-        print(f"\n{'─'*50}")
+        print(f"\n{'─' * 50}")
         print(f"  CYCLE {cycle} / {MAX_CYCLES}")
-        print(f"{'─'*50}")
+        print(f"{'─' * 50}")
 
         # Fresh optimizer + scheduler every cycle — resets LR to 3e-4 each time
         # This prevents LR from dying at min_lr across multi-cycle runs
         # Optimize BOTH model weights and the learnable Reverb IR inside synth
-        optimizer = optim.Adam(
-            list(model.parameters()) + list(synth.reverb.parameters()), 
-            lr=3e-4
-        )
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='min', factor=0.5, patience=12, min_lr=1e-5
-        )
+        optimizer = optim.Adam(list(model.parameters()) + list(synth.reverb.parameters()), lr=3e-4)
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=12, min_lr=1e-5)
 
         best_loss = run_training_cycle(
-            model, synth, loss_fn, optimizer, scheduler,
-            dataloader, device, EPOCHS_PER_CYCLE, cycle
+            model, synth, loss_fn, optimizer, scheduler, dataloader, device, EPOCHS_PER_CYCLE, cycle
         )
 
         # Reload best weights from this cycle before evaluating

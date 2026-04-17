@@ -13,6 +13,7 @@ Preserves the feature format {f0, loudness, z, audio} expected by train.py.
 
 Run: uv run python augment_dataset.py
 """
+
 import os
 
 import librosa
@@ -27,11 +28,11 @@ IN_DIR = "data/processed"
 OUT_DIR = "data/augmented"
 
 AUGMENTATIONS = [
-    {"name": "orig",         "pitch_steps": 0,   "time_rate": 1.0,  "noise_sigma": 0.0},
-    {"name": "pitch_up1",    "pitch_steps": 1,   "time_rate": 1.0,  "noise_sigma": 0.0},
-    {"name": "pitch_dn2",    "pitch_steps": -2,  "time_rate": 1.0,  "noise_sigma": 0.0},
-    {"name": "stretch_slow", "pitch_steps": 0,   "time_rate": 0.92, "noise_sigma": 0.0},
-    {"name": "stretch_fast", "pitch_steps": 0,   "time_rate": 1.08, "noise_sigma": 0.002},
+    {"name": "orig", "pitch_steps": 0, "time_rate": 1.0, "noise_sigma": 0.0},
+    {"name": "pitch_up1", "pitch_steps": 1, "time_rate": 1.0, "noise_sigma": 0.0},
+    {"name": "pitch_dn2", "pitch_steps": -2, "time_rate": 1.0, "noise_sigma": 0.0},
+    {"name": "stretch_slow", "pitch_steps": 0, "time_rate": 0.92, "noise_sigma": 0.0},
+    {"name": "stretch_fast", "pitch_steps": 0, "time_rate": 1.08, "noise_sigma": 0.002},
 ]
 
 
@@ -60,7 +61,7 @@ def extract_features(y: np.ndarray) -> dict:
     rms = librosa.feature.rms(y=y, frame_length=2048, hop_length=HOP_LENGTH)[0]
 
     S = np.abs(librosa.stft(y, n_fft=2048, hop_length=HOP_LENGTH))
-    mel = librosa.feature.melspectrogram(S=S ** 2, sr=SR, n_mels=N_MELS)
+    mel = librosa.feature.melspectrogram(S=S**2, sr=SR, n_mels=N_MELS)
     log_mel = librosa.power_to_db(mel, ref=1.0)
 
     min_len = min(len(f0), len(rms), log_mel.shape[1])
@@ -79,9 +80,7 @@ def augment_waveform(y: np.ndarray, aug: dict) -> np.ndarray:
 
     # Pitch shift (semitones)
     if aug["pitch_steps"] != 0:
-        result = librosa.effects.pitch_shift(
-            result, sr=SR, n_steps=aug["pitch_steps"]
-        )
+        result = librosa.effects.pitch_shift(result, sr=SR, n_steps=aug["pitch_steps"])
 
     # Time stretch
     if aug["time_rate"] != 1.0:
@@ -89,9 +88,7 @@ def augment_waveform(y: np.ndarray, aug: dict) -> np.ndarray:
 
     # Gaussian noise
     if aug["noise_sigma"] > 0.0:
-        noise = np.random.normal(0.0, aug["noise_sigma"], len(result)).astype(
-            np.float32
-        )
+        noise = np.random.normal(0.0, aug["noise_sigma"], len(result)).astype(np.float32)
         result = result + noise
 
     # Normalize to prevent clipping
@@ -105,9 +102,7 @@ def augment_waveform(y: np.ndarray, aug: dict) -> np.ndarray:
 def main() -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
 
-    pt_files = sorted(
-        [os.path.join(IN_DIR, f) for f in os.listdir(IN_DIR) if f.endswith(".pt")]
-    )
+    pt_files = sorted([os.path.join(IN_DIR, f) for f in os.listdir(IN_DIR) if f.endswith(".pt")])
 
     if not pt_files:
         print(f"No .pt files found in {IN_DIR}. Run extract_dataset.py first.")

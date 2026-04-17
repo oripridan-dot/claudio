@@ -15,7 +15,7 @@ from claudio.forge.model.autoencoder import AudioAutoEncoder
 
 def run_validation():
     sr = 44100
-    device = torch.device('mps' if torch.backends.mps.is_available() else 'cpu')
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     codec = AudioAutoEncoder(latent_dim=128).to(device)
 
     ckpt_path = Path(__file__).resolve().parent.parent / "checkpoints" / "forge_model_best.pt"
@@ -23,7 +23,9 @@ def run_validation():
     codec.load_state_dict(ckpt["autoencoder_state_dict"])
     codec.eval()
 
-    ref_path = "/Users/oripridan/Downloads/AllHailThePowerOfJesusName_MULTITRACKS_WAV/AllHailThePowerOfJesusName_EGuitar_E.wav"
+    ref_path = (
+        "/Users/oripridan/Downloads/AllHailThePowerOfJesusName_MULTITRACKS_WAV/AllHailThePowerOfJesusName_EGuitar_E.wav"
+    )
     wav, _ = librosa.load(ref_path, sr=sr, mono=True)
 
     chunk_size = sr
@@ -32,11 +34,12 @@ def run_validation():
 
     with torch.no_grad():
         for c in range(n_chunks):
-            chunk = wav[c*chunk_size : (c+1)*chunk_size]
+            chunk = wav[c * chunk_size : (c + 1) * chunk_size]
             t = torch.from_numpy(chunk).unsqueeze(0).to(device)
             out.append(codec(t).cpu().numpy()[0])
 
     import numpy as np
+
     regen = np.concatenate(out)
 
     out_dir = Path(__file__).resolve().parent.parent / "demo_output"
@@ -48,9 +51,11 @@ def run_validation():
     metrics = audio_metrology.measure_fidelity(ref_path, str(out_path))
     print("METRICS:")
     import json
+
     print(json.dumps(metrics, indent=2))
 
     return ref_path, str(out_path)
+
 
 if __name__ == "__main__":
     run_validation()

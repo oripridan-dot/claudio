@@ -19,8 +19,7 @@ def extract_features(audio_path, sr=48000, hop_length=192):
 
     # 1. Pitch
     f0, voiced_flag, voiced_probs = librosa.pyin(
-        y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C7'),
-        sr=sr, frame_length=2048, hop_length=hop_length
+        y, fmin=librosa.note_to_hz("C2"), fmax=librosa.note_to_hz("C7"), sr=sr, frame_length=2048, hop_length=hop_length
     )
     f0 = np.nan_to_num(f0)
 
@@ -36,34 +35,46 @@ def extract_features(audio_path, sr=48000, hop_length=192):
     min_len = min(len(f0), len(rms), log_mel.shape[1])
 
     features = {
-        'f0': torch.tensor(f0[:min_len], dtype=torch.float32).unsqueeze(1),
-        'loudness': torch.tensor(rms[:min_len], dtype=torch.float32).unsqueeze(1),
-        'z': torch.tensor(log_mel[:, :min_len].T, dtype=torch.float32),
-        'audio': torch.tensor(y[:min_len*hop_length], dtype=torch.float32)
+        "f0": torch.tensor(f0[:min_len], dtype=torch.float32).unsqueeze(1),
+        "loudness": torch.tensor(rms[:min_len], dtype=torch.float32).unsqueeze(1),
+        "z": torch.tensor(log_mel[:, :min_len].T, dtype=torch.float32),
+        "audio": torch.tensor(y[: min_len * hop_length], dtype=torch.float32),
     }
 
     return features
+
 
 def process_directory(data_dir, out_dir):
     os.makedirs(out_dir, exist_ok=True)
     count = 0
     for root, _, files in os.walk(data_dir):
         for f in files:
-            if f.lower().endswith('.wav'):
+            if f.lower().endswith(".wav"):
                 audio_path = os.path.join(root, f)
                 try:
                     features = extract_features(audio_path)
                     out_path = os.path.join(out_dir, f"{count}_{f}.pt")
                     torch.save(features, out_path)
-                    print(f"[{count+1}] Extracted: {f}")
+                    print(f"[{count + 1}] Extracted: {f}")
                     count += 1
                 except Exception as e:
                     print(f"Failed to process {f}: {e}")
     print(f"Extraction complete. {count} clips saved to {out_dir}.")
 
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data-dirs", type=str, nargs='+', default=["training_forge/data/raw_wavs", "training_forge/data/calibration_stems", "training_forge/data/multitracks"], help="Directories to scan for wav files")
+    parser.add_argument(
+        "--data-dirs",
+        type=str,
+        nargs="+",
+        default=[
+            "training_forge/data/raw_wavs",
+            "training_forge/data/calibration_stems",
+            "training_forge/data/multitracks",
+        ],
+        help="Directories to scan for wav files",
+    )
     parser.add_argument("--out-dir", type=str, default="training_forge/data/processed")
     args = parser.parse_args()
 
@@ -74,5 +85,6 @@ def main():
         else:
             print(f"Skipping missing directory: {d}")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

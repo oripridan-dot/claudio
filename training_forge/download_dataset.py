@@ -11,11 +11,9 @@ def main():
 
     print("Fetching high-quality open-source reference stems via Librosa...")
 
-    warnings.filterwarnings('ignore')
+    warnings.filterwarnings("ignore")
 
-    stems = {
-        'trumpet': librosa.util.example('trumpet')
-    }
+    stems = {"trumpet": librosa.util.example("trumpet")}
 
     for name, path in stems.items():
         if os.path.exists(path):
@@ -29,5 +27,6 @@ def main():
 
     print(f"\nAll files saved to {os.path.abspath(out_dir)}. Ready for feature extraction!")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

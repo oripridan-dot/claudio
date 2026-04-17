@@ -4,6 +4,7 @@ billing.py — Real Product Monetization Mock
 This module intercepts mock Stripe events and manages subscription tiers.
 It determines if a user has access to premium collaboration rooms (e.g., HRTF).
 """
+
 import os
 import uuid
 from typing import Any
@@ -47,6 +48,7 @@ class StripeBillingMock:
                 self.active_subscriptions[username] = "premium"
                 return True
         return False
+
 
 # Global Singleton
 billing_manager = StripeBillingMock()

@@ -358,10 +358,10 @@ class IntentEncoder:
 
         # Sustain baseline: if we are far from onset, check if energy is still high
         elif self._frames_since_onset > 40:
-             # If energy has dropped significantly, reset to neutral/silence
-             if loudness_db < -45:
-                 self._current_articulation = ArticulationMode.NEUTRAL
-                 self._articulation_score = 0.5
+            # If energy has dropped significantly, reset to neutral/silence
+            if loudness_db < -45:
+                self._current_articulation = ArticulationMode.NEUTRAL
+                self._articulation_score = 0.5
 
     @staticmethod
     def _hz_to_mel(hz: float) -> float:

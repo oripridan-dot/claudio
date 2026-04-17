@@ -1,9 +1,12 @@
 """
 benchmark_utils.py — utilities for SOTA superiority test.
 """
+
 from __future__ import annotations
+
 import math
 from dataclasses import dataclass
+
 import numpy as np
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -313,5 +316,3 @@ def woodworth_itd(az_deg: float) -> float:
 def brown_duda_ild(az_deg: float) -> float:
     """Brown-Duda head-shadow ILD ground truth (dB)."""
     return 8.0 * abs(math.sin(math.radians(az_deg)))
-
-

@@ -25,6 +25,7 @@ class DDSPDecoder(nn.Module):
       Head(f0_residual) = Tanh([512→1]) * 0.05
       Head(voiced)    = Sigmoid([512→1])
     """
+
     def __init__(self, n_harmonics: int = 60, n_noise: int = 65):
         super().__init__()
 
@@ -36,12 +37,7 @@ class DDSPDecoder(nn.Module):
         # GRU for temporal context — processes full sequence, not frame-by-frame
         # bidirectional=True: hidden=256 per direction → 512 total
         self.gru = nn.GRU(
-            input_size=64,
-            hidden_size=256,
-            num_layers=2,
-            batch_first=True,
-            bidirectional=True,
-            dropout=0.1
+            input_size=64, hidden_size=256, num_layers=2, batch_first=True, bidirectional=True, dropout=0.1
         )
 
         # MLP refiner on top of GRU output
@@ -66,9 +62,9 @@ class DDSPDecoder(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # Inputs: (batch, time, features)
         # Normalize to stabilize gradients
-        f0_norm = f0 / 2000.0                         # Hz → [0,1]
+        f0_norm = f0 / 2000.0  # Hz → [0,1]
         loudness_norm = torch.clamp(loudness, 0.0, 1.0)
-        z_norm = (z + 80.0) / 80.0                    # dB range [-80,0] → [0,1]
+        z_norm = (z + 80.0) / 80.0  # dB range [-80,0] → [0,1]
 
         h_f0 = self.fc_f0(f0_norm)
         h_loud = self.fc_loud(loudness_norm)
