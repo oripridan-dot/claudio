@@ -34,6 +34,8 @@ async def handle_collab_ws(
     params = dict(ws.query_params)
     display_name = auth_payload.get("sub", params.get("name", "Musician"))
     role = PeerRole(params.get("role", "both"))
+    instrument_model_url = params.get("instrument", "/models/ddsp_model.onnx")
+    environment_ir = params.get("environment", "Studio_A")
 
     # Join room
     peer = await collab_manager.join_room(room_id, ws, display_name, role)
@@ -41,6 +43,9 @@ async def handle_collab_ws(
         await ws.send_json({"type": "error", "message": "Room full or not found"})
         await ws.close()
         return
+        
+    peer.instrument = instrument_model_url # Currently reusing the instrument field to map model URLs 
+    peer.environment = environment_ir
 
     # Notify room of new peer
     room = collab_manager.get_room(room_id)
@@ -68,14 +73,19 @@ async def handle_collab_ws(
     try:
         while True:
             message = await ws.receive()
-
             if message["type"] == "websocket.receive":
                 if "bytes" in message and message["bytes"]:
+                    # Build 8-byte UDP-style header for sender attribution
+                    pid_b = peer.peer_id.encode("utf-8").ljust(8, b"\x00")[:8]
+                    augmented_bytes = pid_b + message["bytes"]
+                    pid_b = peer.peer_id.encode("utf-8").ljust(8, b"\x00")[:8]
+                    augmented_bytes = pid_b + message["bytes"]
+
                     # 1. Broadcast via WebSocket (original path)
                     await collab_manager.broadcast_intent(
                         room_id,
                         peer.peer_id,
-                        message["bytes"],
+                        augmented_bytes,
                     )
 
                     # 2. Broadcast via WebRTC Data Channels (Integrated)
@@ -83,7 +93,7 @@ async def handle_collab_ws(
                         await webrtc_manager.broadcast_intent_p2p(
                             room_id,
                             peer.peer_id,
-                            message["bytes"]
+                            augmented_bytes
                         )
 
                     # 3. Handle DDSP Neural Decoding state

@@ -6,6 +6,10 @@ interface JoinCardProps {
   setUserName: (val: string) => void;
   inputRoom: string;
   setInputRoom: (val: string) => void;
+  instrument: string;
+  setInstrument: (val: string) => void;
+  environment: string;
+  setEnvironment: (val: string) => void;
   onJoin: () => void;
   onCreate: () => void;
 }
@@ -15,6 +19,10 @@ export default function JoinCard({
   setUserName,
   inputRoom,
   setInputRoom,
+  instrument,
+  setInstrument,
+  environment,
+  setEnvironment,
   onJoin,
   onCreate
 }: JoinCardProps) {
@@ -32,10 +40,26 @@ export default function JoinCard({
           <input style={styles.input} value={userName}
             onChange={e => setUserName(e.target.value)} placeholder="Musician" />
         </div>
-        <div style={{ marginBottom: '36px' }}>
+        <div style={{ marginBottom: '24px' }}>
           <label style={styles.label}>Room Code (Optional)</label>
           <input style={styles.input} value={inputRoom}
             onChange={e => setInputRoom(e.target.value)} placeholder="Leave blank to create new" />
+        </div>
+        <div style={{ marginBottom: '24px' }}>
+            <label style={styles.label}>Target Instrument Model</label>
+            <select style={{...styles.input, background: 'rgba(255,255,255,0.03)', appearance: 'none', color: '#fff'}} value={instrument} onChange={e => setInstrument(e.target.value)}>
+                <option value="/models/ddsp_model.onnx">Universal Hybrid (ddsp_model.onnx)</option>
+                <option value="/models/ddsp_acoustic.onnx">Acoustic Guitar (Placeholder)</option>
+            </select>
+        </div>
+        <div style={{ marginBottom: '36px' }}>
+            <label style={styles.label}>Acoustic Environment</label>
+            <select style={{...styles.input, background: 'rgba(255,255,255,0.03)', appearance: 'none', color: '#fff'}} value={environment} onChange={e => setEnvironment(e.target.value)}>
+                <option value="Studio_A">Rigid Studio A</option>
+                <option value="EMT_Plate">EMT 140 Vintage Plate</option>
+                <option value="Cathedral">Cathedral</option>
+                <option value="Claudio_Ambient">Claudio Ambient Wash</option>
+            </select>
         </div>
         <button 
           style={styles.primaryBtn} 

@@ -31,6 +31,23 @@ export class RTCalibrationEngine {
 
   public onAutoCalibrate?: (metrics: CalibrationMetrics) => void;
 
+  public params: CalibrationParams = {
+    fftSize: 2048,
+    gainCompStrength: 0.5,
+    eqCompStrength: 0.5,
+    smoothingMs: 50.0
+  };
+
+  public metrics: CalibrationMetrics = {
+    coherence: 0,
+    inputMagnitudeDb: -80,
+    outputMagnitudeDb: -80,
+    magnitudeDeltaDb: 0,
+    inputCentroidHz: 0,
+    outputCentroidHz: 0,
+    freqDeltaHz: 0
+  };
+
   constructor(audioCtx: AudioContext) {
     this.audioCtx = audioCtx;
     this.inputAnalyser = this.audioCtx.createAnalyser();

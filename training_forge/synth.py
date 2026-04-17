@@ -1,6 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import os
+import numpy as np
+import scipy.io.wavfile as wav
 
 
 class HarmonicSynth(nn.Module):
@@ -114,10 +117,23 @@ class TrainableReverb(nn.Module):
     Differentiable Reverb with a learnable Impulse Response (IR).
     Uses FFT convolution for efficient training.
     """
-    def __init__(self, sample_rate=48000, reverb_length=48000):
+    def __init__(self, sample_rate=48000, reverb_length=48000, init_ir_path=None):
         super().__init__()
-        # Initialize IR very quiet to prevent initial explosion
-        self.ir = nn.Parameter(torch.randn(reverb_length) * 1e-4)
+        if init_ir_path and os.path.exists(init_ir_path):
+            print(f"Loading acoustic seed IR: {init_ir_path}")
+            sr, ir_audio = wav.read(init_ir_path)
+            if ir_audio.dtype == np.int16:
+                ir_audio = ir_audio.astype(np.float32) / 32768.0
+            if len(ir_audio) > reverb_length:
+                ir_audio = ir_audio[:reverb_length]
+            elif len(ir_audio) < reverb_length:
+                ir_audio = np.pad(ir_audio, (0, reverb_length - len(ir_audio)))
+            # Multiply by a small scaling factor if needed, but algorithmic IRs are usually pre-normalized.
+            # We scale down slightly so it doesn't overwhelm the initial training phase
+            self.ir = nn.Parameter(torch.from_numpy(ir_audio).float() * 0.1)
+        else:
+            # Initialize IR very quiet to prevent initial explosion
+            self.ir = nn.Parameter(torch.randn(reverb_length) * 1e-4)
         
         # Exponential decay envelope prevents IR from blowing up and forces it to act like a room
         t = torch.linspace(0, 1, reverb_length)
@@ -147,11 +163,11 @@ class TrainableReverb(nn.Module):
         return convolved[:, :a_len]
 
 class DDSPSynth(nn.Module):
-    def __init__(self, sample_rate=48000, frame_rate=250):
+    def __init__(self, sample_rate=48000, frame_rate=250, init_ir_path=None):
         super().__init__()
         self.harmonic = HarmonicSynth(sample_rate, 60, frame_rate)
         self.noise = FilteredNoise(sample_rate, 65, frame_rate)
-        self.reverb = TrainableReverb(sample_rate, sample_rate) # 1 sec IR
+        self.reverb = TrainableReverb(sample_rate, sample_rate, init_ir_path=init_ir_path) # 1 sec IR
         self.hop_length = int(sample_rate / frame_rate)
 
     def forward(self, f0, amplitudes, harmonics, noise, reverb_mix=None, f0_residual=None, voiced_mask=None):

@@ -43,7 +43,8 @@ class PeerInfo:
     display_name: str
     role: PeerRole
     ws: WebSocket
-    instrument: str = "unknown"  # Detected instrument type
+    instrument: str = "unknown"  # Reused as model_url alias for backwards compatibility
+    environment: str = "Studio_A"
     joined_at: float = 0.0
     packets_sent: int = 0
     packets_received: int = 0
@@ -107,6 +108,8 @@ class CollabRoom:
                 "display_name": p.display_name,
                 "role": p.role.value,
                 "instrument": p.instrument,
+                "model_url": p.instrument,
+                "environment": getattr(p, "environment", "Studio_A"),
                 "packets_sent": p.packets_sent,
                 "latency_ms": round(p.latency_ms, 1),
             }

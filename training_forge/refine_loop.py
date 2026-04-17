@@ -168,7 +168,11 @@ def main():
 
     # Build model — single instance reused across all cycles
     model = DDSPDecoder().to(device)
-    synth = DDSPSynth(sample_rate=SR, frame_rate=250).to(device)
+    synth = DDSPSynth(
+        sample_rate=SR, 
+        frame_rate=250, 
+        init_ir_path="../frontend/public/models/irs/Studio_A.wav"
+    ).to(device)
     loss_fn = CombinedPerceptualLoss(sample_rate=SR).to(device)
 
     # num_workers=0 prevents macOS semaphore leaks

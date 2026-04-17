@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { IntentEngine, type IntentFrame, type PeerInfo } from '../engine/IntentEngine';
 import { freqToNote } from '../components/IntentVisualizer';
-import { RTCalibrationEngine } from '../engine/RTCalibrationEngine';
 import { uiStyles as styles } from '../components/styles';
 import JoinCard from '../components/JoinCard';
 import ActiveStage from '../components/ActiveStage';
@@ -15,40 +14,24 @@ export default function CollabPage() {
   const [roomId, setRoomId] = useState('');
   const [inputRoom, setInputRoom] = useState('');
   const [userName, setUserName] = useState('Musician');
+  const [instrument, setInstrument] = useState('/models/ddsp_model.onnx');
+  const [environment, setEnvironment] = useState('Studio_A');
   const [peers, setPeers] = useState<PeerInfo[]>([]);
 
   const [localFrame, setLocalFrame] = useState<IntentFrame | null>(null);
-  const [calibrationEngine, setCalibrationEngine] = useState<RTCalibrationEngine | null>(null);
 
   useEffect(() => {
     engine.onLocalIntent = setLocalFrame;
     engine.onPeersUpdated = setPeers;
     engine.onConnectionChange = setConnected;
-    // Automatic backend configuration
-    engine.setDDSPMode(true);
-    engine.setLocalLoopback(false);
+    // v4.0: Opus audio is the default. DDSP is emergency-only.
+    // No setDDSPMode, no setLocalLoopback.
   }, [engine]);
 
   const handleStartCaptureAsync = useCallback(async () => {
     await engine.startCapture();
     setCapturing(true);
-
-    const ctx = engine.getAudioContext();
-    if (ctx) {
-      if (calibrationEngine) calibrationEngine.destroy();
-      const calib = new RTCalibrationEngine(ctx);
-      const micSrc = engine.getInputAnalyser();
-      if (micSrc) calib.connectInputSource(micSrc);
-
-      const compNode = calib.getCompensationInputNode();
-      engine.redirectOutput(compNode);
-      
-      calib.connectOutputTap(compNode);
-      calib.getFinalOutputNode().connect(ctx.destination);
-
-      setCalibrationEngine(calib);
-    }
-  }, [engine, calibrationEngine]);
+  }, [engine]);
 
   const handleCreateRoom = useCallback(async () => {
     try {
@@ -59,7 +42,7 @@ export default function CollabPage() {
       });
       const data = await res.json();
       setRoomId(data.room_id);
-      await engine.connectToRoom(SERVER_URL, data.room_id, userName);
+      await engine.connectToRoom(SERVER_URL, data.room_id, userName, instrument, environment);
       await handleStartCaptureAsync();
     } catch (e) {
       console.error('Failed to create room:', e);
@@ -70,7 +53,7 @@ export default function CollabPage() {
     if (!inputRoom) return;
     try {
       setRoomId(inputRoom);
-      await engine.connectToRoom(SERVER_URL, inputRoom, userName);
+      await engine.connectToRoom(SERVER_URL, inputRoom, userName, instrument, environment);
       await handleStartCaptureAsync();
     } catch (e) {
       console.error('Failed to join room:', e);
@@ -84,9 +67,7 @@ export default function CollabPage() {
     setConnected(false);
     setRoomId('');
     setPeers([]);
-    calibrationEngine?.destroy();
-    setCalibrationEngine(null);
-  }, [engine, calibrationEngine]);
+  }, [engine]);
 
   return (
     <div style={styles.container}>
@@ -106,6 +87,8 @@ export default function CollabPage() {
         <JoinCard 
           userName={userName} setUserName={setUserName}
           inputRoom={inputRoom} setInputRoom={setInputRoom}
+          instrument={instrument} setInstrument={setInstrument}
+          environment={environment} setEnvironment={setEnvironment}
           onJoin={handleJoinRoom} onCreate={handleCreateRoom}
         />
       ) : (
@@ -114,6 +97,7 @@ export default function CollabPage() {
           roomId={roomId}
           isCapturing={capturing}
           localPitch={localFrame ? freqToNote(localFrame.f0Hz) : undefined}
+          localRms={localFrame?.rmsEnergy || 0}
         />
       )}
     </div>

@@ -61,7 +61,7 @@ def extract_features(y: np.ndarray) -> dict:
 
     S = np.abs(librosa.stft(y, n_fft=2048, hop_length=HOP_LENGTH))
     mel = librosa.feature.melspectrogram(S=S ** 2, sr=SR, n_mels=N_MELS)
-    log_mel = librosa.power_to_db(mel, ref=np.max)
+    log_mel = librosa.power_to_db(mel, ref=1.0)
 
     min_len = min(len(f0), len(rms), log_mel.shape[1])
 
