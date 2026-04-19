@@ -25,6 +25,7 @@ export type NetworkPacket = PivotFrame | DeltaFrame;
 export type IntentFrame = PivotFrame & { 
   mfcc?: number[]; // Deprecated compatibility field
   melBands?: Float32Array; // New 64-dim field
+  peerId?: string; // Auto-discovery routing
 };
 
 export interface PeerInfo {
@@ -34,6 +35,7 @@ export interface PeerInfo {
   instrument: string;
   packets_sent: number;
   latency_ms: number;
+  rmsEnergy?: number;
 }
 
 export interface CollabMetrics {

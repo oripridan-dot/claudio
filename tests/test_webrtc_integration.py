@@ -35,7 +35,7 @@ async def test_webrtc_bidirectional_broadcast():
 
     # We also need to add the rtc_peer to the session_manager room
     # so that the broadcasters see it.
-    rtc_ws_mock = MagicMock() # WebRTC peers still have a signaling WS
+    rtc_ws_mock = MagicMock()  # WebRTC peers still have a signaling WS
     rtc_ws_mock.send_bytes = AsyncMock()
     await session_manager.join_room(room_id, rtc_ws_mock, "RTC_Peer")
     # Join room returns a random id, let's just make sure we use the one it returns

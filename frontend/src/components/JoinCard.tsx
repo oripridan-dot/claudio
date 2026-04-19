@@ -32,10 +32,11 @@ export default function JoinCard({
           <input style={styles.input} value={userName}
             onChange={e => setUserName(e.target.value)} placeholder="Musician" />
         </div>
-        <div style={{ marginBottom: '36px' }}>
+        <div style={{ marginBottom: '24px' }}>
           <label style={styles.label}>Room Code (Optional)</label>
           <input style={styles.input} value={inputRoom}
             onChange={e => setInputRoom(e.target.value)} placeholder="Leave blank to create new" />
+        </div>
         </div>
         <button 
           style={styles.primaryBtn} 

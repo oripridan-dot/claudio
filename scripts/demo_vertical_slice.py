@@ -14,6 +14,7 @@ Runs the complete Claudio intent pipeline on a real multitrack WAV file:
 Usage:
   python demo_vertical_slice.py [--source path/to/file.wav] [--output-dir ./demo_output]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -42,8 +43,8 @@ def load_wav(path: Path, target_sr: int = 44_100) -> np.ndarray:
             n_samples = len(raw) // 3
             samples = np.zeros(n_samples, dtype=np.float32)
             for i in range(n_samples):
-                val = struct.unpack_from("<i", raw[i * 3:i * 3 + 3] + b"\x00")[0]
-                samples[i] = val / (2 ** 23)
+                val = struct.unpack_from("<i", raw[i * 3 : i * 3 + 3] + b"\x00")[0]
+                samples[i] = val / (2**23)
         else:
             samples = np.frombuffer(raw, dtype=np.float32)
 
@@ -92,8 +93,10 @@ def main() -> None:
     start = int(args.start_sec * sr)
     end = int((args.start_sec + args.duration_sec) * sr)
     clip = audio[start:end]
-    print(f"   Clip: {args.start_sec:.1f}s → {args.start_sec + args.duration_sec:.1f}s "
-          f"({len(clip)} samples, {len(clip)/sr:.1f}s)")
+    print(
+        f"   Clip: {args.start_sec:.1f}s → {args.start_sec + args.duration_sec:.1f}s "
+        f"({len(clip)} samples, {len(clip) / sr:.1f}s)"
+    )
     print()
 
     # ── 2. Encode Intents ─────────────────────────────────────────────
@@ -108,11 +111,12 @@ def main() -> None:
     onset_frames = [f for f in frames if f.is_onset]
 
     print(f"   Frames extracted: {len(frames)}")
-    print(f"   Voiced frames:    {len(voiced_frames)} ({100*len(voiced_frames)/max(1,len(frames)):.0f}%)")
-    print(f"   Silent frames:    {len(silent_frames)} ({100*len(silent_frames)/max(1,len(frames)):.0f}%)")
+    print(f"   Voiced frames:    {len(voiced_frames)} ({100 * len(voiced_frames) / max(1, len(frames)):.0f}%)")
+    print(f"   Silent frames:    {len(silent_frames)} ({100 * len(silent_frames) / max(1, len(frames)):.0f}%)")
     print(f"   Onset events:     {len(onset_frames)}")
-    print(f"   Encode time:      {encode_time*1000:.0f} ms "
-          f"(real-time factor: {args.duration_sec/encode_time:.1f}×)")
+    print(
+        f"   Encode time:      {encode_time * 1000:.0f} ms (real-time factor: {args.duration_sec / encode_time:.1f}×)"
+    )
     print()
 
     if voiced_frames:
@@ -140,12 +144,16 @@ def main() -> None:
         if restored_packet.frame is not None:
             restored_frames.append(restored_packet.frame)
         else:
-            restored_frames.append(IntentFrame(
-                timestamp_ms=restored_packet.timestamp_ms,
-                f0_hz=0.0, f0_confidence=0.0,
-                loudness_db=-80.0, loudness_norm=0.0,
-                spectral_centroid_hz=0.0,
-            ))
+            restored_frames.append(
+                IntentFrame(
+                    timestamp_ms=restored_packet.timestamp_ms,
+                    f0_hz=0.0,
+                    f0_confidence=0.0,
+                    loudness_db=-80.0,
+                    loudness_norm=0.0,
+                    spectral_centroid_hz=0.0,
+                )
+            )
 
     raw_pcm_bytes = len(clip) * 2  # 16-bit mono
     compression = 1.0 - (total_bytes / raw_pcm_bytes)
@@ -153,13 +161,13 @@ def main() -> None:
     pcm_rate = raw_pcm_bytes / args.duration_sec
 
     print(f"   Total packets:    {len(frames)}")
-    print(f"   Silence packets:  {silence_packets} ({100*silence_packets/max(1,len(frames)):.0f}%)")
-    print(f"   Wire bytes:       {total_bytes:,} ({total_bytes/1024:.1f} KB)")
-    print(f"   Raw PCM bytes:    {raw_pcm_bytes:,} ({raw_pcm_bytes/1024:.1f} KB)")
+    print(f"   Silence packets:  {silence_packets} ({100 * silence_packets / max(1, len(frames)):.0f}%)")
+    print(f"   Wire bytes:       {total_bytes:,} ({total_bytes / 1024:.1f} KB)")
+    print(f"   Raw PCM bytes:    {raw_pcm_bytes:,} ({raw_pcm_bytes / 1024:.1f} KB)")
     print(f"   Compression:      {compression:.1%}")
-    print(f"   Intent bandwidth: {intent_rate/1024:.1f} KB/s")
-    print(f"   PCM bandwidth:    {pcm_rate/1024:.1f} KB/s")
-    print(f"   Bandwidth saving: {pcm_rate/1024 - intent_rate/1024:.1f} KB/s saved")
+    print(f"   Intent bandwidth: {intent_rate / 1024:.1f} KB/s")
+    print(f"   PCM bandwidth:    {pcm_rate / 1024:.1f} KB/s")
+    print(f"   Bandwidth saving: {pcm_rate / 1024 - intent_rate / 1024:.1f} KB/s saved")
     print()
 
     # ── 4. Decode / Regenerate ────────────────────────────────────────
@@ -169,9 +177,10 @@ def main() -> None:
     regenerated = decoder.decode_frames(restored_frames)
     decode_time = time.monotonic() - t0
 
-    print(f"   Regenerated:      {len(regenerated)} samples ({len(regenerated)/sr:.1f}s)")
-    print(f"   Decode time:      {decode_time*1000:.0f} ms "
-          f"(real-time factor: {args.duration_sec/decode_time:.1f}×)")
+    print(f"   Regenerated:      {len(regenerated)} samples ({len(regenerated) / sr:.1f}s)")
+    print(
+        f"   Decode time:      {decode_time * 1000:.0f} ms (real-time factor: {args.duration_sec / decode_time:.1f}×)"
+    )
     print()
 
     # ── 5. Quality Metrics ────────────────────────────────────────────
@@ -182,8 +191,8 @@ def main() -> None:
     rms_orig = float(np.sqrt(np.mean(clip[:min_len] ** 2)))
     rms_regen = float(np.sqrt(np.mean(regenerated[:min_len] ** 2)))
     rms_diff_db = 20 * math.log10((rms_regen + 1e-10) / (rms_orig + 1e-10))
-    print(f"   RMS original:     {20*math.log10(rms_orig+1e-10):.1f} dB")
-    print(f"   RMS regenerated:  {20*math.log10(rms_regen+1e-10):.1f} dB")
+    print(f"   RMS original:     {20 * math.log10(rms_orig + 1e-10):.1f} dB")
+    print(f"   RMS regenerated:  {20 * math.log10(rms_regen + 1e-10):.1f} dB")
     print(f"   RMS difference:   {rms_diff_db:+.1f} dB")
 
     # Spectral correlation
@@ -228,9 +237,13 @@ def main() -> None:
     print("═" * 70)
     print()
     print(f"  ✅ Intent extraction:   {len(frames)} frames at 250Hz")
-    print(f"  ✅ Wire protocol:       {compression:.0%} compression ({intent_rate/1024:.1f} KB/s vs {pcm_rate/1024:.1f} KB/s)")
-    print(f"  ✅ Audio regeneration:  {len(regenerated)/sr:.1f}s from intent packets")
-    print(f"  ✅ Real-time capable:   encode {args.duration_sec/encode_time:.0f}× / decode {args.duration_sec/decode_time:.0f}× real-time")
+    print(
+        f"  ✅ Wire protocol:       {compression:.0%} compression ({intent_rate / 1024:.1f} KB/s vs {pcm_rate / 1024:.1f} KB/s)"
+    )
+    print(f"  ✅ Audio regeneration:  {len(regenerated) / sr:.1f}s from intent packets")
+    print(
+        f"  ✅ Real-time capable:   encode {args.duration_sec / encode_time:.0f}× / decode {args.duration_sec / decode_time:.0f}× real-time"
+    )
     print(f"  ✅ A/B comparison:      saved to {output_dir}/")
     print()
     print("  Pipeline proven: Audio → Intent → Wire → Intent → Audio ✓")

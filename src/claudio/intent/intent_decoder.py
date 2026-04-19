@@ -116,8 +116,7 @@ class IntentDecoder:
 
             # Interpolate from previous *smoothed* F0 to current smoothed F0
             prev_smooth_f0 = (
-                float(np.median(self._f0_history_buf[:-1])) if len(self._f0_history_buf) > 1
-                else smoothed_f0
+                float(np.median(self._f0_history_buf[:-1])) if len(self._f0_history_buf) > 1 else smoothed_f0
             )
             f0_interp = np.linspace(prev_smooth_f0, smoothed_f0, n)
 

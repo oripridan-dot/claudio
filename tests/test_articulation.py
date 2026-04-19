@@ -7,6 +7,7 @@ def generate_tone(freq, duration_ms, sr=44100, amplitude=0.5):
     t = np.linspace(0, duration_ms / 1000, int(sr * duration_ms / 1000))
     return amplitude * np.sin(2 * np.pi * freq * t)
 
+
 def test_articulation_staccato():
     sr = 44100
     encoder = IntentEncoder(sample_rate=sr)
@@ -25,6 +26,7 @@ def test_articulation_staccato():
     articulations = [f.articulation_mode for f in frames if f.articulation_mode == ArticulationMode.STACCATO]
     assert len(articulations) > 0, "Failed to detect Staccato articulation for sharp decay"
 
+
 def test_articulation_legato():
     sr = 44100
     encoder = IntentEncoder(sample_rate=sr)
@@ -38,6 +40,7 @@ def test_articulation_legato():
     # Check if LEGATO was detected
     articulations = [f.articulation_mode for f in frames if f.articulation_mode == ArticulationMode.LEGATO]
     assert len(articulations) > 0, "Failed to detect Legato articulation for sustained tone"
+
 
 def test_articulation_neutral():
     sr = 44100

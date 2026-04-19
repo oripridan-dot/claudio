@@ -26,12 +26,14 @@ import math
 import os
 import sys
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+
+from benchmark_utils import _sine
 
 from claudio.hrtf_engine import AudioSource, HRTFBinauralEngine
 from claudio.signal_flow_config import (
@@ -44,13 +46,12 @@ from .benchmark_utils import (
     AudioSample,
     SampleResult,
     SpatialPoint,
-    generate_samples,
-    measure_processing_snr,
-    measure_spectral_preservation,
-    measure_itd,
-    measure_ild,
-    woodworth_itd,
     brown_duda_ild,
+    generate_samples,
+    measure_ild,
+    measure_itd,
+    measure_spectral_preservation,
+    woodworth_itd,
 )
 
 # ═══════════════════════════════════════════════════════════════════════

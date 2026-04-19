@@ -112,6 +112,7 @@ async def health() -> dict:
 class CreateRoomRequest(BaseModel):
     username: str = "guest"
 
+
 @app.post("/api/collab/create")
 async def create_collab_room(req: CreateRoomRequest = None) -> dict:
     """Create a new collaboration room based on billing tier."""
@@ -120,15 +121,13 @@ async def create_collab_room(req: CreateRoomRequest = None) -> dict:
 
     # We allow standard users to create basic rooms, but flag premium context
     room_id = await collab_manager.create_room()
-    return {
-        "room_id": room_id,
-        "ws_url": f"/ws/collab/{room_id}",
-        "tier_granted": tier
-    }
+    return {"room_id": room_id, "ws_url": f"/ws/collab/{room_id}", "tier_granted": tier}
+
 
 class StripeWebhookPayload(BaseModel):
     type: str
     data: dict
+
 
 @app.post("/api/billing/webhook")
 async def stripe_webhook(payload: StripeWebhookPayload) -> dict:
@@ -154,11 +153,4 @@ async def collab_ws(ws: WebSocket, room_id: str) -> None:
         await ws.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
-    await handle_collab_ws(
-        ws,
-        room_id,
-        collab_manager,
-        webrtc_manager,
-        global_ddsp_decoder,
-        user_payload
-    )
+    await handle_collab_ws(ws, room_id, collab_manager, webrtc_manager, global_ddsp_decoder, user_payload)

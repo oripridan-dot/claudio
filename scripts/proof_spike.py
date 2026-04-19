@@ -68,7 +68,7 @@ def rms_error(original: np.ndarray, reconstructed: np.ndarray) -> float:
     """Compute RMS error in dB."""
     min_len = min(len(original), len(reconstructed))
     error = original[:min_len] - reconstructed[:min_len]
-    rms = np.sqrt(np.mean(error ** 2) + 1e-10)
+    rms = np.sqrt(np.mean(error**2) + 1e-10)
     return 20 * np.log10(rms)
 
 
@@ -83,7 +83,7 @@ print("╚═══════════════════════�
 FIXTURE = "tests/audio_fixtures/electric_guitar.wav"
 print(f"\n  Loading: {FIXTURE}")
 audio, sr = load_wav(FIXTURE)
-print(f"  Sample rate: {sr} Hz, Duration: {len(audio)/sr:.2f}s, Samples: {len(audio)}")
+print(f"  Sample rate: {sr} Hz, Duration: {len(audio) / sr:.2f}s, Samples: {len(audio)}")
 
 # Use 2 seconds max for the test
 max_samples = sr * 2
@@ -116,8 +116,8 @@ duration = len(audio) / sr
 bw_kbps = (total_bytes * 8) / duration / 1000
 
 print(f"  Frames extracted: {len(frames)}")
-print(f"  Encode time: {t_encode*1000:.1f}ms")
-print(f"  Decode time: {t_decode*1000:.1f}ms")
+print(f"  Encode time: {t_encode * 1000:.1f}ms")
+print(f"  Decode time: {t_decode * 1000:.1f}ms")
 print(f"  Wire bandwidth: {total_bytes} bytes = {bw_kbps:.1f} kbps")
 print(f"  RMS error: {rms_error(audio, regen):.1f} dBFS")
 print(f"  Output: {OUTPUT_DIR}/regen_additive.wav")
@@ -164,6 +164,7 @@ try:
     # Resample back to original SR for comparison
     if sr != 24000:
         import torchaudio
+
         regen_ec_tensor = torch.from_numpy(regen_ec).float().unsqueeze(0)
         resampler = torchaudio.transforms.Resample(24000, sr)
         regen_ec = resampler(regen_ec_tensor).squeeze().numpy()
@@ -173,8 +174,8 @@ try:
     ec_bw_kbps = (codec_bytes * 8) / duration / 1000
 
     print(f"  EnCodec bandwidth: {codec_bytes} bytes = {ec_bw_kbps:.1f} kbps (target: 6 kbps)")
-    print(f"  Encode time: {t_encode_ec*1000:.1f}ms")
-    print(f"  Decode time: {t_decode_ec*1000:.1f}ms")
+    print(f"  Encode time: {t_encode_ec * 1000:.1f}ms")
+    print(f"  Decode time: {t_decode_ec * 1000:.1f}ms")
     print(f"  RMS error: {rms_error(audio, regen_ec):.1f} dBFS")
     print(f"  Output: {OUTPUT_DIR}/regen_encodec_6kbps.wav")
 
@@ -210,10 +211,10 @@ print("  BANDWIDTH COMPARISON")
 print("  ═══════════════════════════════════════════════════")
 raw_bw = sr * 2 * 8 / 1000  # 16-bit mono PCM
 print(f"  Raw PCM (16-bit mono):     {raw_bw:.0f} kbps")
-print(f"  Intent packets (additive): {bw_kbps:.1f} kbps  ({raw_bw/bw_kbps:.0f}× compression)")
+print(f"  Intent packets (additive): {bw_kbps:.1f} kbps  ({raw_bw / bw_kbps:.0f}× compression)")
 if ec_bw_kbps > 0:
-    print(f"  EnCodec @ 6 kbps:          {ec_bw_kbps:.1f} kbps  ({raw_bw/ec_bw_kbps:.0f}× compression)")
-    print(f"  EnCodec @ 24 kbps:         {ec_bw_hq:.1f} kbps ({raw_bw/ec_bw_hq:.0f}× compression)")
+    print(f"  EnCodec @ 6 kbps:          {ec_bw_kbps:.1f} kbps  ({raw_bw / ec_bw_kbps:.0f}× compression)")
+    print(f"  EnCodec @ 24 kbps:         {ec_bw_hq:.1f} kbps ({raw_bw / ec_bw_hq:.0f}× compression)")
 print(f"\n  ⚡ Hybrid (intent + encodec 6k): ~{bw_kbps + 6:.0f} kbps total")
-print(f"     Still {raw_bw/(bw_kbps+6):.0f}× less than raw PCM")
+print(f"     Still {raw_bw / (bw_kbps + 6):.0f}× less than raw PCM")
 print("  ═══════════════════════════════════════════════════")

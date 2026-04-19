@@ -8,6 +8,7 @@ All audio generated at 48kHz/32-bit float for maximum browser compatibility.
 Claudio internally renders at 192kHz then the engine outputs at render rate,
 which we downsample back to 48kHz for the WAV export.
 """
+
 from __future__ import annotations
 
 import math
@@ -31,6 +32,7 @@ SR = 48_000  # export sample rate
 # ═══════════════════════════════════════════════════════════════════════
 # High-Fidelity Audio Synthesis
 # ═══════════════════════════════════════════════════════════════════════
+
 
 def guitar_chord(dur: float = 3.0) -> np.ndarray:
     """Rich acoustic guitar chord (Am7) via Karplus-Strong with body resonance."""
@@ -80,14 +82,14 @@ def piano_melody(dur: float = 4.0) -> np.ndarray:
 
     # C major arpeggio: C4, E4, G4, C5, then resolve to C4
     notes = [
-        (261.63, 0.0, 1.5),   # C4
-        (329.63, 0.4, 1.2),   # E4
-        (392.00, 0.8, 1.0),   # G4
-        (523.25, 1.2, 0.8),   # C5
-        (493.88, 1.8, 1.0),   # B4
-        (440.00, 2.2, 1.0),   # A4
-        (392.00, 2.6, 0.8),   # G4
-        (261.63, 3.0, 1.0),   # C4 resolve
+        (261.63, 0.0, 1.5),  # C4
+        (329.63, 0.4, 1.2),  # E4
+        (392.00, 0.8, 1.0),  # G4
+        (523.25, 1.2, 0.8),  # C5
+        (493.88, 1.8, 1.0),  # B4
+        (440.00, 2.2, 1.0),  # A4
+        (392.00, 2.6, 0.8),  # G4
+        (261.63, 3.0, 1.0),  # C4 resolve
     ]
 
     for f0, onset_s, note_dur in notes:
@@ -105,7 +107,7 @@ def piano_melody(dur: float = 4.0) -> np.ndarray:
             if f_h > SR / 2:
                 break
             # Amplitude: higher harmonics decay faster
-            amp = 1.0 / (h ** 0.65)
+            amp = 1.0 / (h**0.65)
             # Hammer position affects odd/even balance
             hammer_pos = 0.12  # hammer strikes at 12% of string length
             hammer_weight = abs(math.sin(math.pi * h * hammer_pos))
@@ -122,7 +124,7 @@ def piano_melody(dur: float = 4.0) -> np.ndarray:
         sig *= vel
 
         mx_note = np.max(np.abs(sig)) + 1e-10
-        mix[onset:onset + note_n] += sig / mx_note * 0.6
+        mix[onset : onset + note_n] += sig / mx_note * 0.6
 
     mx = np.max(np.abs(mix)) + 1e-10
     return (mix / mx * 0.85).astype(np.float32)
@@ -146,13 +148,18 @@ def full_band_mix(dur: float = 4.0) -> np.ndarray:
         bass = np.zeros(seg_n, dtype=np.float64)
         for h in range(1, 5):
             bass += (0.8 / h) * np.sin(2 * np.pi * f0 * h * seg_t) * env
-        mix[start:start + seg_n] += bass * 0.35
+        mix[start : start + seg_n] += bass * 0.35
 
     # ── Electric piano / keys ───
     key_notes = [
-        (329.63, 0.0, 0.8), (349.23, 0.5, 0.6), (392.00, 1.0, 0.8),
-        (440.00, 1.5, 0.6), (493.88, 2.0, 0.8), (440.00, 2.5, 0.6),
-        (392.00, 3.0, 0.8), (329.63, 3.5, 0.5),
+        (329.63, 0.0, 0.8),
+        (349.23, 0.5, 0.6),
+        (392.00, 1.0, 0.8),
+        (440.00, 1.5, 0.6),
+        (493.88, 2.0, 0.8),
+        (440.00, 2.5, 0.6),
+        (392.00, 3.0, 0.8),
+        (329.63, 3.5, 0.5),
     ]
     for f0, onset, nd in key_notes:
         start = int(onset * SR)
@@ -167,12 +174,16 @@ def full_band_mix(dur: float = 4.0) -> np.ndarray:
         # FM shimmer
         mod = 1.0 + 0.02 * np.sin(2 * np.pi * 5.5 * seg_t)
         keys *= mod
-        mix[start:start + seg_n] += keys * env * 0.2
+        mix[start : start + seg_n] += keys * env * 0.2
 
     # ── Lead melody (sawtooth-ish with vibrato) ───
     lead_notes = [
-        (523.25, 0.5, 0.4), (587.33, 1.0, 0.4), (659.26, 1.5, 0.6),
-        (587.33, 2.2, 0.3), (523.25, 2.6, 0.5), (440.00, 3.2, 0.8),
+        (523.25, 0.5, 0.4),
+        (587.33, 1.0, 0.4),
+        (659.26, 1.5, 0.6),
+        (587.33, 2.2, 0.3),
+        (523.25, 2.6, 0.5),
+        (440.00, 3.2, 0.8),
     ]
     for f0, onset, nd in lead_notes:
         start = int(onset * SR)
@@ -186,7 +197,7 @@ def full_band_mix(dur: float = 4.0) -> np.ndarray:
         for h in range(1, 10):
             lead += (0.5 / h) * np.sin(h * phase) * ((-1) ** (h + 1))
         env = np.exp(-seg_t * 2) * (1 - np.exp(-seg_t * 60))
-        mix[start:start + seg_n] += lead * env * 0.15
+        mix[start : start + seg_n] += lead * env * 0.15
 
     # ── Drums ───
     bpm = 120
@@ -201,21 +212,23 @@ def full_band_mix(dur: float = 4.0) -> np.ndarray:
                 kick_env = np.exp(-kick_t * 25)
                 kick_pitch = 55 + 100 * np.exp(-kick_t * 40)
                 kick = np.sin(2 * np.pi * np.cumsum(kick_pitch / SR)) * kick_env
-                mix[pos:pos + kick_n] += kick * 0.4
+                mix[pos : pos + kick_n] += kick * 0.4
         # Snare on 2, 4
         if beat % 2 == 1:
             snr_n = min(int(0.12 * SR), n - pos)
             if snr_n > 0:
                 snr_t = np.arange(snr_n, dtype=np.float64) / SR
-                snare = (rng.normal(0, 1, snr_n) * np.exp(-snr_t * 18) * 0.3
-                         + np.sin(2 * np.pi * 200 * snr_t) * np.exp(-snr_t * 30) * 0.5)
-                mix[pos:pos + snr_n] += snare * 0.3
+                snare = (
+                    rng.normal(0, 1, snr_n) * np.exp(-snr_t * 18) * 0.3
+                    + np.sin(2 * np.pi * 200 * snr_t) * np.exp(-snr_t * 30) * 0.5
+                )
+                mix[pos : pos + snr_n] += snare * 0.3
         # Hi-hat on every beat
         hh_n = min(int(0.04 * SR), n - pos)
         if hh_n > 0:
             hh_t = np.arange(hh_n, dtype=np.float64) / SR
             hh = rng.normal(0, 1, hh_n) * np.exp(-hh_t * 60)
-            mix[pos:pos + hh_n] += hh * 0.12
+            mix[pos : pos + hh_n] += hh * 0.12
 
     mx = np.max(np.abs(mix)) + 1e-10
     return (mix / mx * 0.85).astype(np.float32)
@@ -258,6 +271,7 @@ def orchestral_swell(dur: float = 4.0) -> np.ndarray:
 # WAV Export (32-bit float)
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def write_wav_float32(path: Path, data: np.ndarray, sr: int, channels: int = 1):
     """Write 32-bit float WAV file (IEEE float format)."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -274,13 +288,13 @@ def write_wav_float32(path: Path, data: np.ndarray, sr: int, channels: int = 1):
         f.write(b"WAVE")
         # fmt chunk (IEEE float = format 3)
         f.write(b"fmt ")
-        f.write(struct.pack("<I", 16))      # chunk size
-        f.write(struct.pack("<H", 3))       # IEEE float
+        f.write(struct.pack("<I", 16))  # chunk size
+        f.write(struct.pack("<H", 3))  # IEEE float
         f.write(struct.pack("<H", channels))
         f.write(struct.pack("<I", sr))
         f.write(struct.pack("<I", sr * channels * 4))  # byte rate
-        f.write(struct.pack("<H", channels * 4))       # block align
-        f.write(struct.pack("<H", 32))      # bits per sample
+        f.write(struct.pack("<H", channels * 4))  # block align
+        f.write(struct.pack("<H", 32))  # bits per sample
         # data chunk
         f.write(b"data")
         f.write(struct.pack("<I", data_size))
@@ -293,8 +307,11 @@ def write_wav_float32(path: Path, data: np.ndarray, sr: int, channels: int = 1):
 # Claudio HRTF Processing
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def process_binaural(
-    mono: np.ndarray, azimuth: float = 45.0, elevation: float = 0.0,
+    mono: np.ndarray,
+    azimuth: float = 45.0,
+    elevation: float = 0.0,
 ) -> np.ndarray:
     """Process mono audio through Claudio HRTF → stereo binaural."""
     config = balanced_config()
@@ -303,11 +320,13 @@ def process_binaural(
 
     az_rad = math.radians(azimuth)
     el_rad = math.radians(elevation)
-    pos = np.array([
-        2.0 * math.sin(az_rad) * math.cos(el_rad),
-        2.0 * math.sin(el_rad),
-        -2.0 * math.cos(az_rad) * math.cos(el_rad),
-    ])
+    pos = np.array(
+        [
+            2.0 * math.sin(az_rad) * math.cos(el_rad),
+            2.0 * math.sin(el_rad),
+            -2.0 * math.cos(az_rad) * math.cos(el_rad),
+        ]
+    )
 
     src = AudioSource(source_id="demo", position=pos)
     engine.add_source(src)
@@ -320,7 +339,7 @@ def process_binaural(
     out_l_list, out_r_list = [], []
 
     for b in range(n_blocks):
-        chunk = data[b * block:(b + 1) * block]
+        chunk = data[b * block : (b + 1) * block]
         if len(chunk) < block:
             chunk = np.pad(chunk, (0, block - len(chunk)))
         frame = engine.render({"demo": chunk})
@@ -362,7 +381,7 @@ def process_intent_resynthesis(mono: np.ndarray) -> np.ndarray:
         if len(block) < encoder.frame_len:
             block = np.pad(block, (0, encoder.frame_len - len(block)))
 
-        frames = encoder.encode_block(block, start_time_ms=(start/SR)*1000)
+        frames = encoder.encode_block(block, start_time_ms=(start / SR) * 1000)
 
         if frames:
             frame = frames[0]

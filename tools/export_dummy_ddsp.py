@@ -16,12 +16,7 @@ class DummyDDSP(nn.Module):
         self.fc_loud = nn.Linear(1, 16)
         self.fc_z = nn.Linear(13, 32)
 
-        self.hidden = nn.Sequential(
-            nn.Linear(64, 128),
-            nn.ReLU(),
-            nn.Linear(128, 128),
-            nn.ReLU()
-        )
+        self.hidden = nn.Sequential(nn.Linear(64, 128), nn.ReLU(), nn.Linear(128, 128), nn.ReLU())
 
         self.out_harmonics = nn.Linear(128, n_harmonics)
         self.out_noise = nn.Linear(128, n_noise)
@@ -41,6 +36,7 @@ class DummyDDSP(nn.Module):
 
         return harmonics, noise
 
+
 def main():
     model = DummyDDSP()
     model.eval()
@@ -59,18 +55,19 @@ def main():
         model,
         (f0, loudness, z),
         out_path,
-        input_names=['f0', 'loudness', 'z'],
-        output_names=['harmonics', 'noise'],
+        input_names=["f0", "loudness", "z"],
+        output_names=["harmonics", "noise"],
         dynamic_axes={
-            'f0': {0: 'batch', 1: 'time'},
-            'loudness': {0: 'batch', 1: 'time'},
-            'z': {0: 'batch', 1: 'time'},
-            'harmonics': {0: 'batch', 1: 'time'},
-            'noise': {0: 'batch', 1: 'time'},
+            "f0": {0: "batch", 1: "time"},
+            "loudness": {0: "batch", 1: "time"},
+            "z": {0: "batch", 1: "time"},
+            "harmonics": {0: "batch", 1: "time"},
+            "noise": {0: "batch", 1: "time"},
         },
-        opset_version=14
+        opset_version=14,
     )
     print(f"Exported dummy DDSP model to {out_path}")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

@@ -13,6 +13,7 @@ from claudio.signal_flow_config import SignalFlowConfig
 MULTITRACK_DIR = "/Users/oripridan/Downloads/AllHailThePowerOfJesusName_MULTITRACKS_WAV"
 OUTPUT_PATH = "/Users/oripridan/ANTIGRAVITY/claudio/demo_output/multitrack_claudio_mix.wav"
 
+
 def main():
     sr = 44100
     cfg = SignalFlowConfig(capture_sample_rate=sr, render_sample_rate=sr, fft_size=512, hrir_length=256)
@@ -31,13 +32,13 @@ def main():
 
     positions = [
         np.array([-2.0, 0.0, -1.0]),  # left
-        np.array([2.0, 0.0, -1.0]),   # right
+        np.array([2.0, 0.0, -1.0]),  # right
         np.array([-1.0, 0.5, -2.0]),  # center left
-        np.array([1.0, 0.5, -2.0]),   # center right
+        np.array([1.0, 0.5, -2.0]),  # center right
         np.array([0.0, -0.5, -3.0]),  # bottom
-        np.array([0.0, 1.0, -2.0]),   # top
-        np.array([-3.0, 0.0, 0.0]),   # hard left
-        np.array([3.0, 0.0, 0.0]),    # hard right
+        np.array([0.0, 1.0, -2.0]),  # top
+        np.array([-3.0, 0.0, 0.0]),  # hard left
+        np.array([3.0, 0.0, 0.0]),  # hard right
     ]
 
     decoder_model = "/Users/oripridan/ANTIGRAVITY/claudio/checkpoints/forge_model_best.pt"
@@ -77,7 +78,7 @@ def main():
         if actual_len > max_len:
             max_len = actual_len
 
-        print(f"[{i+1}/8] Translating {file} to Intent Packets -> DDSP Neural Decoder...")
+        print(f"[{i + 1}/8] Translating {file} to Intent Packets -> DDSP Neural Decoder...")
 
         encoder = IntentEncoder(sample_rate=sr)
         decoder = IntentDecoder(sample_rate=sr, model_path=decoder_model)
@@ -86,10 +87,10 @@ def main():
         n_chunks = max_samples // chunk_size
         decoded_chunks = []
         for c in range(n_chunks):
-            chunk = waveform[c*chunk_size : (c+1)*chunk_size]
+            chunk = waveform[c * chunk_size : (c + 1) * chunk_size]
 
             # 1. Semantic pipeline (Mentors/UI)
-            frames = encoder.encode_block(chunk, start_time_ms=c*1000.0)
+            frames = encoder.encode_block(chunk, start_time_ms=c * 1000.0)
 
             # 2. Audio Latent pipeline (Polyphonic transport)
             if getattr(decoder, "use_ddsp", False):
@@ -125,7 +126,7 @@ def main():
                 buffers[name] = chunk
             else:
                 pad = np.zeros(block, dtype=np.float32)
-                pad[:len(chunk)] = chunk
+                pad[: len(chunk)] = chunk
                 buffers[name] = pad
 
         frame = engine.render(buffers)
@@ -143,5 +144,6 @@ def main():
     write_wav_stereo(OUTPUT_PATH, out_l, out_r, sr)
     print(f"\n✅ Binaural Spatial Mix saved to:\n{OUTPUT_PATH}")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

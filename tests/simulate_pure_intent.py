@@ -11,13 +11,14 @@ def _sine(freq: float, dur: float, sr: int) -> np.ndarray:
     t = np.arange(int(sr * dur), dtype=np.float64) / sr
     return (np.sin(2 * np.pi * freq * t) * 0.8).astype(np.float32)
 
+
 def simulate_pure_intent_latency():
     print("=" * 60)
     print("  CLAUDIO v3.0 PURE INTENT LATENCY SIMULATION")
     print("=" * 60)
 
     sr = 48000
-    block_size = int(sr / 120) # 120Hz frame rate -> 400 samples
+    block_size = int(sr / 120)  # 120Hz frame rate -> 400 samples
 
     encoder = IntentEncoder(sample_rate=sr)
     decoder = IntentDecoder(sample_rate=sr)
@@ -28,7 +29,7 @@ def simulate_pure_intent_latency():
 
     encode_times = []
     pack_times = []
-    transmit_sim_network_ms = 1.0 # 1ms LAN assumed
+    transmit_sim_network_ms = 1.0  # 1ms LAN assumed
     decode_times = []
 
     print(f"\n▶ Simulating 1 second of audio at {120}Hz framerate (block_size: {block_size})...")
@@ -49,6 +50,7 @@ def simulate_pure_intent_latency():
         # 3. Decode
         t0 = time.perf_counter()
         from claudio.intent.intent_protocol import IntentPacket
+
         restored = [IntentPacket.from_bytes(p).frame for p in packets if IntentPacket.from_bytes(p).frame]
         decoder.decode_frames(restored)
         t_decode = (time.perf_counter() - t0) * 1000
@@ -78,6 +80,7 @@ def simulate_pure_intent_latency():
         print("\n✅ PASSED: Total Latency is well under the 15ms promise!")
     else:
         print("\n❌ FAILED: Latency exceeded 15ms target.")
+
 
 if __name__ == "__main__":
     simulate_pure_intent_latency()

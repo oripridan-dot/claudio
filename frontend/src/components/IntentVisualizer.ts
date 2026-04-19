@@ -209,7 +209,8 @@ export function drawSpatialArena(
   ctx: CanvasRenderingContext2D,
   peers: PeerInfo[],
   w: number,
-  h: number
+  h: number,
+  localRms: number = 0
 ): void {
   ctx.clearRect(0, 0, w, h);
   
@@ -224,19 +225,40 @@ export function drawSpatialArena(
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
   const cx = w / 2;
   const cy = h / 2;
-  for (let r = 50; r < Math.min(w, h); r += 80) {
+  for (let r = 80; r < Math.min(w, h); r += 80) {
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.stroke();
   }
 
-  // Draw local user in center
-  ctx.shadowBlur = 15;
+  // Draw local user in center (Distinct Server/Base Station look + Audio Reactive)
+  ctx.shadowBlur = 25;
   ctx.shadowColor = '#00ff88';
-  ctx.fillStyle = '#00ff88';
+  ctx.fillStyle = '#0a2a1a'; // Inner dark
+  
+  const baseSize = 14 + (localRms * 120); // Responds to audio energy
+  
   ctx.beginPath();
-  ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+  ctx.moveTo(cx, cy - baseSize);
+  ctx.lineTo(cx + baseSize, cy);
+  ctx.lineTo(cx, cy + baseSize);
+  ctx.lineTo(cx - baseSize, cy);
+  ctx.closePath();
   ctx.fill();
+
+  ctx.strokeStyle = '#00ff88';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Glow pulse ring around YOU based on localRms
+  ctx.strokeStyle = `rgba(0, 255, 136, ${0.3 + localRms * 2})`;
+  ctx.lineDashOffset = Date.now() / -20;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.arc(cx, cy, baseSize + 8, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]); // Reset dash
+
   ctx.shadowBlur = 0;
   ctx.fillStyle = '#fff';
   ctx.font = '10px JetBrains Mono, monospace';
@@ -251,14 +273,14 @@ export function drawSpatialArena(
 
   // Draw peers
   peers.forEach((peer, i) => {
-    // Map latency to radius (max 500ms -> outer edge)
+    // Spread peers farther apart
     const lat = Math.min(Math.max(peer.latency_ms ?? 0, 10), 500);
-    const radius = 50 + (lat / 500) * (Math.min(w, h) / 2 - 50);
+    const radius = 120 + (lat / 500) * (Math.min(w, h) / 2 - 140);
     
     // Spread evenly around the circle
     const angle = (i / peers.length) * Math.PI * 2;
-    const px = cx + Math.cos(angle) * radius;
-    const py = cy + Math.sin(angle) * radius;
+    const px = cx + Math.cos(angle) * Math.max(radius, 100);
+    const py = cy + Math.sin(angle) * Math.max(radius, 100);
 
     // Glowing peer node
     let color = '#ff6644'; // default
@@ -271,18 +293,19 @@ export function drawSpatialArena(
     ctx.shadowColor = color;
     ctx.fillStyle = color;
     
-    // Pulse effect based on packet traffic
-    const pulse = 1.0 + Math.sin(Date.now() / 150 + i) * 0.2;
+    // Pulse effect based on packet traffic AND audio energy
+    const audioPulse = (peer.rmsEnergy || 0) * 100;
+    const pulse = 1.0 + Math.sin(Date.now() / 150 + i) * 0.2 + audioPulse;
     
     ctx.beginPath();
     ctx.arc(px, py, 8 * pulse, 0, Math.PI * 2);
     ctx.fill();
 
-    // Pulse rings
+    // Pulse rings corresponding to audio
     ctx.strokeStyle = color + '40';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(px, py, 14 * pulse, 0, Math.PI * 2);
+    ctx.arc(px, py, 14 * pulse + (audioPulse * 2), 0, Math.PI * 2);
     ctx.stroke();
     ctx.shadowBlur = 0;
 

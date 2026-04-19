@@ -68,7 +68,6 @@ ignore = ["E501", "SIM102", "SIM108", "SIM110"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "PLR2004", "F841"]
 "src/claudio/metering/semantic_metering.py" = ["F401", "E402"]  # intentional re-exports
-"scripts/train_forge.py" = ["E402"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["claudio"]

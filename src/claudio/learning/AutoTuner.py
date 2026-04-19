@@ -10,11 +10,8 @@ import random
 import time
 
 # Mock values for hyper-params
-params = {
-    'mfcc_bins': 13,
-    'yin_threshold': 0.85,
-    'onset_leniency': 0.05
-}
+params = {"mfcc_bins": 13, "yin_threshold": 0.85, "onset_leniency": 0.05}
+
 
 def optimize_loop():
     print("====================================")
@@ -24,8 +21,8 @@ def optimize_loop():
 
     for epoch in range(1, 4):
         print(f"\n[Epoch {epoch}] Tweaking thresholds...")
-        params['yin_threshold'] -= 0.02
-        params['onset_leniency'] -= 0.01
+        params["yin_threshold"] -= 0.02
+        params["onset_leniency"] -= 0.01
 
         # Simulating heavy calibration calculation
         time.sleep(1.0)
@@ -40,6 +37,7 @@ def optimize_loop():
             return
 
     print("\n❌ FAILED TO CONVERGE. Manual architectural intervention required.")
+
 
 if __name__ == "__main__":
     optimize_loop()

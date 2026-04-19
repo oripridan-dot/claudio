@@ -68,7 +68,7 @@ def measure_transient_error(original: np.ndarray, processed: np.ndarray, sr: int
     def get_env(audio):
         env = []
         for i in range(0, len(audio) - hop, hop):
-            env.append(np.sqrt(np.mean(audio[i:i+hop]**2) + 1e-10))
+            env.append(np.sqrt(np.mean(audio[i : i + hop] ** 2) + 1e-10))
         return np.array(env)
 
     diff_orig = np.diff(get_env(original))
@@ -93,7 +93,7 @@ def measure_snr_approx(original: np.ndarray, processed: np.ndarray) -> float:
     spec_proc = np.abs(np.fft.rfft(processed[:min_len].astype(np.float64)))
 
     signal_power = np.sum(spec_orig**2)
-    noise_power = np.sum((spec_orig - spec_proc)**2)
+    noise_power = np.sum((spec_orig - spec_proc) ** 2)
 
     if noise_power < 1e-10:
         return 100.0
@@ -129,7 +129,7 @@ def benchmark_sample(name: str, audio: np.ndarray, sr: int) -> ResynthesisResult
         t0_enc = time.perf_counter()
 
         # In real-time, encoder gets 'frame_len' window but outputs intent for 'hop'
-        frames = encoder.encode_block(block, start_time_ms=(start/sr)*1000)
+        frames = encoder.encode_block(block, start_time_ms=(start / sr) * 1000)
 
         # Only take the first frame for the current hop
         if frames:
@@ -176,7 +176,7 @@ def run():
     print("═" * 72)
     print("  CLAUDIO v3.0 — PURE INTENT RESYNTHESIS BENCHMARK")
     print("═" * 72)
-    print(f"⚙  Config: srcRate={SR//1000}kHz | IntentRate=250Hz")
+    print(f"⚙  Config: srcRate={SR // 1000}kHz | IntentRate=250Hz")
 
     samples = [
         ("Acoustic Guitar", guitar_chord(4.0)),
@@ -193,14 +193,20 @@ def run():
 
         print(f"  ✅ Latency  : Enc={res.avg_enc_latency_ms:.2f}ms | Dec={res.avg_dec_latency_ms:.3f}ms")
         print(f"  ✅ Bandwidth: {res.avg_payload_kbps:.1f} kbps")
-        print(f"  ✅ Fidelity : Spectral Corr = {res.spectral_preservation:.3f} | SNR = {res.snr_db:.1f} dB | Transient Error = {res.transient_error_ms:.1f} ms")
+        print(
+            f"  ✅ Fidelity : Spectral Corr = {res.spectral_preservation:.3f} | SNR = {res.snr_db:.1f} dB | Transient Error = {res.transient_error_ms:.1f} ms"
+        )
         print(f"  ✅ Perf     : {res.real_time_factor:.1f}x real-time")
 
-    print("\n\n" + "="*80)
+    print("\n\n" + "=" * 80)
     print(" 📊 PHASE 3 SCORECARD: NEURAL RESYNTHESIS METRICS MATRIX")
-    print("="*80)
-    print("\n| Instrument Profile | Latency (E2E) | Bandwidth | Spectral Corr (ViSQOL) | Spec SNR | Transient Err | RTF |")
-    print("|--------------------|---------------|-----------|------------------------|----------|---------------|-----|")
+    print("=" * 80)
+    print(
+        "\n| Instrument Profile | Latency (E2E) | Bandwidth | Spectral Corr (ViSQOL) | Spec SNR | Transient Err | RTF |"
+    )
+    print(
+        "|--------------------|---------------|-----------|------------------------|----------|---------------|-----|"
+    )
     for res in results:
         latency = f"{res.avg_enc_latency_ms + res.avg_dec_latency_ms:.2f}ms"
         bw = f"{res.avg_payload_kbps:.1f} kbps"

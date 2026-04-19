@@ -36,15 +36,15 @@ import {
 
 import { initIntentWebSocket, initIntentWebRTC } from './IntentWebRTC';
 import { encodePacket, decodePacket } from './protocol';
-import { DDSPDecoder } from './DDSPDecoder';
-import { RTCalibrationEngine } from './RTCalibrationEngine';
+
+import { scheduleAudioBlock, updateAudioRouting } from './IntentAudioOutput';
+import { requestMetrics } from './IntentTelemetry';
 
 const FRAME_RATE = 120;
 
 // ─── Intent Engine ──────────────────────────────────────────────────────────
 
 export class IntentEngine {
-  private rcEngine: RTCalibrationEngine | null = null;
   private latestLocalMelBands: any = new Float32Array(64);
   latestRemoteMelBands: any = new Float32Array(64);
   private deltaSeqCounter = 10000;
@@ -78,11 +78,9 @@ export class IntentEngine {
   peers: PeerInfo[] = [];
   connected = false;
 
-  // Remote regeneration — DDSP Neural Synth
-  private remoteSynth: DDSPDecoder | null = null;
+  // Remote intent caches for visualizer telemetry
+  remoteMelBandsCaches: Map<string, Float32Array> = new Map();
   private melFilterbank: Float32Array[] | null = null;
-  ddspMode = false;
-  localLoopback = false;
   nextAudioTime = 0;
 
   // Onset detection state
@@ -95,6 +93,8 @@ export class IntentEngine {
   serverUrl = '';
   displayName = '';
   jwtToken: string | null = null;
+  instrumentProfile = '';
+  environmentProfile = '';
 
   // Audio output routing
   masterOut: GainNode | null = null;
@@ -157,32 +157,8 @@ export class IntentEngine {
     // Ensure WASM core is ready for sub-millisecond intent extraction
     await initWasmDSP();
 
-    // High-fidelity neural DDSP for local loopback and remote regeneration
-    this.remoteSynth = new DDSPDecoder(this.audioCtx);
-    await this.remoteSynth.loadModel();
-
-    // Real-Time Auto-Calibration Loop (Ghost Observer)
-    this.rcEngine = new RTCalibrationEngine(this.audioCtx);
-    this.rcEngine.connectInputSource(source);
-    this.rcEngine.connectOutputTap(this.remoteSynth.getOutputNode());
-    
-    this.rcEngine.onAutoCalibrate = (metrics) => {
-        if (!this.remoteSynth) return;
-        
-        // Scenario A: The Bleeding Gate (Unvoiced DC Rumble Tracking)
-        if (metrics.inputMagnitudeDb < -55 && metrics.outputMagnitudeDb > -35) {
-            this.remoteSynth.setGateOverride(0.01);
-        } else {
-            this.remoteSynth.setGateOverride(1.0);
-        }
-
-        // Scenario B: The Muffled Synth (Brightness Shift)
-        if (metrics.inputCentroidHz > 3000 && metrics.outputCentroidHz < 1500) {
-            this.remoteSynth.setNoiseMultiplier(1.5);
-        } else {
-            this.remoteSynth.setNoiseMultiplier(1.0);
-        }
-    };
+    // In the new Clustered Architecture, we don't boot global remoteSynths.
+    // Telemetry and intents are extracted strictly to feed the UI Validation Worker.
 
     // [Learning Kit] Instantiate Shadow Worker if in teaching environment
     if (import.meta.env.VITE_APP_ENV === 'teaching') {
@@ -206,8 +182,6 @@ export class IntentEngine {
 
     this.captureInterval = window.setInterval(() => {
       if (!this.analyser || !this.audioCtx) return;
-
-      this.rcEngine?.updateMetrics();
 
       const timeDomain = new Float32Array(this.analyser.fftSize);
       this.analyser.getFloatTimeDomainData(timeDomain as Float32Array<ArrayBuffer>);
@@ -267,10 +241,6 @@ export class IntentEngine {
       const hybridFrame: IntentFrame = { ...pivot, melBands: this.latestLocalMelBands };
 
       this.onLocalIntent?.(hybridFrame);
-      
-      if (this.localLoopback) {
-          this.regenerateFromIntent(hybridFrame);
-      }
 
       // [Learning Kit] Post frame off main-thread to be ruthlessly evaluated
       if (this.shadowWorker) {
@@ -285,14 +255,11 @@ export class IntentEngine {
     }, Math.floor(1000 / FRAME_RATE));
   }
 
-  stopCapture(): void {
     this.isCapturing = false;
     if (this.captureInterval !== null) {
       clearInterval(this.captureInterval);
       this.captureInterval = null;
     }
-    this.remoteSynth?.destroy();
-    this.remoteSynth = null;
     if (this.shadowWorker) {
       this.shadowWorker.terminate();
       this.shadowWorker = null;
@@ -304,10 +271,12 @@ export class IntentEngine {
     this.audioCtx = null;
   }
 
-  async connectToRoom(serverUrl: string, roomId: string, name: string): Promise<void> {
+  async connectToRoom(serverUrl: string, roomId: string, name: string, instrument: string = '/models/ddsp_model.onnx', environment: string = 'Studio_A'): Promise<void> {
     this.roomId = roomId;
     this.serverUrl = serverUrl;
     this.displayName = name;
+    this.instrumentProfile = instrument;
+    this.environmentProfile = environment;
     this.reconnectAttempts = 0;
     
     // Fetch JWT Token for websocket negotiation
@@ -383,37 +352,7 @@ export class IntentEngine {
 
 
   requestMetrics(): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'metrics_request' }));
-    }
-    if (this.pc) {
-      this.pc.getStats().then(stats => {
-        let jitter = 0;
-        let packetsLost = 0;
-        let packetsReceived = 0;
-        let currentRtt = 0;
-        
-        stats.forEach(report => {
-          if (report.type === 'inbound-rtp' && report.kind === 'audio') {
-            jitter = report.jitter * 1000 || 0;
-            packetsLost = report.packetsLost || 0;
-            packetsReceived = report.packetsReceived || 0;
-          }
-          if (report.type === 'candidate-pair' && report.state === 'succeeded') {
-            currentRtt = report.currentRoundTripTime * 1000 || 0;
-          }
-        });
-        
-        if (jitter > 0) this.jitterMs = jitter;
-        if (currentRtt > 0) this.latencyMs = currentRtt;
-        if (packetsReceived > 0) {
-           this.packetLossPercent = (packetsLost / (packetsLost + packetsReceived)) * 100;
-        }
-
-        // Apply smart routing (Auto-fallback if network is thrashing)
-        this._updateAudioRouting();
-      }).catch(err => console.error("WebRTC Stats Error:", err));
-    }
+    requestMetrics(this);
   }
 
   setInstrument(instrument: string): void {
@@ -422,77 +361,28 @@ export class IntentEngine {
     }
   }
 
-  setDDSPMode(enabled: boolean): void {
-    this.ddspMode = enabled;
-    this._updateAudioRouting();
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'ddsp_toggle', enabled }));
-    }
-  }
-
-  private _updateAudioRouting(): void {
-    const isNetworkPoor = this.packetLossPercent > 15 || this.jitterMs > 100;
-    const forceDDSP = this.ddspMode || isNetworkPoor || !this.remoteStreamSource;
-
-    if (forceDDSP) {
-      // Mute Raw WebRTC Audio
-      if (this.remoteStreamSource) {
-         try { this.remoteStreamSource.disconnect(); } catch(e) {}
-      }
-      // Unmute DDSP Synth so Neural Regeneration can seamlessly take over
-      this.remoteSynth?.setMuted(false);
-    } else {
-      // Unmute Raw WebRTC Audio
-      if (this.remoteStreamSource && this.audioCtx) {
-         try { this.remoteStreamSource.disconnect(); } catch(e) {}
-         if (this.masterOut) {
-           this.remoteStreamSource.connect(this.masterOut);
-         } else {
-           this.remoteStreamSource.connect(this.audioCtx.destination);
-         }
-      }
-      // Mute DDSP Synth to prevent horrific double-audio echo
-      this.remoteSynth?.setMuted(true);
-    }
-  }
-
-  setLocalLoopback(enabled: boolean): void {
-    this.localLoopback = enabled;
+  _updateAudioRouting(): void {
+    updateAudioRouting(this);
   }
 
   async _initWebRTC(): Promise<void> {
     await initIntentWebRTC(this);
   }
 
-  private _scheduleAudioBlock(audioData: Float32Array): void {
-    if (!this.audioCtx) return;
-    
-    // Smooth trailing silence to prevent clicking
-    if (audioData.length > 0) {
-       for (let i=0; i<10; i++) {
-           audioData[i] *= (i/10); 
-           audioData[audioData.length-1-i] *= (i/10);
-       }
-    }
-    
-    const buffer = this.audioCtx.createBuffer(1, audioData.length, 44100);
-    buffer.copyToChannel(audioData as Float32Array<ArrayBuffer>, 0);
-    
-    const source = this.audioCtx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(this.audioCtx.destination);
-    
-    const now = this.audioCtx.currentTime;
-    if (this.nextAudioTime < now) {
-        this.nextAudioTime = now + 0.05; // pre-buffer
-    }
-    
-    source.start(this.nextAudioTime);
-    this.nextAudioTime += buffer.duration;
+  _scheduleAudioBlock(audioData: Float32Array): void {
+    scheduleAudioBlock(this, audioData);
   }
 
-  private regenerateFromIntent(frame: IntentFrame): void {
-    // DDSP Client-side inference
-    this.remoteSynth?.processFrame(frame);
+  private async regenerateFromIntent(frame: IntentFrame): Promise<void> {
+    if (!frame.peerId || !this.audioCtx) return;
+
+    if (frame.type === 'pivot' && frame.rmsEnergy !== undefined) {
+        const peerProfile = this.peers.find(p => p.peer_id === frame.peerId);
+        if (peerProfile) {
+            peerProfile.rmsEnergy = frame.rmsEnergy;
+        }
+    }
+    // Remote rendering of neural synthesis is DEPRECATED.
+    // Audio is strictly Opus WebRTC based.
   }
 }

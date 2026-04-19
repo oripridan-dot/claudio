@@ -6,11 +6,13 @@ import { uiStyles as styles } from './styles';
 interface ActiveStageProps {
   peers: PeerInfo[];
   localPitch?: string;
+  localRms?: number;
   isCapturing: boolean;
   roomId: string;
 }
 
-export default function ActiveStage({ peers, localPitch, isCapturing, roomId }: ActiveStageProps) {
+export default function ActiveStage({ peers, localPitch, localRms, isCapturing, roomId }: ActiveStageProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const arenaRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
   
@@ -21,10 +23,19 @@ export default function ActiveStage({ peers, localPitch, isCapturing, roomId }: 
   useEffect(() => {
     const draw = () => {
       const arena = arenaRef.current;
-      if (arena) {
+      const container = containerRef.current;
+      if (arena && container) {
+        // Sync drawing buffer exact size to layout size
+        const w = container.clientWidth;
+        const h = container.clientHeight;
+        if (arena.width !== w || arena.height !== h) {
+          arena.width = w;
+          arena.height = h;
+        }
+
         const c = arena.getContext('2d');
         if (c) {
-          drawSpatialArena(c, peersRef.current, arena.width, arena.height);
+          drawSpatialArena(c, peersRef.current, arena.width, arena.height, localRms);
         }
       }
       animRef.current = requestAnimationFrame(draw);
@@ -63,8 +74,8 @@ export default function ActiveStage({ peers, localPitch, isCapturing, roomId }: 
       </div>
 
       {/* Main Arena */}
-      <div style={{ ...styles.arenaBox, position: 'relative' }}>
-         <canvas ref={arenaRef} width={800} height={500} style={{ width: '100%', height: '100%', borderRadius: '12px' }} />
+      <div ref={containerRef} style={{ ...styles.arenaBox, position: 'relative' }}>
+         <canvas ref={arenaRef} style={{ width: '100%', height: '100%', borderRadius: '12px' }} />
          {localPitch && (
             <div style={{ 
                position: 'absolute', bottom: '24px', left: '24px', 
