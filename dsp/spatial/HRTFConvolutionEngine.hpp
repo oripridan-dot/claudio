@@ -9,10 +9,9 @@
  *          azimuth-dependent Interaural Time Difference
  *   - ILD: Rayleigh/Brown-Duda frequency-dependent head shadow approximation
  *   - Elevation: Simplified pinna spectral notch via comb filter
- *
- * Supports internal oversampling × 1/2/4 (48 kHz → 96 → 192 kHz).
- * At 192 kHz, ITD resolution = 5.2 µs/sample — sufficient to localise
- * a source within ~1° of azimuth.
+ * Supports internal oversampling × 1/2/4/8 (48 kHz → 96 → 192 → 384 kHz).
+ * At 384 kHz, ITD resolution = 2.6 µs/sample — sufficient to localise
+ * a source within ~0.5° of azimuth.
  *
  * THREAD / MUTEX POLICY
  *   All methods are audio-thread-only.
@@ -35,12 +34,12 @@
 namespace claudio::spatial {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
 /// HRTF filter impulse-response length (samples at the effective sample rate).
-static constexpr int kHRTFFilterLen = 128;
+/// Increased to 512 to support the larger sample delay at 384kHz (which requires ~253 samples for max ITD).
+static constexpr int kHRTFFilterLen = 512;
 
 /// Overlap-save FFT block size (power of 2, must be >= 2 * kHRTFFilterLen).
-static constexpr int kFFTBlockSize = 512;
+static constexpr int kFFTBlockSize = 2048;
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
@@ -94,7 +93,7 @@ class HRTFConvolutionEngine {
      * @param sample_rate  Nominal sample rate Hz (e.g. 48000, 96000, 192000).
      *                     If oversampling > 1, pass the BASE rate; the engine
      *                     scales internally.
-     * @param oversampling Internal oversampling factor: 1, 2, or 4.
+     * @param oversampling Internal oversampling factor: 1, 2, 4, or 8.
      */
     explicit HRTFConvolutionEngine(float sample_rate = 48000.f,
                                    int   oversampling = 1);

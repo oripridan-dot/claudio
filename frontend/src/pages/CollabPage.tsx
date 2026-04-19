@@ -38,10 +38,10 @@ export default function CollabPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username: userName })
       });
+      await handleStartCaptureAsync();
       const data = await res.json();
       setRoomId(data.room_id);
       await engine.connectToRoom(SERVER_URL, data.room_id, userName);
-      await handleStartCaptureAsync();
     } catch (e) {
       console.error('Failed to create room:', e);
     }
@@ -50,9 +50,9 @@ export default function CollabPage() {
   const handleJoinRoom = useCallback(async () => {
     if (!inputRoom) return;
     try {
+      await handleStartCaptureAsync();
       setRoomId(inputRoom);
       await engine.connectToRoom(SERVER_URL, inputRoom, userName);
-      await handleStartCaptureAsync();
     } catch (e) {
       console.error('Failed to join room:', e);
     }

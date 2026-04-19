@@ -38,9 +38,13 @@ jobs:
         run: npm run build
 
       - name: Deploy to Firebase Hosting
+        id: deploy
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
           firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
           projectId: too-loo-zi8g7e
           channelId: live
+
+      - name: Verify Frontend Live
+        run: curl -f -s --max-time 15 ${{ steps.deploy.outputs.details_url }} | grep "<title>"

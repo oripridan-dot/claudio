@@ -263,25 +263,31 @@ class SignalFlowSimulator:
         )
 
 
-def optimize_config(max_iterations: int = 20) -> SimulationResult:
+def optimize_config(max_iterations: int = 200) -> SimulationResult:
     """Automated parameter sweep to find SOTA-optimal configuration."""
+    from claudio.signal_flow_config import HRTFInterpolation
+
     best_result: SimulationResult | None = None
     best_score = -float("inf")
 
     sweep_params = [
-        {"capture_buffer_size": bs, "output_buffer_size": bs, "fft_size": fft, "hrir_length": hrir}
-        for bs in [64, 128, 256]
-        for fft in [256, 512]
-        for hrir in [128, 256]
+        {"capture_buffer_size": bs, "output_buffer_size": bs, "fft_size": fft, "hrir_length": hrir,
+         "hrtf_interpolation": HRTFInterpolation.VBAP, "hrtf_grid_resolution_deg": 2.5}
+        for bs in [256, 128, 64]
+        for fft in [1024, 512, 256]
+        for hrir in [512, 256, 128]
     ]
 
     for _i, params in enumerate(sweep_params[:max_iterations]):
         cfg = SignalFlowConfig(**params)
         sim = SignalFlowSimulator(cfg)
         result = sim.run_sine_test(freq_hz=1000.0, duration_s=0.2)
-        score = -result.metrics.total_latency_ms - result.metrics.avg_render_time_us / 1000.0
+        
+        # Priority: pass all gates, then score by highest spatial resolution / FFT size
+        score = params["hrir_length"] * 10 + params["fft_size"]
         if result.passed_all_gates:
-            score += 100
+            score += 1000000
+        
         if best_result is None or score > best_score:
             best_score = score
             best_result = result

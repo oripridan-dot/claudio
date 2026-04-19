@@ -37,7 +37,6 @@ export default function JoinCard({
           <input style={styles.input} value={inputRoom}
             onChange={e => setInputRoom(e.target.value)} placeholder="Leave blank to create new" />
         </div>
-        </div>
         <button 
           style={styles.primaryBtn} 
           onClick={inputRoom.trim() !== '' ? onJoin : onCreate}

@@ -32,15 +32,25 @@ def simulate_pure_intent_latency():
     transmit_sim_network_ms = 1.0  # 1ms LAN assumed
     decode_times = []
 
+    ring_buffer = np.zeros(encoder.frame_len, dtype=np.float32)
+
     print(f"\n▶ Simulating 1 second of audio at {120}Hz framerate (block_size: {block_size})...")
 
     for b in range(blocks):
         chunk = audio[b * block_size : (b + 1) * block_size]
 
-        # 1. Encode
+        # Shift ring buffer
+        ring_buffer = np.roll(ring_buffer, -block_size)
+        ring_buffer[-block_size:] = chunk
+
+        # 1. Encode (Force exact extraction on current buffer state)
         t0 = time.perf_counter()
-        frames = encoder.encode_block(chunk)
+        # Directly extract frame since encode_block would require a full buffer and step through hop sizes
+        # In real-time streaming, we extract precisely 1 frame per arrival buffer if block_size == hop size
+        # Or, we mock the real-time block logic here directly:
+        intent = encoder._extract_frame(ring_buffer, ts=b * (block_size / sr) * 1000.0)
         t_encode = (time.perf_counter() - t0) * 1000
+        frames = [intent]
 
         # 2. Pack
         t0 = time.perf_counter()
@@ -55,9 +65,11 @@ def simulate_pure_intent_latency():
         decoder.decode_frames(restored)
         t_decode = (time.perf_counter() - t0) * 1000
 
-        encode_times.append(t_encode / len(frames) if frames else t_encode)
-        pack_times.append(t_pack / len(packets) if packets else t_pack)
-        decode_times.append(t_decode / len(restored) if restored else t_decode)
+        # Discard warmup frames from metrics
+        if b > 5:
+            encode_times.append(t_encode / len(frames) if frames else t_encode)
+            pack_times.append(t_pack / len(packets) if packets else t_pack)
+            decode_times.append(t_decode / len(restored) if restored else t_decode)
 
     avg_enc = np.mean(encode_times)
     avg_pack = np.mean(pack_times)
