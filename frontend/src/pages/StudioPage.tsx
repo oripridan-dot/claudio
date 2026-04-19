@@ -13,6 +13,7 @@ import { DEFAULT_CODEC_ID, getCodecById } from '../engine/codecProfiles';
 import { HeadTracker } from '../spatial/HeadTracker';
 import { HeadTracker } from '../spatial/HeadTracker';
 import { SpatialEngine } from '../spatial/SpatialEngine';
+import DumbStudioVisuals from '../components/DumbStudioVisuals';
 
 // Keyboard → MIDI note map (C4 = 60)
 const KEY_NOTES: Record<string, number> = {
@@ -260,214 +261,40 @@ export default function StudioPage() {
     padding: 14,
   };
 
-  const sectionLabel: React.CSSProperties = {
-    fontSize: 10,
-    color: '#7070a0',
-    letterSpacing: 3,
-    textTransform: 'uppercase' as const,
-    marginBottom: 12,
-    fontWeight: 700,
-  };
-
-  // ── Splash ──────────────────────────────────────────────────────────────
-  if (!started) {
-    return (
-      <div style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center',
-        justifyContent: 'center', height: '100vh', background: '#08080d',
-      }}>
-        <div style={{ textAlign: 'center', marginBottom: 48 }}>
-          <div style={{
-            fontSize: 56, fontWeight: 900, color: A, letterSpacing: -3,
-            fontFamily: 'monospace', marginBottom: 8,
-          }}>
-            CLAUDIO
-          </div>
-          <div style={{ color: '#404058', fontSize: 13, letterSpacing: 1 }}>
-            Neural DSP Studio · zero-perceptual-latency musical collaboration
-          </div>
-        </div>
-
-        <button
-          onClick={launch}
-          style={{
-            background: A, color: '#08080d', fontWeight: 900,
-            padding: '16px 48px', borderRadius: 8, fontSize: 15,
-            border: 'none', cursor: 'pointer', letterSpacing: 3,
-            fontFamily: 'monospace',
-            boxShadow: `0 0 32px ${A}44`,
-          }}
-        >
-          ▶  LAUNCH STUDIO
-        </button>
-
-        <div style={{ color: '#303048', fontSize: 11, marginTop: 24, textAlign: 'center', lineHeight: 2 }}>
-          Z S X D C V G B H N J M · keyboard notes (C4–C5)<br />
-          Click LAUNCH to initialise the AudioContext
-        </div>
-      </div>
-    );
-  }
-
-  // ── Studio ──────────────────────────────────────────────────────────────
   return (
-    <div style={{
-      height: '100vh', display: 'flex', flexDirection: 'column',
-      background: '#08080d', fontFamily: 'monospace', overflow: 'hidden',
-    }}>
-
-      <StudioHeader 
-        ready={ready} 
-        sampleRate={engineRef.current?.ctx.sampleRate}
-        activeNote={activeNote}
-        grReduction={grReduction}
-        micOn={micOn}
-        oscOn={oscOn}
-        spatialOn={spatialOn}
-        toggleMic={toggleMic}
-        toggleOscManual={toggleOscManual}
-        toggleSpatial={toggleSpatial}
-      />
-
-      {/* ── Spectrum analyser ── */}
-      <div style={{
-        padding: '4px 8px', borderBottom: '1px solid #1e1e2a',
-        background: '#08080d', flexShrink: 0,
-      }}>
-        {ready && <SpectrumAnalyzer engine={engineRef.current!} height={130} />}
-        {!ready && (
-          <div style={{ height: 130, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ color: '#252535', fontSize: 11 }}>spectrum analyser — click LAUNCH</span>
-          </div>
-        )}
-      </div>
-
-      {/* ── Main body ── */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
-
-        {/* Left column */}
-        <div style={{
-          width: 240, flexShrink: 0,
-          borderRight: '1px solid #1e1e2a',
-          display: 'flex', flexDirection: 'column',
-          background: '#0c0c16',
-          overflowY: 'auto',
-        }}>
-          {/* Oscillator */}
-          <div style={{ padding: 10, borderBottom: '1px solid #1e1e2a' }}>
-            <div style={sectionLabel}>OSCILLATOR</div>
-
-            {/* Wave selector */}
-            <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
-              {(['sine','square','sawtooth','triangle'] as OscillatorType[]).map(t => (
-                <button key={t} onClick={() => {
-                  setOscType(t);
-                  engineRef.current?.setOscillatorType(t);
-                }} style={{
-                  flex: 1, padding: '4px 0', borderRadius: 4, fontSize: 9,
-                  border: `1px solid ${oscType === t ? A : '#252535'}`,
-                  background: oscType === t ? `${A}18` : '#0a0a14',
-                  color: oscType === t ? A : '#505070', cursor: 'pointer',
-                }}>
-                  {t.slice(0, 3).toUpperCase()}
-                </button>
-              ))}
-            </div>
-
-            {/* Frequency */}
-            <div style={{ marginBottom: 6 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 9, color: '#505070', letterSpacing: 1 }}>FREQUENCY</span>
-                <span style={{ fontSize: 10, color: A, fontWeight: 700 }}>{oscFreq.toFixed(1)} Hz</span>
-              </div>
-              <input
-                type="range" min={20} max={4000} step={1} value={oscFreq}
-                onChange={e => {
-                  const f = Number(e.target.value);
-                  setOscFreq(f);
-                  engineRef.current?.setOscillatorFrequency(f);
-                }}
-                style={{ width: '100%', accentColor: A }}
-              />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: '#404055' }}>
-                <span>20</span><span>4000</span>
-              </div>
-            </div>
-
-            <div style={{ fontSize: 9, color: '#404055', lineHeight: 1.7 }}>
-              Keyboard: Z S X D C V G B H N J M ,
-            </div>
-          </div>
-
-          {/* Waveform */}
-          <div style={{ padding: 8, borderBottom: '1px solid #1e1e2a' }}>
-            <div style={sectionLabel}>OSCILLOSCOPE</div>
-            {ready
-              ? <WaveformViewer engine={engineRef.current!} height={72} color={A} />
-              : <div style={{ height: 72, background: '#08080d', borderRadius: 4 }} />}
-          </div>
-
-          {/* Latency */}
-          <div style={{ padding: 10, borderBottom: '1px solid #1e1e2a' }}>
-            <div style={sectionLabel}>SYSTEM LATENCY</div>
-            <LatencyPanel engine={engineRef.current} />
-          </div>
-
-          {/* Bluetooth Codec */}
-          <div style={{ padding: 10, borderBottom: '1px solid #1e1e2a' }}>
-            <div style={sectionLabel}>BLUETOOTH CODEC</div>
-            <CodecSelector selected={codec.id} onSelect={c => setCodec(c)} />
-          </div>
-
-          {/* BT Latency Compensation */}
-          {ready && engineRef.current && (
-            <div style={{ padding: 10, flex: 1 }}>
-              <div style={sectionLabel}>BT LATENCY COMP</div>
-              <BTLatencyPanel
-                engine={engineRef.current}
-                codec={codec}
-                onLatencyMs={ms => setBtLatencyMs(ms)}
-              />
-              <div style={{ marginTop: 8, fontSize: 10, color: A }}>
-                Compensation: {btLatencyMs}ms
-              </div>
-            </div>
-          )}
-          {(!ready || !engineRef.current) && <div style={{ flex: 1 }} />}
-        </div>
-
-        {/* Right column: effects + MIDI */}
-        <div style={{
-          flex: 1, padding: 12, overflowY: 'auto',
-          display: 'flex', flexDirection: 'column', gap: 10,
-        }}>
-
-          <StudioEffectsChain engine={engineRef.current} ready={ready} grReduction={grReduction} />
-
-          {/* Audio File Player */}
-          <AudioFilePlayer engine={engineRef.current} />
-
-          {/* MIDI panel */}
-          <MidiPanel />
-
-          {/* SPATIAL panel */}
-          <StudioSpatialPanel
-            spatialOn={spatialOn}
-            spatialTrackMode={spatialTrackMode}
-            webcamOn={webcamOn}
-            calibFlash={calibFlash}
-            spatialAz={spatialAz}
-            spatialEl={spatialEl}
-            spatialDist={spatialDist}
-            autoRotate={autoRotate}
-            toggleWebcam={toggleWebcam}
-            calibrateCamera={calibrateCamera}
-            setSpatialDist={setSpatialDist}
-            toggleAutoRotate={toggleAutoRotate}
-            webcamContainerRef={webcamContainerRef}
-          />
-        </div>
-      </div>
-    </div>
+    <DumbStudioVisuals
+      engineRef={engineRef}
+      ready={ready}
+      started={started}
+      micOn={micOn}
+      oscOn={oscOn}
+      oscType={oscType}
+      oscFreq={oscFreq}
+      activeNote={activeNote}
+      grReduction={grReduction}
+      spatialOn={spatialOn}
+      spatialAz={spatialAz}
+      spatialEl={spatialEl}
+      spatialDist={spatialDist}
+      spatialTrackMode={spatialTrackMode}
+      autoRotate={autoRotate}
+      webcamOn={webcamOn}
+      webcamContainerRef={webcamContainerRef}
+      codec={codec}
+      btLatencyMs={btLatencyMs}
+      calibFlash={calibFlash}
+      launch={launch}
+      toggleMic={toggleMic}
+      toggleOscManual={toggleOscManual}
+      toggleSpatial={toggleSpatial}
+      setOscType={setOscType}
+      setOscFreq={setOscFreq}
+      setCodec={setCodec}
+      setBtLatencyMs={setBtLatencyMs}
+      toggleWebcam={toggleWebcam}
+      calibrateCamera={calibrateCamera}
+      setSpatialDist={setSpatialDist}
+      toggleAutoRotate={toggleAutoRotate}
+    />
   );
 }
