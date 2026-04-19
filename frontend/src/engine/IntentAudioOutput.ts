@@ -13,13 +13,19 @@ export function scheduleAudioBlock(engine: any, audioData: Float32Array): void {
  * Opus audio ON strictly.
  */
 export function updateAudioRouting(engine: any): void {
-  // Default: real Opus audio — connect remote stream to speakers
-  if (engine.remoteStreamSource && engine.audioCtx) {
-     try { engine.remoteStreamSource.disconnect(); } catch(e) {}
-     if (engine.masterOut) {
-       engine.remoteStreamSource.connect(engine.masterOut);
-     } else {
-       engine.remoteStreamSource.connect(engine.audioCtx.destination);
+  // Default: real Opus audio — use native <audio> element to bypass Web Audio 
+  // silence bugs and guarantee hardware accelerated playback.
+  if (engine.remoteStream) {
+     if (!engine.remoteAudioElement) {
+         engine.remoteAudioElement = new Audio();
+         engine.remoteAudioElement.autoplay = true;
+         engine.remoteAudioElement.style.display = 'none';
+         document.body.appendChild(engine.remoteAudioElement);
+     }
+     
+     if (engine.remoteAudioElement.srcObject !== engine.remoteStream) {
+         engine.remoteAudioElement.srcObject = engine.remoteStream;
+         engine.remoteAudioElement.play().catch((e: any) => console.warn("Opus audio play blocked by browser:", e));
      }
   }
 }

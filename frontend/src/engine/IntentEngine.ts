@@ -254,7 +254,7 @@ export class IntentEngine {
       }
     }, Math.floor(1000 / FRAME_RATE));
   }
-
+  stopCapture(): void {
     this.isCapturing = false;
     if (this.captureInterval !== null) {
       clearInterval(this.captureInterval);

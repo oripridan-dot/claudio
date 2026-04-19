@@ -66,15 +66,15 @@ class SignalFlowConfig:
     render_sample_rate: int = 192_000  # HRTF convolution internal rate
 
     # ── Buffer Geometry ──────────────────────────────────────────────
-    capture_buffer_size: int = 128  # samples per audio callback
-    output_buffer_size: int = 128  # output DAC buffer
+    capture_buffer_size: int = 256  # samples per audio callback
+    output_buffer_size: int = 256  # output DAC buffer
 
     # ── HRTF Engine ──────────────────────────────────────────────────
-    fft_size: int = 512  # OLA / OLS FFT block
-    hrir_length: int = 256  # impulse response samples (was 128)
-    hrtf_grid_resolution_deg: float = 5.0  # azimuth/elevation grid spacing
+    fft_size: int = 1024  # OLA / OLS FFT block
+    hrir_length: int = 512  # impulse response samples (was 128)
+    hrtf_grid_resolution_deg: float = 2.5  # azimuth/elevation grid spacing
     convolution_strategy: ConvolutionStrategy = ConvolutionStrategy.PARTITIONED
-    hrtf_interpolation: HRTFInterpolation = HRTFInterpolation.BILINEAR
+    hrtf_interpolation: HRTFInterpolation = HRTFInterpolation.VBAP
     partition_count: int = 2  # segments for partitioned conv
     crossfade_samples: int = 32  # click-free HRTF swap window
 

@@ -51,6 +51,7 @@ jobs:
           docker push $IMAGE_PATH
 
       - name: Deploy to Cloud Run
+        id: deploy
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: ${{ env.SERVICE_NAME }}
@@ -59,3 +60,6 @@ jobs:
           env_vars: |
             CLOUD_NATIVE_WORKSPACE=true
             ENVIRONMENT=production
+
+      - name: Verify Backend Live
+        run: curl -f -s --max-time 15 ${{ steps.deploy.outputs.url }}/health

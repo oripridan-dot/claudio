@@ -63,3 +63,7 @@ All loudness references must cite current platform-specific targets with source 
 - YouTube: -13 to -14 LUFS integrated
 - Amazon Music: -14 LUFS integrated
 - True peak ceiling: -1.0 dBTP (AES77-2023)
+
+## 11. Audio Quality Validation
+
+Whenever parameters, DSP pipelines, or Neural Network weights are adjusted in a way that impacts sound quality or intent modeling fidelity, an objective numeric output OR standard reference audio clip (e.g. via `test_intent_pipeline`, `audio_lab_bouncer.py`, or a literal WAV clip) **must** be provided to prove auditory integrity.

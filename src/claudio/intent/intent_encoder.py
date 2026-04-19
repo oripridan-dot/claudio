@@ -63,8 +63,10 @@ class IntentEncoder:
     state between calls. Create one instance per audio stream.
     """
 
-    def __init__(self, sample_rate: int = 44_100) -> None:
+    def __init__(self, sample_rate: int = 44_100, yin_threshold: float = 0.2, onset_threshold: float = 0.3) -> None:
         self.sample_rate = sample_rate
+        self.onset_threshold = onset_threshold
+        self.yin_threshold = yin_threshold
         self.hop = sample_rate // FRAME_RATE_HZ
         # 8× hop for YIN window — needed to detect F0 down to ~62Hz (B1)
         # At 44.1kHz: frame_len=1408, half=704, min_f0 = 44100/704 ≈ 63Hz
@@ -82,7 +84,7 @@ class IntentEncoder:
 
         # Onset detection state
         self._prev_spectrum: np.ndarray | None = None
-        self._onset_threshold = 0.3
+        self._onset_threshold = self.onset_threshold
 
         # F0 history for vibrato detection
         self._f0_history: list[float] = []
@@ -134,30 +136,33 @@ class IntentEncoder:
         if not np.all(np.isfinite(frame64)):
             frame64 = np.nan_to_num(frame64, nan=0.0, posinf=0.0, neginf=0.0)
 
-        # 1. F0 via YIN
-        f0_hz, f0_conf = self._yin_f0(frame64)
-
-        # 2. Loudness — dual measurement:
-        #    loudness_db:   time-domain RMS (for decoder gain matching)
-        #    loudness_norm: A-weighted (for perceptual display/silence detection)
+        # 1. Loudness — dual measurement (using full frame)
         rms = float(np.sqrt(np.mean(frame64**2) + 1e-10))
         loudness_db = 20.0 * math.log10(rms + 1e-10)
 
-        # A-weighted perceptual loudness for normalised display
         spectrum_raw = np.abs(np.fft.rfft(frame64))
         a_weighted_rms = float(np.sqrt(np.mean((spectrum_raw * self._a_weight) ** 2) + 1e-10))
         a_weighted_db = 20.0 * math.log10(a_weighted_rms + 1e-10)
         loudness_norm = min(1.0, max(0.0, (a_weighted_db + 40.0) / 60.0))
 
-        # 3. Spectral features
+        # 2. Spectral features & Centroid FIRST (for adaptive windowing)
         spectrum = np.abs(np.fft.rfft(frame64 * np.hanning(len(frame64))))
         freqs = np.fft.rfftfreq(len(frame64), 1.0 / self.sample_rate)
 
-        # Spectral centroid
         total_power = np.sum(spectrum) + 1e-10
         centroid = float(np.sum(freqs * spectrum) / total_power)
 
-        # MFCCs (compact timbre representation)
+        # 3. Adaptive Windowing for YIN (Biological Workaround)
+        # Shift algorithmic center closer to present for high-frequency sounds
+        yin_frame = frame64
+        if centroid > 1200.0:
+            yin_frame = frame64[-512:]  # Last 512 samples -> ~5ms algorithmic latency
+        elif centroid > 500.0:
+            yin_frame = frame64[-1024:] # Last 1024 samples -> ~10ms algorithmic latency
+
+        f0_hz, f0_conf = self._yin_f0(yin_frame, threshold=self.yin_threshold)
+
+        # 4. MFCCs (compact timbre representation)
         mfccs = self._compute_mfcc(spectrum, freqs)
 
         # 4. Onset detection via spectral flux

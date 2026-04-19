@@ -111,18 +111,11 @@ export function initIntentWebSocket(engine: any) {
                     await engine.pc.setLocalDescription({ type: 'rollback' });
                   } else {
                     console.warn('Impolite peer: ignoring conflicting offer');
-                    break;
+                    return; // Break out of this handler completely
                   }
                 }
                 await engine.pc.setRemoteDescription(new RTCSessionDescription({ type: msg.rtc_type, sdp: msg.sdp }));
                 const answer = await engine.pc.createAnswer();
-                if (answer.sdp) {
-                  // v4.0 SDP munging: High-fidelity Opus for music (answer)
-                  answer.sdp = answer.sdp.replace(
-                    /a=fmtp:(\d+) .*/g, 
-                    'a=fmtp:$1 minptime=10; useinbandfec=1; stereo=1; sprop-stereo=1; maxaveragebitrate=128000; maxplaybackrate=48000; sprop-maxcapturerate=48000'
-                  );
-                }
                 await engine.pc.setLocalDescription(answer);
                 engine.ws?.send(JSON.stringify({
                   type: 'webrtc_answer',
@@ -170,8 +163,8 @@ export function initIntentWebSocket(engine: any) {
             engine.peers = msg.peers || [];
             engine.onPeersUpdated?.(engine.peers);
             // Re-initiate WebRTC when a new peer joins so the existing peer
-            // sends a fresh offer (solves the glare deadlock where the initial
-            // offer was sent to an empty room).
+            // sends a fresh offer (solves the empty room offer blackhole).
+            // Glare is handled by the perfect negotiation polite/impolite pattern.
             engine._initWebRTC();
             break;
           case 'peer_updated':
@@ -230,13 +223,11 @@ export async function initIntentWebRTC(engine: any) {
 
     // Receive remote audio track — wire directly to output (near-lossless)
     engine.pc.ontrack = (event) => {
-      if (event.track.kind === 'audio' && engine.audioCtx) {
+      if (event.track.kind === 'audio') {
         engine.remoteStream = event.streams[0];
-        if (engine.remoteStreamSource) engine.remoteStreamSource.disconnect();
-        engine.remoteStreamSource = engine.audioCtx.createMediaStreamSource(engine.remoteStream);
         
         // Smart Routing trigger: dynamically decide whether to map this directly to speakers 
-        // or keep relying on DDSP fallback depending on ddspMode and line quality.
+        // or keep relying on backend fallback depending on ddspMode and line quality.
         engine._updateAudioRouting();
       }
     };
@@ -254,13 +245,6 @@ export async function initIntentWebRTC(engine: any) {
     };
 
     const offer = await engine.pc.createOffer();
-    if (offer.sdp) {
-      // v4.0 SDP munging: High-fidelity Opus for music
-      offer.sdp = offer.sdp.replace(
-        /a=fmtp:(\d+) .*/g, 
-        'a=fmtp:$1 minptime=10; useinbandfec=1; stereo=1; sprop-stereo=1; maxaveragebitrate=128000; maxplaybackrate=48000; sprop-maxcapturerate=48000'
-      );
-    }
     await engine.pc.setLocalDescription(offer);
 
     if (engine.ws?.readyState === WebSocket.OPEN) {

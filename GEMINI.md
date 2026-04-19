@@ -26,6 +26,8 @@ All AI agents working on Claudio must be brutally honest. If a command fails, sa
 - **No Premature Abstractions**: Don't create helpers for one-time operations.
 - **Security First**: No command injection, XSS, SQL injection, or OWASP Top 10 vulnerabilities.
 - **Executing Actions with Care**: Consider reversibility and blast radius. Never bypass safety checks.
+- **Goal-Driven Execution**: Define definitions of 'done' declaratively instead of issuing imperative action-by-action commands.
+- **Validity First**: Never assume success. Code isn't working until it is empirically proven to work (tests pass, build compiles, logs confirm). Hallucinating success is a constitutional violation.
 
 ---
 
