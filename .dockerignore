@@ -1,0 +1,33 @@
+# Claudio Production — exclude all dev/test/build bloat
+.git/
+.venv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+.pytest_cache/
+.ruff_cache/
+.benchmarks/
+.wrangler/
+.agents/
+.github/
+.gemini/
+
+# Heavy local-only directories
+frontend/node_modules/
+frontend/.next/
+studio/
+data/
+assets/
+tests/
+scripts/
+tools/
+docs/
+build/
+
+# Dev files
+*.md
+CLAUDE.md
+GEMINI.md
+CMakeLists.txt
+LICENSE
